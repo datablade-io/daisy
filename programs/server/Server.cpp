@@ -737,8 +737,14 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
             // FIXME logging-related things need synchronization -- see the 'Logger * log' saved
             // in a lot of places. For now, disable updating log configuration without server restart.
-            //setTextLog(global_context->getTextLog());
-            //buildLoggers(*config, logger());
+            if (config->has("text_log.level"))
+            {
+                String level_str = config->getString("text_log.level", "");
+                int level = level_str.empty() ? INT_MAX : Poco::Logger::parseLevel(level_str);
+                setTextLog(global_context->getTextLog(), level);
+            }
+            buildLoggers(*config, logger());
+
             global_context->setClustersConfig(config);
             global_context->setMacros(std::make_unique<Macros>(*config, "macros", log));
             global_context->setExternalAuthenticatorsConfig(*config);
@@ -749,6 +755,9 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
             if (config->has("max_partition_size_to_drop"))
                 global_context->setMaxPartitionSizeToDrop(config->getUInt64("max_partition_size_to_drop"));
+
+            if (config->has("max_concurrent_queries"))
+                global_context->getProcessList().setMaxSize(config->getInt("max_concurrent_queries"));
 
             if (config->has("zookeeper"))
                 global_context->reloadZooKeeperIfChanged(config);
