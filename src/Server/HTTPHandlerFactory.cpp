@@ -15,6 +15,7 @@
 #include "PrometheusRequestHandler.h"
 #include "RestHTTPRequestHandler.h"
 #include "WebUIRequestHandler.h"
+#include "SQLAnalyzeHTTPHandler.h"
 
 
 namespace DB
@@ -91,6 +92,8 @@ static inline auto createHandlersFactoryFromConfig(
                 main_handler_factory->addHandler(createPrometheusHandlerFactory(server, async_metrics, prefix + "." + key));
             else if (handler_type == "replicas_status")
                 main_handler_factory->addHandler(createReplicasStatusHandlerFactory(server, prefix + "." + key));
+            else if (handler_type == "sqlanalyze")
+                main_handler_factory->addHandler(createSQLAnalyzeHandlerFactory(server, prefix + "." + key));
             else
                 throw Exception("Unknown handler type '" + handler_type + "' in config here: " + prefix + "." + key + ".handler.type",
                     ErrorCodes::INVALID_CONFIG_PARAMETER);
@@ -174,6 +177,13 @@ void addCommonDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IS
     web_ui_handler->attachNonStrictPath("/play");
     web_ui_handler->allowGetAndHeadRequest();
     factory.addHandler(web_ui_handler);
+
+    /// Daisy : starts
+    /*auto analyze_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<SQLAnalyzeHTTPHandler>>(server, "sqlanalyze");
+    analyze_handler->attachNonStrictPath("/sqlanalyze");
+    analyze_handler->allowPostAndGetParamsRequest();
+    factory.addHandler(analyze_handler);*/
+    /// Daisy : ends.
 }
 
 void addDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IServer & server, AsynchronousMetrics & async_metrics)

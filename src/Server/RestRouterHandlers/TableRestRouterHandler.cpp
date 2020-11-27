@@ -164,7 +164,7 @@ String TableRestRouterHandler::processQuery(const String & query, Int32 & /* htt
     {
         Poco::JSON::Object resp;
         resp.set("query_id", query_context.getClientInfo().initial_query_id);
-        std::stringstream resp_str_stream;
+        std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         resp.stringify(resp_str_stream, 4);
         String resp_str = resp_str_stream.str();
         return resp_str;

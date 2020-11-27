@@ -16,11 +16,6 @@
 
 namespace DB
 {
-namespace ErrorCodes
-{
-    extern const int INCORRECT_DATA;
-}
-
 class RestRouterHandler : private boost::noncopyable
 {
 public:
@@ -94,9 +89,9 @@ private:
 
     /// Admin APIs like DDL overrides this function
     String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
-    {   
+    {
         const auto & client_info = query_context.getClientInfo();
-        
+
         if (client_info.http_method == ClientInfo::HTTPMethod::GET)
         {
             return executeGet(payload, http_status);

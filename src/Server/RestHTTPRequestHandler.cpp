@@ -13,7 +13,6 @@ namespace DB
 {
 namespace ErrorCodes
 {
-    extern const int LOGICAL_ERROR;
     extern const int CANNOT_PARSE_TEXT;
     extern const int CANNOT_PARSE_ESCAPE_SEQUENCE;
     extern const int CANNOT_PARSE_QUOTED_STRING;
@@ -22,7 +21,6 @@ namespace ErrorCodes
     extern const int CANNOT_PARSE_NUMBER;
     extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
     extern const int CANNOT_OPEN_FILE;
-    extern const int CANNOT_COMPILE_REGEXP;
 
     extern const int UNKNOWN_ELEMENT_IN_AST;
     extern const int UNKNOWN_TYPE_OF_AST_NODE;
@@ -47,7 +45,6 @@ namespace ErrorCodes
     extern const int UNKNOWN_FORMAT;
     extern const int UNKNOWN_DATABASE_ENGINE;
     extern const int UNKNOWN_TYPE_OF_QUERY;
-    extern const int NO_ELEMENTS_IN_CONFIG;
 
     extern const int QUERY_IS_TOO_LARGE;
 
@@ -58,10 +55,7 @@ namespace ErrorCodes
     extern const int WRONG_PASSWORD;
     extern const int REQUIRED_PASSWORD;
 
-    extern const int BAD_REQUEST_PARAMETER;
-    extern const int INVALID_SESSION_TIMEOUT;
     extern const int HTTP_LENGTH_REQUIRED;
-    extern const int UNACCEPTABLE_URL;
 }
 
 namespace
@@ -239,7 +233,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
           */
         int exception_code = getCurrentExceptionCode();
 
-        std::stringstream error_str_stream;
+        std::stringstream error_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         Poco::JSON::Object error_resp;
 
         error_resp.set("error_messgae", getCurrentExceptionMessage(false, true));
