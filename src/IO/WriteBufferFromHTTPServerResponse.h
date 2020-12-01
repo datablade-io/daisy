@@ -31,6 +31,12 @@ namespace Poco
 namespace DB
 {
 
+enum class SendProgressMode {
+    progress_none,
+    progress_via_header,
+    progress_via_body
+};
+
 /// The difference from WriteBufferFromOStream is that this buffer gets the underlying std::ostream
 /// (using response.send()) only after data is flushed for the first time. This is needed in HTTP
 /// servers to change some HTTP headers (e.g. response code) before any data is sent to the client
@@ -55,6 +61,8 @@ private:
     bool compress = false;
     CompressionMethod compression_method;
     int compression_level = 1;
+    /// 0, disable, 1: send via HTTP header, 2: send via HTTP body
+    SendProgressMode send_progress_mode = SendProgressMode::progress_none;
 
     std::ostream * response_body_ostr = nullptr;
 
@@ -66,6 +74,7 @@ private:
 
     bool headers_started_sending = false;
     bool headers_finished_sending = false;    /// If true, you could not add any headers.
+    bool headers_finish_delimiter = false;
 
     Progress accumulated_progress;
     size_t send_progress_interval_ms = 100;
@@ -79,10 +88,11 @@ private:
     ///  but not finish them with \r\n, allowing to send more headers subsequently.
     void startSendHeaders();
 
-    // Used for write the header X-ClickHouse-Progress
-    void writeHeaderProgress();
-    // Used for write the header X-ClickHouse-Summary
-    void writeHeaderSummary();
+    // Used for write the header X-ClickHouse-Progress or in HTTP body
+    void writeProgress();
+
+    // Used for write the header X-ClickHouse-Summary or in HTTP body
+    void writeSummary();
 
     /// This method finish headers with \r\n, allowing to start to send body.
     void finishSendHeaders();
@@ -131,6 +141,12 @@ public:
     void setSendProgressInterval(size_t send_progress_interval_ms_)
     {
         send_progress_interval_ms = send_progress_interval_ms_;
+    }
+
+    /// Setup progress sending mode
+    void setSendProgressMode(SendProgressMode mode)
+    {
+        send_progress_mode = mode;
     }
 
     ~WriteBufferFromHTTPServerResponse() override;
