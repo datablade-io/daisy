@@ -19,8 +19,9 @@ RUN groupadd -r clickhouse --gid=101 \
         ca-certificates \
         dirmngr \
         gnupg \
+        tzdata \
     && mkdir -p /etc/apt/sources.list.d \
-    && apt-key adv --keyserver keyserver.ubuntu.com --recv E0C56BD4 \
+    && apt-key adv --keyserver keyserver.ubuntu.com --recv 68cafa431bad7c00e03828930f9403e96171aa0d \
     && echo $repository > /etc/apt/sources.list.d/clickhouse.list \
     && apt-get update \
     && env DEBIAN_FRONTEND=noninteractive \
@@ -43,13 +44,14 @@ RUN groupadd -r clickhouse --gid=101 \
 # we need to allow "others" access to clickhouse folder, because docker container
 # can be started with arbitrary uid (openshift usecase)
 
-ADD https://github.com/tianon/gosu/releases/download/$gosu_ver/gosu-amd64 /bin/gosu
+ADD http://tob45.bigdata.lycc.qihoo.net:8080/gosu/$gosu_ver/gosu-amd64 /bin/gosu
 
 RUN locale-gen en_US.UTF-8
 ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
-ENV TZ UTC
+ENV TZ Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN mkdir /docker-entrypoint-initdb.d
 
