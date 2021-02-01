@@ -2,48 +2,18 @@
 
 #include <ext/shared_ptr_helper.h>
 
-#include <Core/BaseSettings.h>
-#include <Core/Settings.h>
-#include <Storages/IStorage.h>
+#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 #include <Storages/MergeTree/MergeTreeData.h>
 #include <Storages/MergeTree/MergeTreeDataWriter.h>
 #include <Storages/MergeTree/MergeTreeMutationEntry.h>
 #include <Storages/MergeTree/MergeTreeMutationStatus.h>
+#include <Storages/MergeTree/SystemKafkaSettings.h>
 #include <Storages/StorageMergeTree.h>
 
 #include <pcg_random.hpp>
 
 namespace DB
 {
-
-/// FIXME, move the Kafka settings class in a correct place.
-
-#define SYSTEM_KAFKA_RELATED_SETTINGS(M) \
-    M(String, kafka_broker_list, "", "A comma-separated list of brokers for Kafka engine.", 0) \
-    M(String, kafka_topic, "", "Kafka topic.", 0) \
-    M(Int64, kafka_partition, -1, "Kafka partition to poll from.", 0) \
-    M(UInt64, kafka_num_consumers, 1, "The number of consumers per table for Kafka engine.", 0) \
-    /* default is stream_poll_timeout_ms */ \
-    M(Milliseconds, kafka_poll_timeout_ms, 0, "Timeout for single poll from Kafka.", 0) \
-    /* default is min(max_block_size, kafka_max_block_size)*/ \
-    M(UInt64, kafka_poll_max_batch_size, 0, "Maximum amount of messages to be polled in a single Kafka poll.", 0) \
-    /* default is = max_insert_block_size / kafka_num_consumers  */ \
-    M(UInt64, kafka_max_block_size, 0, "Number of row collected by poll(s) for flushing data from Kafka.", 0)
-
-/** TODO: */
-/* https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md */
-/* https://github.com/edenhill/librdkafka/blob/v1.4.2/src/rdkafka_conf.c */
-
-#define LIST_OF_SYSTEM_KAFKA_SETTINGS(M) \
-    SYSTEM_KAFKA_RELATED_SETTINGS(M) \
-    FORMAT_FACTORY_SETTINGS(M)
-
-DECLARE_SETTINGS_TRAITS(SystemKafkaSettingsTraits, LIST_OF_SYSTEM_KAFKA_SETTINGS)
-
-
-struct SystemKafkaSettings : public BaseSettings<SystemKafkaSettingsTraits>
-{
-};
 
 /** See the description of the data structure in MergeTreeData.
   */
@@ -142,17 +112,17 @@ protected:
         bool has_force_restore_data_flag);
 
 private:
-    /// Kafka Settings
+    Poco::Logger * log;
+
     std::unique_ptr<SystemKafkaSettings> system_kafka_settings;
     const String brokers;
     const String topic;
 
     /// For Kafka consumer
-    String client_id;
-    Int64 partition_id;
+    UInt32 partition_id;
     UInt64 num_consumers;
 
-    Poco::Logger * log;
+    DistributedWriteAheadLogPtr wal;
 
     /// For block numbers.
     SimpleIncrement increment;

@@ -6,22 +6,16 @@
 #include <Interpreters/createBlockSelector.h>
 
 #include <Processors/Pipe.h>
+#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <Storages/MergeTree/DistributedMergeTreeBlockOutputStream.h>
 #include <Common/Macros.h>
-#include <Common/config_version.h>
 #include <Common/randomSeed.h>
-#include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
 namespace DB
 {
 namespace
 {
-String getDefaultClientId(const StorageID & table_id_)
-{
-    return fmt::format("{}-{}-{}-{}", VERSION_NAME, getFQDNOrHostName(), table_id_.database_name, table_id_.table_name);
-}
-
 ExpressionActionsPtr
 buildShardingKeyExpression(const ASTPtr & sharding_key, const Context & context, const NamesAndTypesList & columns, bool project)
 {
@@ -36,13 +30,13 @@ bool isExpressionActionsDeterministics(const ExpressionActionsPtr & actions)
     {
         if (action.node->type != ActionsDAG::ActionType::FUNCTION)
             continue;
+
         if (!action.node->function_base->isDeterministic())
             return false;
     }
     return true;
 }
 }
-
 
 StorageDistributedMergeTree::StorageDistributedMergeTree(
     const StorageID & table_id_,
@@ -68,19 +62,23 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
         std::move(storage_settings_),
         false, /// require_part_metadata
         attach)
+    , log(&Poco::Logger::get("StorageDistributedMergeTree (" + table_id_.table_name + ")"))
     , system_kafka_settings(std::move(system_kafka_settings_))
     , brokers(global_context.getMacros()->expand(system_kafka_settings->kafka_broker_list.value))
     , topic(global_context.getMacros()->expand(system_kafka_settings->kafka_topic.value))
-    , client_id(getDefaultClientId(table_id_))
     , partition_id(system_kafka_settings->kafka_partition.value)
     , num_consumers(system_kafka_settings->kafka_num_consumers.value)
-    , log(&Poco::Logger::get("StorageDistributedMergeTree (" + table_id_.table_name + ")"))
     , has_sharding_key(sharding_key_)
     , shard_count(shard_count_)
     , replication_factor(replication_factor_)
     , slot_to_shard(shard_count, 1)
     , rng(randomSeed())
 {
+    DistributedWriteAheadLogKafkaSettings wal_settings = {
+        .brokers = brokers,
+    };
+    wal = std::make_shared<DistributedWriteAheadLogKafka>(wal_settings);
+
     if (sharding_key_)
     {
         sharding_key_expr = buildShardingKeyExpression(sharding_key_, global_context, metadata_.getColumns().getAllPhysical(), false);
