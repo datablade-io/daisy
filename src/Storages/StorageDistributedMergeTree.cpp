@@ -90,6 +90,10 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     }
 }
 
+StorageDistributedMergeTree::~StorageDistributedMergeTree()
+{
+}
+
 Pipe StorageDistributedMergeTree::read(
     const Names & column_names,
     const StorageMetadataPtr & metadata_snapshot,

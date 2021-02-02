@@ -33,6 +33,8 @@ public:
         CREATE_TABLE = 2,
         DELETE_TABLE = 3,
         ALTER_TABLE = 4,
+
+        UNKNOWN = 255,
     };
 
 
@@ -45,8 +47,8 @@ public:
         Block block;
         RecordSequenceNumber sequence_number = -1;
 
-        static std::vector<UInt8> serialize(const Record & record);
-        static Record deserialize(const std::vector<UInt8> & data);
+        static std::vector<UInt8> write(const Record & record);
+        static Record read(const char * data, size_t size);
 
         Record(ActionType action_type_, Block && block_) : action_type(action_type_), block(block_) { }
     };

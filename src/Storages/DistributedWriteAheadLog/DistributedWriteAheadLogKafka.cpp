@@ -241,7 +241,7 @@ IDistributedWriteAheadLog::RecordSequenceNumber DistributedWriteAheadLogKafka::a
         walctx.topic_handle = init_topic(walctx.topic);
     }
 
-    std::vector<UInt8> data{Record::serialize(record)};
+    std::vector<UInt8> data{Record::write(record)};
 
     (void)data;
     return {};
