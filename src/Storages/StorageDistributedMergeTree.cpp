@@ -14,6 +14,12 @@
 
 namespace DB
 {
+
+namespace ErrorCodes
+{
+    extern const int TYPE_MISMATCH;
+}
+
 namespace
 {
 ExpressionActionsPtr
@@ -74,10 +80,7 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     , slot_to_shard(shard_count, 1)
     , rng(randomSeed())
 {
-    DistributedWriteAheadLogKafkaSettings wal_settings = {
-        .brokers = brokers,
-    };
-    wal = std::make_shared<DistributedWriteAheadLogKafka>(wal_settings);
+    init_wal();
 
     if (sharding_key_)
     {
@@ -294,4 +297,12 @@ size_t StorageDistributedMergeTree::getRandomShardIndex()
     std::lock_guard lock(rng_mutex);
     return std::uniform_int_distribution<size_t>(0, shard_count - 1)(rng);
 }
+
+void StorageDistributedMergeTree::init_wal()
+{
+    std::unique_ptr<DistributedWriteAheadLogKafkaSettings> wal_settings{new DistributedWriteAheadLogKafkaSettings};
+    wal_settings->brokers = brokers;
+    wal = std::make_shared<DistributedWriteAheadLogKafka>(std::move(wal_settings));
+}
+
 }

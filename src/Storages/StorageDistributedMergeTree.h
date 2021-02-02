@@ -112,6 +112,9 @@ protected:
         bool has_force_restore_data_flag);
 
 private:
+    void init_wal();
+
+private:
     Poco::Logger * log;
 
     std::unique_ptr<SystemKafkaSettings> system_kafka_settings;

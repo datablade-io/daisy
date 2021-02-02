@@ -20,6 +20,8 @@ class IDistributedWriteAheadLog : private boost::noncopyable
 {
 public:
     virtual ~IDistributedWriteAheadLog() = default;
+    virtual void startup() { }
+    virtual void shutdown() { }
 
     enum class ActionType : UInt8
     {
@@ -33,6 +35,7 @@ public:
         ALTER_TABLE = 4,
     };
 
+
     using RecordSequenceNumber = Int64;
     using RecordSequenceNumbers = std::vector<Int64>;
 
@@ -41,6 +44,9 @@ public:
         ActionType action_type;
         Block block;
         RecordSequenceNumber sequence_number = -1;
+
+        static std::vector<UInt8> serialize(const Record & record);
+        static Record deserialize(const std::vector<UInt8> & data);
 
         Record(ActionType action_type_, Block && block_) : action_type(action_type_), block(block_) { }
     };
