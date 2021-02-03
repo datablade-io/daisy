@@ -37,14 +37,21 @@ public:
         UNKNOWN = 255,
     };
 
-
     using RecordSequenceNumber = Int64;
     using RecordSequenceNumbers = std::vector<Int64>;
 
     struct Record
     {
-        ActionType action_type;
+        ActionType action_type = ActionType::UNKNOWN;
+
         Block block;
+
+        UInt64 partition_key;
+
+        /// For deduplication
+        String idempotent_key;
+
+        /// When produced to WAL and consumed from WAL
         RecordSequenceNumber sequence_number = -1;
 
         static std::vector<UInt8> write(const Record & record);
@@ -57,14 +64,24 @@ public:
 
     constexpr static UInt8 WAL_VERSION = 1;
 
+
+    struct AppendResult
+    {
+        RecordSequenceNumber sn;
+        std::any ctx;
+    };
+
     /// Append a Record to the target WAL and returns SequenceNumber for this record
     /// Once this function is returned without an error, the record is guaranteed to be committed
-    virtual RecordSequenceNumber append(Record & record, std::any & ctx) = 0;
+    /// If failed, throws necessary exception
+    virtual AppendResult append(Record & record, std::any & ctx) = 0;
 
     /// Consume a max number (`count`) of Record
+    /// If failed, throws necessary exception
     virtual Records consume(size_t count, std::any & ctx) = 0;
 
     /// Move the consuming sequence numbers forward
+    /// If failed, throws necessary exception
     virtual void commit(const RecordSequenceNumbers & sequence_numbers, std::any & ctx) = 0;
 };
 
