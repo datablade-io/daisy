@@ -32,7 +32,7 @@ DistributedWriteAheadLogKafkaContext::DistributedWriteAheadLogKafkaContext(const
 
 std::shared_ptr<rd_kafka_topic_s> DistributedWriteAheadLogKafka::init_topic(const String & topic)
 {
-    using KTopicConfPtr = std::shared_ptr<rd_kafka_topic_conf_t>;
+    using KTopicConfPtr = std::unique_ptr<rd_kafka_topic_conf_t, decltype(rd_kafka_topic_conf_destroy) *>;
 
     KTopicConfPtr tconf{rd_kafka_topic_conf_new(), rd_kafka_topic_conf_destroy};
     if (!tconf)
@@ -41,8 +41,14 @@ std::shared_ptr<rd_kafka_topic_s> DistributedWriteAheadLogKafka::init_topic(cons
         throw Exception("KafkaWAL failed to created kafka topic conf", ErrorCodes::CANNOT_ALLOCATE_MEMORY);
     }
 
+    String acks;
+    if (settings->enable_idempotence)
+         acks = "all";
+     else
+         std::to_string(settings->request_required_acks);
+
     std::vector<std::pair<String, String>> topic_params = {
-        std::make_pair("request.required.acks", std::to_string(settings->request_required_acks)),
+        std::make_pair("request.required.acks", acks),
         /// std::make_pair("delivery.timeout.ms", std::to_string(kLocalMessageTimeout)),
         /// FIXME, partitioner
         std::make_pair("partitioner", "consistent_random"),
@@ -65,7 +71,7 @@ std::shared_ptr<rd_kafka_topic_s> DistributedWriteAheadLogKafka::init_topic(cons
     /// rd_kafka_topic_conf_set_opaque(tconf.get(), this);
 
     /// release the ownership as `rd_kafka_topic_new` takes over
-    return std::shared_ptr<rd_kafka_topic_s>{rd_kafka_topic_new(producer_handle.get(), topic.c_str(), tconf.get()), rd_kafka_topic_destroy};
+    return std::shared_ptr<rd_kafka_topic_s>{rd_kafka_topic_new(producer_handle.get(), topic.c_str(), tconf.release()), rd_kafka_topic_destroy};
 }
 
 void DistributedWriteAheadLogKafka::log_failed_msg(struct rd_kafka_s * rk, const struct rd_kafka_message_s * msg, void * opaque)
@@ -221,7 +227,7 @@ void DistributedWriteAheadLogKafka::init_producer()
 
 void DistributedWriteAheadLogKafka::init_consumer()
 {
-    throw Exception("Not implemented", ErrorCodes::NOT_IMPLEMENTED);
+    /// throw Exception("Not implemented", ErrorCodes::NOT_IMPLEMENTED);
 }
 
 void DistributedWriteAheadLogKafka::shutdown()
@@ -309,6 +315,7 @@ IDistributedWriteAheadLog::AppendResult DistributedWriteAheadLogKafka::append(Re
                 return {.sn = dr.offset, .ctx = dr.partition};
             }
         }
+
         LOG_ERROR(log, "KafkaWal produce message timed out, topic={} partition_key={}", walctx.topic, record.partition_key);
         throw Exception("KafkaWal produce message timed out", ErrorCodes::TIMEOUT_EXCEEDED);
     }

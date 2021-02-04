@@ -51,8 +51,7 @@ public:
         /// For deduplication
         String idempotent_key;
 
-        /// When produced to WAL and consumed from WAL
-        RecordSequenceNumber sequence_number = -1;
+        /// When produced to WAL and consumed from WAL RecordSequenceNumber sequence_number = -1;
 
         static std::vector<UInt8> write(const Record & record);
         static Record read(const char * data, size_t size);
@@ -63,7 +62,6 @@ public:
     using Records = std::vector<Record>;
 
     constexpr static UInt8 WAL_VERSION = 1;
-
 
     struct AppendResult
     {
