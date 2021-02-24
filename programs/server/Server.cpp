@@ -795,8 +795,14 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
             // FIXME logging-related things need synchronization -- see the 'Logger * log' saved
             // in a lot of places. For now, disable updating log configuration without server restart.
-            //setTextLog(global_context->getTextLog());
-            //buildLoggers(*config, logger());
+            if (config->has("text_log.level"))
+            {
+                String level_str = config->getString("text_log.level", "");
+                int level = level_str.empty() ? INT_MAX : Poco::Logger::parseLevel(level_str);
+                setTextLog(global_context->getTextLog(), level);
+            }
+            buildLoggers(*config, logger());
+
             global_context->setClustersConfig(config);
             global_context->setMacros(std::make_unique<Macros>(*config, "macros", log));
             global_context->setExternalAuthenticatorsConfig(*config);
