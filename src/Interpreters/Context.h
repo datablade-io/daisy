@@ -196,6 +196,12 @@ private:
     /// Fields for distributed s3 function
     std::optional<ReadTaskCallback> next_task_callback;
 
+    /// Daisy : starts
+    String query_status_poll_id;
+    String idempotent_key;
+    String ingest_mode;
+    /// Daisy : ends 
+
     /// Record entities accessed by current query, and store this information in system.query_log.
     struct QueryAccessInfo
     {
@@ -465,6 +471,9 @@ public:
 
     String getCurrentDatabase() const;
     String getCurrentQueryId() const { return client_info.current_query_id; }
+    String getQueryStatusPollId() const { return query_status_poll_id; }
+    const String & getIdempotentKey() const { return idempotent_key; }
+    const String & getIngestMode() const { return ingest_mode; }
 
     /// Id of initiating query for distributed queries; or current query id if it's not a distributed query.
     String getInitialQueryId() const;
@@ -474,6 +483,9 @@ public:
     /// exists because it should be set before databases loading.
     void setCurrentDatabaseNameInGlobalContext(const String & name);
     void setCurrentQueryId(const String & query_id);
+    void setQueryStatusPollId(const String & query_status_poll_id_) { query_status_poll_id = query_status_poll_id_; }
+    void setIdempotentKey(const String & idempotent_key_) { idempotent_key = idempotent_key_; }
+    void setIngestMode(const String & ingest_mode_) { ingest_mode = ingest_mode_; }
 
     void killCurrentQuery();
 
@@ -696,6 +708,7 @@ public:
 
     const MergeTreeSettings & getMergeTreeSettings() const;
     const MergeTreeSettings & getReplicatedMergeTreeSettings() const;
+    const MergeTreeSettings & getDistributedMergeTreeSettings() const;
     const StorageS3Settings & getStorageS3Settings() const;
 
     /// Prevents DROP TABLE if its size is greater than max_size (50GB by default, max_size=0 turn off this check)

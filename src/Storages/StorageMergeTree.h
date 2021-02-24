@@ -234,6 +234,7 @@ private:
 
     friend class MergeTreeBlockOutputStream;
     friend class MergeTreeData;
+    friend class StorageDistributedMergeTree;
 
 
 protected:
