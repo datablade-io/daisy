@@ -1,15 +1,16 @@
-[![ClickHouse — open source distributed column-oriented DBMS](https://github.com/ClickHouse/ClickHouse/raw/master/website/images/logo-400x240.png)](https://clickhouse.tech)
+Daisy is an open-source column-oriented and streaming time series database management system built on top of ClickHouse. At it core, it leverages the super power of single instance ClickHouse but provides almost infinite horizontal scalability in data ingestion and query in distributed mode. Daisy combines the two best worlds of real-time streaming processing and data warehouse which we called `Streaming Warehouse`. Internally, it is tailored for time series data and `time` is the first class concept in Daisy.
 
-ClickHouse® is an open-source column-oriented database management system that allows generating analytical data reports in real time.
+# Achitecture
 
-## Useful Links
+In distributed mode, Daisy depends on a high throughput and low latency distributed write ahead log for data ingestion and streaming query. Also it depends on this distributed write ahead log for metadata management and node membership management etc tasks. This architecture is inspired by lots of prior work in academic and industry, to name a few [LinkedIn Databus](https://dl.acm.org/doi/10.1145/2391229.2391247), [SLOG](http://www.vldb.org/pvldb/vol12/p1747-ren.pdf), and lots of work from [Martin Kleppmann](https://martin.kleppmann.com/)
 
-* [Official website](https://clickhouse.tech/) has quick high-level overview of ClickHouse on main page.
-* [Tutorial](https://clickhouse.tech/docs/en/getting_started/tutorial/) shows how to set up and query small ClickHouse cluster.
-* [Documentation](https://clickhouse.tech/docs/en/) provides more in-depth information.
-* [YouTube channel](https://www.youtube.com/c/ClickHouseDB) has a lot of content about ClickHouse in video format.
-* [Slack](https://join.slack.com/t/clickhousedb/shared_invite/zt-nwwakmk4-xOJ6cdy0sJC3It8j348~IA) and [Telegram](https://telegram.me/clickhouse_en) allow to chat with ClickHouse users in real-time.
-* [Blog](https://clickhouse.yandex/blog/en/) contains various ClickHouse-related articles, as well as announcements and reports about events.
-* [Code Browser](https://clickhouse.tech/codebrowser/html_report/ClickHouse/index.html) with syntax highlight and navigation.
-* [Contacts](https://clickhouse.tech/#contacts) can help to get your questions answered if there are any.
-* You can also [fill this form](https://clickhouse.tech/#meet) to meet Yandex ClickHouse team in person.
+achitecture highlights
+
+1. Extremely high performant data ingestion and query. Every node in the cluster can serve ingest and query request.
+2. Time as first class concept and internally the engine is optimized for it
+3. Built-in streaming query capability
+4. At least once delivery semantic by default. Can elimnitate data duplication in practical scenarios in distributed mode
+5. Automatic data shard placement
+6. Mininum operation overhead if running in K8S
+
+![Daisy Architecture](https://github.com/datatlas-io/daisy/raw/develop/design/daisy-high-level-arch.png)
