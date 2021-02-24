@@ -1056,4 +1056,89 @@
 
     <!-- Uncomment to disable ClickHouse internal DNS caching. -->
     <!-- <disable_internal_dns_cache>1</disable_internal_dns_cache> -->
+
+    <system_settings>
+        <system_dwals>
+            <system_kafka>
+                <system_default>true</system_default>
+                <cluster_name>default-sys-kafka-cluster-name</cluster_name>
+                <!-- cluster_id canâ€™t be changed after the system is up and running -->
+                <!-- because the code depends on the immutability of cluster_id -->
+                <cluster_id>default-sys-kafka-cluster-id</cluster_id>
+                <security_protocol>PLAINTEXT</security_protocol>
+                <brokers>localhost:9092</brokers>
+                <replication_factor>1</replication_factor>
+
+                <!-- Global settings for both producers & consumers -->
+                <!--
+                <sasl_kerberos_keytab>...</sasl_kerberos_keytab>
+                <sasl_kerberos_principal>...</sasl_kerberos_principal>
+                -->
+
+                <topic_metadata_refresh_interval_ms>300000</topic_metadata_refresh_interval_ms>
+                <message_max_bytes>1000000</message_max_bytes>
+                <statistic_internal_ms>30000</statistic_internal_ms>
+                <debug></debug>
+
+                <!-- Global settings for producers -->
+                <enable_idempotence>true</enable_idempotence>
+                <queue_buffering_max_messages>100000</queue_buffering_max_messages>
+                <queue_buffering_max_kbytes>1048576</queue_buffering_max_kbytes>
+                <queue_buffering_max_ms>5</queue_buffering_max_ms>
+                <message_send_max_retries>2</message_send_max_retries>
+                <retry_backoff_ms>100</retry_backoff_ms>
+                <compression_codec>snappy</compression_codec>
+
+                <!-- Global librdkafka client settings for producers -->
+                <message_timeout_ms>40000</message_timeout_ms>
+                <message_delivery_async_poll_ms>100</message_delivery_async_poll_ms>
+                <message_delivery_sync_poll_ms>10</message_delivery_sync_poll_ms>
+
+                <!-- Global settings for consumers -->
+                <group_id>daisy</group_id>
+                <message_max_bytes>1000000</message_max_bytes>
+                <enable_auto_commit>true</enable_auto_commit>
+                <check_crcs>false</check_crcs>
+                <auto_commit_interval_ms>5000</auto_commit_interval_ms>
+                <fetch_message_max_bytes>1048576</fetch_message_max_bytes>
+
+                <!-- Global librdkafka client settings for consumers -->
+                <queued_min_messages>1000000</queued_min_messages>
+                <queued_max_messages_kbytes>65536</queued_max_messages_kbytes>
+
+                <internal_pool_size>2</internal_pool_size>
+            </system_kafka>
+            <system_kafka>
+                <system_default>false</system_default>
+                <cluster_name>other-sys-kafka-cluster-name</cluster_name>
+                <!-- cluster_id canâ€™t be changed after the system is up and running -->
+                <!-- because the code depends on the immutability of cluster_id -->
+                <cluster_id>other-sys-kafka-cluster-id</cluster_id>
+            </system_kafka>
+        </system_dwals>
+
+        <system_roles>
+            <role>placement</role>
+            <role>catalog</role>
+        </system_roles>
+
+        <!-- system_ddl_wal is for distributed DDL -->
+        <system_ddl_dwal>
+            <name>__system_ddl</name>
+            <replication_factor>1</replication_factor>
+        </system_ddl_dwal>
+
+        <!-- system_catalog_dwal is for distributed catalog service -->
+        <system_catalog_dwal>
+            <name>__system_catalog</name>
+            <replication_factor>1</replication_factor>
+        </system_catalog_dwal>
+
+        <!-- system_node_metrics_dwal is for distributed placement service -->
+        <system_node_metrics_dwal>
+            <name>__system_node_metrics</name>
+            <replication_factor>1</replication_factor>
+        </system_node_metrics_dwal>
+    </system_settings>
+
 </yandex>

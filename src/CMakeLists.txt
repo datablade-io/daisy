@@ -74,6 +74,7 @@ list (REMOVE_ITEM clickhouse_common_io_sources Common/malloc.cpp Common/new_dele
 
 if(USE_RDKAFKA)
     add_headers_and_sources(dbms Storages/Kafka)
+    add_headers_and_sources(dbms Storages/DistributedWriteAheadLog)
 endif()
 
 if (USE_AMQPCPP)
