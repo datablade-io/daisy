@@ -218,7 +218,7 @@ selectUnionStmt: selectStmtWithParens (UNION ALL selectStmtWithParens)*;
 selectStmtWithParens: selectStmt | LPAREN selectUnionStmt RPAREN;
 selectStmt:
     withClause?
-    SELECT DISTINCT? topClause? columnExprList
+    SELECT STREAM? DISTINCT? topClause? columnExprList
     fromClause?
     arrayJoinClause?
     prewhereClause?

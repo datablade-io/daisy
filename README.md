@@ -31,7 +31,7 @@ $ mkdir -p build && cd build && cmake ..
 $ ninja
 ```
 
-## Full Relase Package Build
+## Full Release Package Build
 
 ```
 $ cd daisy/docker/packager
