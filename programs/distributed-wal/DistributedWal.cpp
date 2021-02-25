@@ -417,7 +417,7 @@ BenchmarkSettings parseTopicSettings(po::parsed_options & cmd_parsed, const char
 
     auto options = desc.add_options();
     options("help", "help message");
-    options("mode", value<String>()->default_value("create"), "create or delete Kafka topic");
+    options("mode", value<String>()->default_value("create"), "create or delete or describe Kafka topic");
     options("partitions", value<Int32>()->default_value(1), "number of partitions");
     options("replication_factor", value<Int32>()->default_value(1), "number of replicas per partition");
     options("name", value<String>(), "Kafka topic name");
@@ -447,7 +447,7 @@ BenchmarkSettings parseTopicSettings(po::parsed_options & cmd_parsed, const char
     }
 
     auto mode = option_map["mode"].as<String>();
-    if (mode != "create" && mode != "delete")
+    if (mode != "create" && mode != "delete" && mode != "describe")
     {
         cout << "Usage: " << progname << " " << desc << "\n";
         return {};
@@ -856,7 +856,7 @@ void admin(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
             cout << "create topic " << bench_settings.topic_settings.name << " successfully\n";
         }
     }
-    else
+    else if (bench_settings.topic_settings.mode == "delete")
     {
         if (wals[0]->remove(bench_settings.topic_settings.name, ctx) != 0)
         {
@@ -865,6 +865,17 @@ void admin(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
         else
         {
             cout << "delete topic " << bench_settings.topic_settings.name << " successfully\n";
+        }
+    }
+    else
+    {
+        if (wals[0]->describe(bench_settings.topic_settings.name, ctx) != 0)
+        {
+            cout << "failed to describe topic " << bench_settings.topic_settings.name << "\n";
+        }
+        else
+        {
+            cout << "describe topic " << bench_settings.topic_settings.name << " successfully\n";
         }
     }
 }
