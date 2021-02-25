@@ -171,6 +171,8 @@ public:
     /// `ctx` is DistributedWriteAheadLogKafkaContext
     Int32 remove(const String & name, std::any & ctx) override;
 
+    /// `ctx` is DistributedWriteAheadLogKafkaContext
+    Int32 describe(const String & name, std::any & ctx) override;
 
 private:
     using FreeRdKafka = void (*)(struct rd_kafka_s *);
@@ -248,8 +250,8 @@ private:
 
     ThreadPool poller;
 
-    StatsPtr stats;
-
     Poco::Logger * log;
+
+    StatsPtr stats;
 };
 }

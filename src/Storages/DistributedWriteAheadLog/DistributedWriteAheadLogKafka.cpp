@@ -51,11 +51,14 @@ Int32 mapErrorCode(rd_kafka_resp_err_t err)
 
 Int32 doTopic(
     const String & name,
-    const std::function<void(rd_kafka_AdminOptions_t *, rd_kafka_queue_t *)> & do_topic,
+    const std::function<void(rd_kafka_t *, rd_kafka_AdminOptions_t *, rd_kafka_queue_t *)> & do_topic,
     decltype(rd_kafka_event_DeleteTopics_result) topics_result_func,
     decltype(rd_kafka_DeleteTopics_result_topics) topics_func,
+    std::function<Int32(const rd_kafka_event_t *)> post_validate,
     rd_kafka_t * handle,
-    Poco::Logger * log)
+    UInt32 request_timeout,
+    Poco::Logger * log,
+    const String & action)
 {
     /// Setup options
     std::shared_ptr<rd_kafka_AdminOptions_t> options(
@@ -64,11 +67,10 @@ Int32 doTopic(
     /// Overall request timeout, including broker lookup, request transmission, operation time on broker and resposne
     /// default is `socket.timeout.ms` which is 60 seconds, -1 for indefinite timeout
     char errstr[512] = {'\0'};
-    int request_timeout = 60000;
     auto err = rd_kafka_AdminOptions_set_request_timeout(options.get(), request_timeout, errstr, sizeof(errstr));
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        LOG_ERROR(log, "KafkaWal failed to create topic={} error={} detail={}", name, rd_kafka_err2str(err), errstr);
+        LOG_ERROR(log, "KafkaWal failed to {} topic={} error={} detail={}", action, name, rd_kafka_err2str(err), errstr);
         return mapErrorCode(err);
     }
 
@@ -76,60 +78,70 @@ Int32 doTopic(
     err = rd_kafka_AdminOptions_set_operation_timeout(options.get(), request_timeout, errstr, sizeof(errstr));
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        LOG_ERROR(log, "KafkaWal failed to create topic={} error={} detail={}", name, rd_kafka_err2str(err), errstr);
+        LOG_ERROR(log, "KafkaWal failed to {} topic={} error={} detail={}", action, name, rd_kafka_err2str(err), errstr);
         return mapErrorCode(err);
     }
 
     std::shared_ptr<rd_kafka_queue_t> admin_queue{rd_kafka_queue_new(handle), rd_kafka_queue_destroy};
 
     /// create or delete topic
-    do_topic(options.get(), admin_queue.get());
+    do_topic(handle, options.get(), admin_queue.get());
 
     /// poll result
-    auto rkev = rd_kafka_queue_poll(admin_queue.get(), request_timeout + 1000);
+    auto rkev = rd_kafka_queue_poll(admin_queue.get(), request_timeout + 500);
     if (rkev == nullptr)
     {
-        LOG_ERROR(log, "KafkaWal failed to delete topic={} timeout", name);
+        LOG_ERROR(log, "KafkaWal failed to {} topic={} timeout", action, name);
         return ErrorCodes::TIMEOUT_EXCEEDED;
     }
     std::shared_ptr<rd_kafka_event_t> event_holder{rkev, rd_kafka_event_destroy};
-
-    auto res = topics_result_func(rkev);
-    if (res == nullptr)
-    {
-        LOG_ERROR(log, "KafkaWal failed to delete topic={}, unknown error", name);
-        return ErrorCodes::UNKNOWN_EXCEPTION;
-    }
 
     if ((err = rd_kafka_event_error(rkev)) != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
         LOG_ERROR(
             log,
-            "KafkaWal failed to delete topic={}, error={} detail={}",
+            "KafkaWal failed to {} topic={}, error={} detail={}",
+            action,
             name,
             rd_kafka_err2str(err),
             rd_kafka_event_error_string(rkev));
         return mapErrorCode(err);
     }
 
-    size_t cnt = 0;
-    auto result_topics = topics_func(res, &cnt);
-    if (cnt != 1 || result_topics == nullptr)
+    auto res = topics_result_func(rkev);
+    if (res == nullptr)
     {
-        LOG_ERROR(log, "KafkaWal failed to delete topic={}, unknown error", name);
+        LOG_ERROR(log, "KafkaWal failed to {} topic={}, unknown error", action, name);
         return ErrorCodes::UNKNOWN_EXCEPTION;
     }
 
-    if ((err = rd_kafka_topic_result_error(result_topics[0])) != RD_KAFKA_RESP_ERR_NO_ERROR)
+    if (topics_func)
     {
-        LOG_ERROR(
-            log,
-            "KafkaWal failed to delete topic={}, error={} detail={}",
-            name,
-            rd_kafka_err2str(err),
-            rd_kafka_topic_result_error_string(result_topics[0]));
+        size_t cnt = 0;
+        auto result_topics = topics_func(res, &cnt);
+        if (cnt != 1 || result_topics == nullptr)
+        {
+            LOG_ERROR(log, "KafkaWal failed to {} topic={}, unknown error", action, name);
+            return ErrorCodes::UNKNOWN_EXCEPTION;
+        }
 
-        return mapErrorCode(err);
+        if ((err = rd_kafka_topic_result_error(result_topics[0])) != RD_KAFKA_RESP_ERR_NO_ERROR)
+        {
+            LOG_ERROR(
+                log,
+                "KafkaWal failed to {} topic={}, error={} detail={}",
+                action,
+                name,
+                rd_kafka_err2str(err),
+                rd_kafka_topic_result_error_string(result_topics[0]));
+
+            return mapErrorCode(err);
+        }
+    }
+
+    if (post_validate)
+    {
+        return post_validate(res);
     }
 
     return ErrorCodes::OK;
@@ -386,8 +398,8 @@ DistributedWriteAheadLogKafka::DistributedWriteAheadLogKafka(std::unique_ptr<Dis
     , producer_handle(nullptr, rd_kafka_destroy)
     , consumer_handle(nullptr, rd_kafka_destroy)
     , poller(2)
-    , stats{std::make_unique<Stats>(log)}
     , log(&Poco::Logger::get("DistributedWriteAheadLogKafka"))
+    , stats{std::make_unique<Stats>(log)}
 {
 }
 
@@ -1101,12 +1113,22 @@ Int32 DistributedWriteAheadLogKafka::create(const String & name, std::any & ctx)
     }
     std::shared_ptr<rd_kafka_NewTopic_t> topics_holder{topics[0], rd_kafka_NewTopic_destroy};
 
-    auto createTopics
-        = [&, this](rd_kafka_AdminOptions_t * options, rd_kafka_queue_t * admin_queue) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-              rd_kafka_CreateTopics(producer_handle.get(), topics, 1, options, admin_queue);
-          };
+    auto createTopics = [&](rd_kafka_t * handle,
+                            rd_kafka_AdminOptions_t * options,
+                            rd_kafka_queue_t * admin_queue) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+        rd_kafka_CreateTopics(handle, topics, 1, options, admin_queue);
+    };
 
-    return doTopic(name, createTopics, rd_kafka_event_CreateTopics_result, rd_kafka_CreateTopics_result_topics, producer_handle.get(), log);
+    return doTopic(
+        name,
+        createTopics,
+        rd_kafka_event_CreateTopics_result,
+        rd_kafka_CreateTopics_result_topics,
+        nullptr,
+        producer_handle.get(),
+        60000,
+        log,
+        "create");
 }
 
 Int32 DistributedWriteAheadLogKafka::remove(const String & name, std::any & ctx)
@@ -1118,10 +1140,77 @@ Int32 DistributedWriteAheadLogKafka::remove(const String & name, std::any & ctx)
     topics[0] = rd_kafka_DeleteTopic_new(name.c_str());
     std::shared_ptr<rd_kafka_DeleteTopic_t> topics_holder{topics[0], rd_kafka_DeleteTopic_destroy};
 
-    auto deleteTopics = [&, this](rd_kafka_AdminOptions_t * options, rd_kafka_queue_t * admin_queue) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-        rd_kafka_DeleteTopics(producer_handle.get(), topics, 1, options, admin_queue);
+    auto deleteTopics = [&](rd_kafka_t * handle,
+                            rd_kafka_AdminOptions_t * options,
+                            rd_kafka_queue_t * admin_queue) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+        rd_kafka_DeleteTopics(handle, topics, 1, options, admin_queue);
     };
 
-    return doTopic(name, deleteTopics, rd_kafka_event_DeleteTopics_result, rd_kafka_DeleteTopics_result_topics, producer_handle.get(), log);
+    return doTopic(
+        name,
+        deleteTopics,
+        rd_kafka_event_DeleteTopics_result,
+        rd_kafka_DeleteTopics_result_topics,
+        nullptr,
+        producer_handle.get(),
+        60000,
+        log,
+        "delete");
+}
+
+Int32 DistributedWriteAheadLogKafka::describe(const String & name, std::any & ctx)
+{
+    assert(ctx.has_value());
+    (void)ctx;
+
+    rd_kafka_ConfigResource_t * configs[1];
+    configs[0] = rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, name.c_str());
+    if (configs[0] == nullptr)
+    {
+        LOG_ERROR(log, "KafkaWal failed to describe topic, invalid arguments");
+        return ErrorCodes::BAD_ARGUMENTS;
+    }
+    std::shared_ptr<rd_kafka_ConfigResource_t> config_holder{configs[0], rd_kafka_ConfigResource_destroy};
+
+    auto describeTopics = [&](rd_kafka_t * handle,
+                              rd_kafka_AdminOptions_t * options,
+                              rd_kafka_queue_t * admin_queue) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+        rd_kafka_DescribeConfigs(handle, configs, 1, options, admin_queue);
+    };
+
+    auto validate = [this, &name](const rd_kafka_event_t * event) -> Int32 {
+        /// validate result resources
+        size_t cnt = 0;
+        auto rconfigs = rd_kafka_DescribeConfigs_result_resources(event, &cnt);
+        if (cnt != 1 || rconfigs == nullptr)
+        {
+            LOG_ERROR(log, "KafkaWal failed to describe topic={}, unknown error", name);
+            return ErrorCodes::UNKNOWN_EXCEPTION;
+        }
+
+        auto err = rd_kafka_ConfigResource_error(rconfigs[0]);
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        {
+            LOG_ERROR(
+                log,
+                "KafkaWal failed to describe topic={}, error={} detail={}",
+                name,
+                rd_kafka_err2str(err),
+                rd_kafka_ConfigResource_error_string(rconfigs[0]));
+
+            return mapErrorCode(err);
+        }
+
+        rd_kafka_ConfigResource_configs(rconfigs[0], &cnt);
+        if (cnt == 0)
+        {
+            return ErrorCodes::RESOURCE_NOT_FOUND;
+        }
+
+        return ErrorCodes::OK;
+    };
+
+    return doTopic(
+        name, describeTopics, rd_kafka_event_DescribeConfigs_result, nullptr, validate, producer_handle.get(), 4000, log, "describe");
 }
 }

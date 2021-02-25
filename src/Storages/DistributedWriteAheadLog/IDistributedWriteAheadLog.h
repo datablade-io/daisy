@@ -148,6 +148,9 @@ public:
 
     /// `remove` deltes a WAL log named `name`. Returns 0 if success; otherwise non-zero
     virtual Int32 remove(const String & name, std::any & ctx) = 0;
+
+    /// `describe` return 0 if success; otherwise return non-zero
+    virtual Int32 describe(const String & name, std::any & ctx) = 0;
 };
 
 using DistributedWriteAheadLogPtr = std::shared_ptr<IDistributedWriteAheadLog>;
