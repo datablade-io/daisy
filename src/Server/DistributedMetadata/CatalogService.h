@@ -31,13 +31,17 @@ private:
     void commit(Block && block);
 
     void buildCatalog(const String & host, const Block & bock);
+    void buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs & records);
+
     void createTable(const Block & bock);
     void deleteTable(const Block & bock);
     void alterTable(const Block & bock);
-    void process(const IDistributedWriteAheadLog::RecordPtrs & records);
+    void processDDL(const IDistributedWriteAheadLog::RecordPtrs & records);
 
+    bool validateSchema(const Block & block, const std::vector<String> & col_names);
     void backgroundCataloger();
-    void createDWal();
+    void backgroundDDL();
+    void createDWal(std::any & ctx);
 
 private:
     struct Table
@@ -70,7 +74,8 @@ private:
     /// global context
     Context & global_context;
 
-    std::any ctx;
+    std::any catalog_ctx;
+    std::any ddl_ctx;
     DistributedWriteAheadLogPtr dwal;
 
     std::atomic_flag stopped = ATOMIC_FLAG_INIT;
@@ -80,6 +85,8 @@ private:
     /// indexed by table name which is enfored to
     /// be unique across the whole system / cluster
     std::unordered_map<String, std::vector<Table>> tables;
+
+    std::optional<ThreadPool> ddl;
 
     Poco::Logger * log;
 };
