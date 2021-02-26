@@ -1,4 +1,5 @@
 #include "CatalogService.h"
+#include "CommonUtils.h"
 
 #include <Core/Block.h>
 #include <DataStreams/AsynchronousBlockInputStream.h>
@@ -28,18 +29,13 @@ namespace ErrorCodes
 namespace
 {
 /// globals
+String SYSTEM_ROLES_KEY = "system_settings.system_roles";
+String CATALOG_ROLE = "catalog";
+
 String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
 String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
 String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
-String SYSTEM_ROLES_KEY = "system_settings.system_roles";
-
-String CATALOG_ROLE = "catalog";
 String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
-
-String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
-String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
-String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
-String DDL_DEFAULT_TOPIC = "__system_ddls";
 
 
 inline String nodeIdentity() { return getFQDNOrHostName(); }
@@ -158,28 +154,74 @@ void CatalogService::commit(Block && block)
     }
 }
 
-void CatalogService::buildCatalog(const String & host, const Block & block)
+std::vector<CatalogService::TablePtr> CatalogService::tables() const
 {
+    std::vector<TablePtr> results;
+    std::shared_lock guard(rwlock);
+    for (const auto & p : indexedByName)
+    {
+        for (const auto & pp : p.second)
+        {
+            results.push_back(pp.second);
+        }
+    }
+    return results;
+}
+
+std::vector<CatalogService::TablePtr> CatalogService::findTableByHost(const String & host) const
+{
+    std::vector<TablePtr> results;
+    std::shared_lock guard(rwlock);
+    auto iter = indexedByHost.find(host);
+    if (iter != indexedByHost.end())
+    {
+        for (const auto & p : iter->second)
+        {
+            results.push_back(p.second);
+        }
+    }
+    return results;
+}
+
+std::vector<CatalogService::TablePtr> CatalogService::findTableByName(const String & table) const
+{
+    std::vector<TablePtr> results;
+    std::shared_lock guard(rwlock);
+    auto iter = indexedByName.find(table);
+    if (iter != indexedByName.end())
+    {
+        for (const auto & p : iter->second)
+        {
+            results.push_back(p.second);
+        }
+    }
+    return results;
+}
+
+/// build tables indexed by (tablename, shard) for host
+CatalogService::TableInnerContainer CatalogService::buildCatalog(const String & host, const Block & block)
+{
+    TableInnerContainer snapshot;
     for (size_t row = 0; row < block.rows(); ++row)
     {
-        Table table{host};
+        TablePtr table = std::make_shared<Table>(host);
         std::unordered_map<String, void *> kvp = {
-            {"database", &table.database},
-            {"name", &table.name},
-            {"engine", &table.engine},
-            {"metadata_path", &table.metadata_path},
-            {"data_paths", &table.data_paths},
-            {"dependencies_database", &table.dependencies_database},
-            {"dependencies_table", &table.dependencies_table},
-            {"create_table_query", &table.create_table_query},
-            {"engine_full", &table.engine_full},
-            {"partition_key", &table.partition_key},
-            {"sorting_key", &table.sorting_key},
-            {"primary_key", &table.primary_key},
-            {"sampling_key", &table.sampling_key},
-            {"storage_policy", &table.storage_policy},
-            {"total_rows", &table.total_rows},
-            {"total_bytes", &table.total_bytes},
+            {"database", &table->database},
+            {"name", &table->name},
+            {"engine", &table->engine},
+            {"metadata_path", &table->metadata_path},
+            {"data_paths", &table->data_paths},
+            {"dependencies_database", &table->dependencies_database},
+            {"dependencies_table", &table->dependencies_table},
+            {"create_table_query", &table->create_table_query},
+            {"engine_full", &table->engine_full},
+            {"partition_key", &table->partition_key},
+            {"sorting_key", &table->sorting_key},
+            {"primary_key", &table->primary_key},
+            {"sampling_key", &table->sampling_key},
+            {"storage_policy", &table->storage_policy},
+            {"total_rows", &table->total_rows},
+            {"total_bytes", &table->total_bytes},
         };
 
         for (const auto & col : block)
@@ -205,28 +247,53 @@ void CatalogService::buildCatalog(const String & host, const Block & block)
         }
 
         /// FIXME; shard parsing
-
-        {
-            bool replaced = false;
-            std::unique_lock guard(rwlock);
-            for (auto & tbl: tables[table.name])
-            {
-                if ((tbl.shard == table.shard) && (tbl.host == table.host))
-                {
-                    tbl = table;
-                    replaced = true;
-                    break;
-                }
-            }
-
-            if (!replaced)
-            {
-                tables[table.name].push_back(std::move(table));
-            }
-        }
+        snapshot.emplace(std::make_pair(std::make_pair(table->name, table->shard), table));
     }
 
-    /// std::shared_lock guard(rwlock);
+    return snapshot;
+}
+
+void CatalogService::mergeCatalog(const String & host, TableInnerContainer snapshot)
+{
+    std::unique_lock guard(rwlock);
+
+    auto iter = indexedByHost.find(host);
+    if (iter == indexedByHost.end())
+    {
+        /// Not found, add all tables from this host to `indexedByName`
+        for (const auto & p : snapshot)
+        {
+            auto & by_host_shard = indexedByName[p.second->name];
+            Pair key = std::make_pair(p.second->host, p.second->shard);
+
+            assert(!by_host_shard.contains(key));
+
+            by_host_shard.emplace(std::make_pair(key, p.second));
+        }
+    }
+    else
+    {
+        /// Found, merge new / existing tables from this host to `indexedByName`
+        /// and delete `deleted` table entries from `indexedByName`
+         for (const auto & p : iter->second)
+         {
+             /// ((tablename, shard), table) pair
+             if (!snapshot.contains(p.first))
+             {
+                 /// deleted table, remove from `indexByName`
+                 auto removed = indexedByName[p.second->name].erase(std::make_pair(p.second->host, p.second->shard));
+                 assert(removed == 1);
+                 (void)removed;
+             }
+             else
+             {
+                 indexedByName[p.second->name].insert_or_assign(std::make_pair(p.second->host, p.second->shard), p.second);
+             }
+         }
+    }
+
+    /// replace all tables for this host in `indexedByHost`
+    indexedByHost[host].swap(snapshot);
 }
 
 void CatalogService::buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs & records)
@@ -235,13 +302,15 @@ void CatalogService::buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs &
     {
         assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
 
-        buildCatalog(record->idempotent_key, record->block);
+        TableInnerContainer snapshot{buildCatalog(record->idempotent_key, record->block)};
+        mergeCatalog(record->idempotent_key, std::move(snapshot));
+        assert(snapshot.empty());
     }
 }
 
 void CatalogService::backgroundCataloger()
 {
-    createDWal(catalog_ctx);
+    createDWal(dwal, catalog_ctx, stopped, log);
 
     auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(catalog_ctx);
 
@@ -262,122 +331,6 @@ void CatalogService::backgroundCataloger()
         }
 
         buildCatalogs(result.records);
-    }
-}
-
-bool CatalogService::validateSchema(const Block & block, const std::vector<String> & col_names)
-{
-    for (const auto & col_name : col_names)
-    {
-        if (!block.has(col_name))
-        {
-            LOG_ERROR(log, "`{}` column is missing", col_name);
-            return false;
-        }
-    }
-    return true;
-}
-
-void CatalogService::createTable(const Block & block)
-{
-    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
-    {
-        return;
-    }
-
-    String query = block.getByName("ddl").column->getDataAt(0).toString();
-    (void)query;
-}
-
-void CatalogService::deleteTable(const Block & block)
-{
-    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
-    {
-        return;
-    }
-}
-
-void CatalogService::alterTable(const Block & block)
-{
-    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
-    {
-        return;
-    }
-}
-
-void CatalogService::processDDL(const IDistributedWriteAheadLog::RecordPtrs & records)
-{
-    for (const auto & record : records)
-    {
-        if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_TABLE)
-        {
-            createTable(record->block);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
-        {
-            deleteTable(record->block);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
-        {
-            alterTable(record->block);
-        }
-        else
-        {
-            assert(0);
-            LOG_ERROR(log, "Unknown operation={}", static_cast<Int32>(record->op_code));
-        }
-    }
-}
-
-void CatalogService::backgroundDDL()
-{
-    createDWal(ddl_ctx);
-
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ddl_ctx);
-
-    /// FIXME, checkpoint
-    while (!stopped.test())
-    {
-        auto result{dwal->consume(10, 200, catalog_ctx)};
-        if (result.err != ErrorCodes::OK)
-        {
-            LOG_ERROR(log, "Failed to consume data, error={}", result.err);
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            continue;
-        }
-
-        if (result.records.empty())
-        {
-            continue;
-        }
-
-        processDDL(result.records);
-    }
-}
-
-/// try indefinitely to create dwal for catalog
-void CatalogService::createDWal(std::any & ctx)
-{
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
-    if (dwal->describe(kctx.topic, ctx) == ErrorCodes::OK)
-    {
-        return;
-    }
-
-    LOG_INFO(log, "Catalog topic={} is not detected, create one", kctx.topic);
-    while (!stopped.test())
-    {
-        if (dwal->create(kctx.topic, ctx) == ErrorCodes::OK)
-        {
-            /// FIXME, if the error is fatal. throws
-            LOG_INFO(log, "Successfully created catalog topic={}", kctx.topic);
-            break;
-        }
-        else
-        {
-            LOG_INFO(log, "Failed to create catalog topic={}, will retry indefinitely ...", kctx.topic);
-            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-        }
     }
 }
 
@@ -403,15 +356,6 @@ void CatalogService::init()
             cataloger.emplace(1);
             cataloger->scheduleOrThrowOnError([this] { backgroundCataloger(); });
             catalog_ctx = catalog_kctx;
-
-            /// ddl
-            String ddl_topic = config.getString(DDL_NAME_KEY, DDL_DEFAULT_TOPIC);
-            DistributedWriteAheadLogKafkaContext ddl_kctx{ddl_topic, 1, config.getInt(DDL_REPLICATION_FACTOR_KEY, 1)};
-            ddl_kctx.partition = 0;
-
-            ddl.emplace(1);
-            ddl->scheduleOrThrowOnError([this] { backgroundDDL(); });
-            ddl_ctx = ddl_kctx;
 
             break;
         }

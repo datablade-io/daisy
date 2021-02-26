@@ -1120,7 +1120,8 @@
         <system_roles>
             <role>placement</role>
             <role>catalog</role>
-            <role>admin_task</role>
+            <role>ddl</role>
+            <role>task</role>
         </system_roles>
 
         <!-- system_ddl_wal is for distributed DDL -->
