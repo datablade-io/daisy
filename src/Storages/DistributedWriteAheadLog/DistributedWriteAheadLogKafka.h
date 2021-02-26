@@ -33,6 +33,12 @@ struct DistributedWriteAheadLogKafkaContext
     Int32 partitions = 1;
     Int32 replication_factor = 1;
 
+    /// data retention for cleanup_policy `delete`
+    Int32 retention_ms = 86400 * 1000;
+
+    /// compact or delete
+    String cleanup_policy = "delete";
+
     /// ************************************************
 
     /// per topic producer settings
@@ -56,6 +62,12 @@ struct DistributedWriteAheadLogKafkaContext
 
     DistributedWriteAheadLogKafkaContext(const String & topic_, Int32 partition_, Int64 offset_)
         : topic(topic_), partition(partition_), offset(offset_)
+    {
+    }
+
+    DistributedWriteAheadLogKafkaContext(
+        const String & topic_, Int32 partitions_, Int32 replication_factor_, const String & cleanup_policy_ = "delete")
+        : topic(topic_), partitions(partitions_), replication_factor(replication_factor_), cleanup_policy(cleanup_policy_)
     {
     }
 

@@ -469,7 +469,7 @@ void StorageDistributedMergeTree::mergeBlocks(Block & lhs, Block & rhs)
 void StorageDistributedMergeTree::doCommit(Block & block, Int64 & last_sn, std::any & dwal_consume_ctx)
 {
     assert(block);
-    assert(last_sn > 0);
+    assert(last_sn >= 0);
 
     const auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
 
@@ -553,14 +553,14 @@ void StorageDistributedMergeTree::commit(
     assert(!merged);
 
     last_sn = records.back().back()->sn;
-    assert(last_sn > 0);
+    assert(last_sn >= 0);
 
     doCommit(block, last_sn, dwal_consume_ctx);
 }
 
 void StorageDistributedMergeTree::backgroundConsumer()
 {
-    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    /// std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
     auto topic = getStorageID().getFullTableName();
     DistributedWriteAheadLogKafkaContext consume_ctx{topic, dwal_partition, lastSequenceNumber()};
