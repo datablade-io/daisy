@@ -17,6 +17,7 @@ namespace ErrorCodes
     extern const int RESOURCE_ALREADY_EXISTS;
     extern const int TIMEOUT_EXCEEDED;
     extern const int UNKNOWN_EXCEPTION;
+    extern const int DWAL_FATAL_ERROR;
 }
 
 namespace
@@ -29,6 +30,7 @@ using KConfParams = std::vector<std::pair<String, String>>;
 
 /// static globals
 const char * IDEM_HEADER_NAME = "_idem";
+
 
 Int32 mapErrorCode(rd_kafka_resp_err_t err)
 {
@@ -43,6 +45,12 @@ Int32 mapErrorCode(rd_kafka_resp_err_t err)
 
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
             return ErrorCodes::RESOURCE_NOT_FOUND;
+
+        case RD_KAFKA_RESP_ERR__INVALID_ARG:
+            return ErrorCodes::INVALID_CONFIG_PARAMETER;
+
+        case RD_KAFKA_RESP_ERR__FATAL:
+            throw Exception("KafkaWAL has fatal error, shall tear down the whole program", ErrorCodes::DWAL_FATAL_ERROR);
 
         default:
             return ErrorCodes::UNKNOWN_EXCEPTION;
@@ -759,19 +767,6 @@ DistributedWriteAheadLogKafka::handleError(int err, const Record & record, const
         record.partition_key,
         rd_kafka_err2str(kerr));
 
-    if (kerr == RD_KAFKA_RESP_ERR__FATAL)
-    {
-        /// for fatal error, we need replace this KafkaWAL instance with
-        /// a new one
-    }
-    else if (kerr == RD_KAFKA_RESP_ERR__QUEUE_FULL)
-    {
-        /// Server busy
-    }
-    else
-    {
-    }
-
     return {.sn = -1, .err = mapErrorCode(kerr), .ctx = -1};
 }
 
@@ -1111,6 +1106,23 @@ Int32 DistributedWriteAheadLogKafka::create(const String & name, std::any & ctx)
         LOG_ERROR(log, "KafkaWal failed to create topic={} error={}", name, errstr);
         return ErrorCodes::UNKNOWN_EXCEPTION;
     }
+
+    KConfParams params = {
+        std::make_pair("compression.type", "lz4"),
+        std::make_pair("cleanup.policy", walctx.cleanup_policy),
+        std::make_pair("retention.ms", std::to_string(walctx.retention_ms)),
+    };
+
+    for (const auto & param : params)
+    {
+        auto err = rd_kafka_NewTopic_set_config(topics[0], param.first.c_str(), param.second.c_str());
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        {
+            LOG_ERROR(log, "KafkaWal failed to set config for topic={} error={}", name, rd_kafka_err2str(err));
+            return mapErrorCode(err);
+        }
+    }
+
     std::shared_ptr<rd_kafka_NewTopic_t> topics_holder{topics[0], rd_kafka_NewTopic_destroy};
 
     auto createTopics = [&](rd_kafka_t * handle,
