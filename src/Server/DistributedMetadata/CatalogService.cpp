@@ -32,8 +32,15 @@ String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
 String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
 String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
 String SYSTEM_ROLES_KEY = "system_settings.system_roles";
+
 String CATALOG_ROLE = "catalog";
-String CATALOG_DEFAULT_TOPIC = "__system_catalog";
+String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
+
+String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
+String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
+String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
+String DDL_DEFAULT_TOPIC = "__system_ddls";
+
 
 inline String nodeIdentity() { return getFQDNOrHostName(); }
 }
@@ -65,7 +72,7 @@ void CatalogService::broadcast()
     }
     catch (...)
     {
-        LOG_ERROR(log, "CatalogService failed to execute table query, error={}", getCurrentExceptionMessage(true, true));
+        LOG_ERROR(log, "Failed to execute table query, error={}", getCurrentExceptionMessage(true, true));
     }
 }
 
@@ -91,7 +98,7 @@ void CatalogService::doBroadcast()
     else
     {
         assert(false);
-        LOG_ERROR(log, "CatalogService failed to execute table query");
+        LOG_ERROR(log, "Failed to execute table query");
     }
 }
 
@@ -140,30 +147,15 @@ void CatalogService::commit(Block && block)
     int retries = 3;
     while (retries--)
     {
-        auto result = dwal->append(record, ctx);
+        auto result = dwal->append(record, catalog_ctx);
         if (result.err == 0)
         {
             return;
         }
 
-        LOG_ERROR(log, "CatalogService failed to commit, error={}", result.err);
+        LOG_ERROR(log, "Failed to commit, error={}", result.err);
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     }
-}
-
-void CatalogService::createTable(const Block & block)
-{
-    (void)block;
-}
-
-void CatalogService::deleteTable(const Block & block)
-{
-    (void)block;
-}
-
-void CatalogService::alterTable(const Block & block)
-{
-    (void)block;
 }
 
 void CatalogService::buildCatalog(const String & host, const Block & block)
@@ -237,16 +229,87 @@ void CatalogService::buildCatalog(const String & host, const Block & block)
     /// std::shared_lock guard(rwlock);
 }
 
-void CatalogService::process(const IDistributedWriteAheadLog::RecordPtrs & records)
+void CatalogService::buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
     for (const auto & record : records)
     {
-        if (record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK)
+        assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
+
+        buildCatalog(record->idempotent_key, record->block);
+    }
+}
+
+void CatalogService::backgroundCataloger()
+{
+    createDWal(catalog_ctx);
+
+    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(catalog_ctx);
+
+    /// always consuming from beginning
+    while (!stopped.test())
+    {
+        auto result{dwal->consume(1000, 200, catalog_ctx)};
+        if (result.err != ErrorCodes::OK)
         {
-            /// data block
-            buildCatalog(record->idempotent_key, record->block);
+            LOG_ERROR(log, "Failed to consume data, error={}", result.err);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            continue;
         }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_TABLE)
+
+        if (result.records.empty())
+        {
+            continue;
+        }
+
+        buildCatalogs(result.records);
+    }
+}
+
+bool CatalogService::validateSchema(const Block & block, const std::vector<String> & col_names)
+{
+    for (const auto & col_name : col_names)
+    {
+        if (!block.has(col_name))
+        {
+            LOG_ERROR(log, "`{}` column is missing", col_name);
+            return false;
+        }
+    }
+    return true;
+}
+
+void CatalogService::createTable(const Block & block)
+{
+    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
+    {
+        return;
+    }
+
+    String query = block.getByName("ddl").column->getDataAt(0).toString();
+    (void)query;
+}
+
+void CatalogService::deleteTable(const Block & block)
+{
+    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
+    {
+        return;
+    }
+}
+
+void CatalogService::alterTable(const Block & block)
+{
+    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
+    {
+        return;
+    }
+}
+
+void CatalogService::processDDL(const IDistributedWriteAheadLog::RecordPtrs & records)
+{
+    for (const auto & record : records)
+    {
+        if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_TABLE)
         {
             createTable(record->block);
         }
@@ -261,24 +324,24 @@ void CatalogService::process(const IDistributedWriteAheadLog::RecordPtrs & recor
         else
         {
             assert(0);
-            LOG_ERROR(log, "unknown operation={}", static_cast<Int32>(record->op_code));
+            LOG_ERROR(log, "Unknown operation={}", static_cast<Int32>(record->op_code));
         }
     }
 }
 
-void CatalogService::backgroundCataloger()
+void CatalogService::backgroundDDL()
 {
-    createDWal();
+    createDWal(ddl_ctx);
 
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
+    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ddl_ctx);
 
-    /// always consuming from beginning
+    /// FIXME, checkpoint
     while (!stopped.test())
     {
-        auto result{dwal->consume(1000, 1000, ctx)};
+        auto result{dwal->consume(10, 200, catalog_ctx)};
         if (result.err != ErrorCodes::OK)
         {
-            LOG_ERROR(log, "failed to consume data, error={}", result.err);
+            LOG_ERROR(log, "Failed to consume data, error={}", result.err);
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
             continue;
         }
@@ -288,12 +351,12 @@ void CatalogService::backgroundCataloger()
             continue;
         }
 
-        process(result.records);
+        processDDL(result.records);
     }
 }
 
 /// try indefinitely to create dwal for catalog
-void CatalogService::createDWal()
+void CatalogService::createDWal(std::any & ctx)
 {
     auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
     if (dwal->describe(kctx.topic, ctx) == ErrorCodes::OK)
@@ -301,18 +364,18 @@ void CatalogService::createDWal()
         return;
     }
 
-    LOG_INFO(log, "catalog topic={} is not detected, create one", kctx.topic);
+    LOG_INFO(log, "Catalog topic={} is not detected, create one", kctx.topic);
     while (!stopped.test())
     {
         if (dwal->create(kctx.topic, ctx) == ErrorCodes::OK)
         {
             /// FIXME, if the error is fatal. throws
-            LOG_INFO(log, "successfully created catalog topic={}", kctx.topic);
+            LOG_INFO(log, "Successfully created catalog topic={}", kctx.topic);
             break;
         }
         else
         {
-            LOG_INFO(log, "failed to create catalog topic={}, will retry indefinitely ...", kctx.topic);
+            LOG_INFO(log, "Failed to create catalog topic={}, will retry indefinitely ...", kctx.topic);
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         }
     }
@@ -321,9 +384,6 @@ void CatalogService::createDWal()
 void CatalogService::init()
 {
     const auto & config = global_context.getConfigRef();
-    String topic = config.getString(CATALOG_NAME_KEY, CATALOG_DEFAULT_TOPIC);
-    DistributedWriteAheadLogKafkaContext kctx{topic, 1, 1, "compact"};
-    kctx.partition = 0;
 
     /// if this node has `catalog` role, start background thread doing catalog work
     Poco::Util::AbstractConfiguration::Keys role_keys;
@@ -333,13 +393,28 @@ void CatalogService::init()
     {
         if (config.getString(SYSTEM_ROLES_KEY + "." + key, "") == CATALOG_ROLE)
         {
-            LOG_INFO(log, "CatalogService detects the current log has `catalog` role");
-            kctx.replication_factor = config.getInt(CATALOG_REPLICATION_FACTOR_KEY, 1);
+            LOG_INFO(log, "Detects the current log has `catalog` role");
+
+            /// catalog
+            String catalog_topic = config.getString(CATALOG_NAME_KEY, CATALOG_DEFAULT_TOPIC);
+            DistributedWriteAheadLogKafkaContext catalog_kctx{catalog_topic, 1, config.getInt(CATALOG_REPLICATION_FACTOR_KEY, 1)};
+            catalog_kctx.partition = 0;
+
             cataloger.emplace(1);
             cataloger->scheduleOrThrowOnError([this] { backgroundCataloger(); });
+            catalog_ctx = catalog_kctx;
+
+            /// ddl
+            String ddl_topic = config.getString(DDL_NAME_KEY, DDL_DEFAULT_TOPIC);
+            DistributedWriteAheadLogKafkaContext ddl_kctx{ddl_topic, 1, config.getInt(DDL_REPLICATION_FACTOR_KEY, 1)};
+            ddl_kctx.partition = 0;
+
+            ddl.emplace(1);
+            ddl->scheduleOrThrowOnError([this] { backgroundDDL(); });
+            ddl_ctx = ddl_kctx;
+
+            break;
         }
     }
-
-    ctx = kctx;
 }
 }
