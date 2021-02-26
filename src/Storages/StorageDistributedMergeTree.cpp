@@ -425,7 +425,7 @@ void StorageDistributedMergeTree::writeCallback(
     if (result.err)
     {
         ingesting_blocks.fail(query_status_poll_id, result.err);
-        LOG_ERROR(log, "failed to write block={} for query_status_poll_id={} error={}", block_id, query_status_poll_id, result.err);
+        LOG_ERROR(log, "Failed to write block={} for query_status_poll_id={} error={}", block_id, query_status_poll_id, result.err);
     }
     else
     {
@@ -473,7 +473,7 @@ void StorageDistributedMergeTree::doCommit(Block & block, Int64 & last_sn, std::
 
     const auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
 
-    LOG_TRACE(log, "committing rows={} for topic={} partition={}", block.rows(), dwalctx.topic, dwalctx.partition);
+    LOG_TRACE(log, "Committing rows={} for topic={} partition={}", block.rows(), dwalctx.topic, dwalctx.partition);
 
     /// FIXME : write offset to file system
     auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), global_context);
@@ -488,20 +488,20 @@ void StorageDistributedMergeTree::doCommit(Block & block, Int64 & last_sn, std::
         auto err = dwal->commit(last_sn, dwal_consume_ctx);
         if (likely(err == 0))
         {
-            LOG_INFO(log, "successfully committed offset={} for topic={} partition={}", last_sn, dwalctx.topic, dwalctx.partition);
+            LOG_INFO(log, "Successfully committed offset={} for topic={} partition={}", last_sn, dwalctx.topic, dwalctx.partition);
             dwal_last_sn = last_sn;
         }
         else
         {
             /// it is ok as next commit will override this commit if it makes through
-            LOG_ERROR(log, "failed to commit offset={} for topic={} partition={} error={}", last_sn, dwalctx.topic, dwalctx.partition, err);
+            LOG_ERROR(log, "Failed to commit offset={} for topic={} partition={} error={}", last_sn, dwalctx.topic, dwalctx.partition, err);
         }
     }
     catch (...)
     {
         LOG_ERROR(
             log,
-            "failed to commit offset={} for topic={} partition={} exception={}",
+            "Failed to commit offset={} for topic={} partition={} exception={}",
             last_sn,
             dwalctx.topic,
             dwalctx.partition,
@@ -620,7 +620,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
                     records.clear();
                 }
 
-                LOG_ERROR(log, "failed to commit data for topic={} partition={}, retries={}, exception={}", dwalctx.topic, dwalctx.partition, retries, getCurrentExceptionMessage(true, true));
+                LOG_ERROR(log, "Failed to commit data for topic={} partition={}, retries={}, exception={}", dwalctx.topic, dwalctx.partition, retries, getCurrentExceptionMessage(true, true));
                 ++retries;
                 std::this_thread::sleep_for(std::chrono::milliseconds(std::min(1000 * retries, 7000)));
                 continue;
