@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/functional/hash.hpp>
 #include <boost/noncopyable.hpp>
 
 #include <DataStreams/IBlockStream_fwd.h>
@@ -16,34 +17,6 @@ class Context;
 class CatalogService : private boost::noncopyable
 {
 public:
-    explicit CatalogService(Context & context_);
-    ~CatalogService();
-
-    /// `broadcast` broadcasts the metadata catalog on this node
-    /// to CatalogService role nodes
-    void broadcast();
-
-private:
-    void init();
-    void doBroadcast();
-    void processQuery(BlockInputStreamPtr & in);
-    void processQueryWithProcessors(QueryPipeline & pipeline);
-    void commit(Block && block);
-
-    void buildCatalog(const String & host, const Block & bock);
-    void buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs & records);
-
-    void createTable(const Block & bock);
-    void deleteTable(const Block & bock);
-    void alterTable(const Block & bock);
-    void processDDL(const IDistributedWriteAheadLog::RecordPtrs & records);
-
-    bool validateSchema(const Block & block, const std::vector<String> & col_names);
-    void backgroundCataloger();
-    void backgroundDDL();
-    void createDWal(std::any & ctx);
-
-private:
     struct Table
     {
         String host;
@@ -70,12 +43,43 @@ private:
         explicit Table(const String & host_) : host(host_) { }
     };
 
+    using TablePtr = std::shared_ptr<Table>;
+
+public:
+    explicit CatalogService(Context & context_);
+    ~CatalogService();
+
+    /// `broadcast` broadcasts the metadata catalog on this node
+    /// to CatalogService role nodes
+    void broadcast();
+
+    std::vector<TablePtr> findTableByName(const String & table) const;
+    std::vector<TablePtr> findTableByHost(const String & host) const;
+    std::vector<TablePtr> tables() const;
+
+private:
+    void init();
+    void doBroadcast();
+    void processQuery(BlockInputStreamPtr & in);
+    void processQueryWithProcessors(QueryPipeline & pipeline);
+    void commit(Block && block);
+
+private:
+    using Pair = std::pair<String, Int32>;
+    using TableInnerContainer = std::unordered_map<Pair, TablePtr, boost::hash<Pair>>;
+    using TableContainer = std::unordered_map<String, TableInnerContainer>;
+
+    TableInnerContainer buildCatalog(const String & host, const Block & bock);
+    void mergeCatalog(const String & host, TableInnerContainer snapshot);
+    void buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs & records);
+
+    void backgroundCataloger();
+
 private:
     /// global context
     Context & global_context;
 
     std::any catalog_ctx;
-    std::any ddl_ctx;
     DistributedWriteAheadLogPtr dwal;
 
     std::atomic_flag stopped = ATOMIC_FLAG_INIT;
@@ -84,9 +88,8 @@ private:
     mutable std::shared_mutex rwlock;
     /// indexed by table name which is enfored to
     /// be unique across the whole system / cluster
-    std::unordered_map<String, std::vector<Table>> tables;
-
-    std::optional<ThreadPool> ddl;
+    TableContainer indexedByName; /// (tablename, (host, shard))
+    TableContainer indexedByHost; /// (host, (tablename, shard))
 
     Poco::Logger * log;
 };
