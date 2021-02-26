@@ -1120,17 +1120,18 @@
         <system_roles>
             <role>placement</role>
             <role>catalog</role>
+            <role>admin_task</role>
         </system_roles>
 
         <!-- system_ddl_wal is for distributed DDL -->
         <system_ddl_dwal>
-            <name>__system_ddl</name>
+            <name>__system_ddls</name>
             <replication_factor>1</replication_factor>
         </system_ddl_dwal>
 
         <!-- system_catalog_dwal is for distributed catalog service -->
         <system_catalog_dwal>
-            <name>__system_catalog</name>
+            <name>__system_catalogs</name>
             <replication_factor>1</replication_factor>
         </system_catalog_dwal>
 
@@ -1139,6 +1140,13 @@
             <name>__system_node_metrics</name>
             <replication_factor>1</replication_factor>
         </system_node_metrics_dwal>
+
+        <!-- system_task_dwal is for global task status -->
+        <system_task_dwal>
+            <name>__system_tasks</name>
+            <replication_factor>1</replication_factor>
+        </system_task_dwal>
+
     </system_settings>
 
 </yandex>

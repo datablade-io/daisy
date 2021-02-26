@@ -50,7 +50,7 @@ Int32 mapErrorCode(rd_kafka_resp_err_t err)
             return ErrorCodes::INVALID_CONFIG_PARAMETER;
 
         case RD_KAFKA_RESP_ERR__FATAL:
-            throw Exception("KafkaWAL has fatal error, shall tear down the whole program", ErrorCodes::DWAL_FATAL_ERROR);
+            throw Exception("Fatal error occured, shall tear down the whole program", ErrorCodes::DWAL_FATAL_ERROR);
 
         default:
             return ErrorCodes::UNKNOWN_EXCEPTION;
@@ -78,7 +78,7 @@ Int32 doTopic(
     auto err = rd_kafka_AdminOptions_set_request_timeout(options.get(), request_timeout, errstr, sizeof(errstr));
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        LOG_ERROR(log, "KafkaWal failed to {} topic={} error={} detail={}", action, name, rd_kafka_err2str(err), errstr);
+        LOG_ERROR(log, "Failed to {} topic={} error={} detail={}", action, name, rd_kafka_err2str(err), errstr);
         return mapErrorCode(err);
     }
 
@@ -86,7 +86,7 @@ Int32 doTopic(
     err = rd_kafka_AdminOptions_set_operation_timeout(options.get(), request_timeout, errstr, sizeof(errstr));
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        LOG_ERROR(log, "KafkaWal failed to {} topic={} error={} detail={}", action, name, rd_kafka_err2str(err), errstr);
+        LOG_ERROR(log, "Failed to {} topic={} error={} detail={}", action, name, rd_kafka_err2str(err), errstr);
         return mapErrorCode(err);
     }
 
@@ -99,7 +99,7 @@ Int32 doTopic(
     auto rkev = rd_kafka_queue_poll(admin_queue.get(), request_timeout + 500);
     if (rkev == nullptr)
     {
-        LOG_ERROR(log, "KafkaWal failed to {} topic={} timeout", action, name);
+        LOG_ERROR(log, "Failed to {} topic={} timeout", action, name);
         return ErrorCodes::TIMEOUT_EXCEEDED;
     }
     std::shared_ptr<rd_kafka_event_t> event_holder{rkev, rd_kafka_event_destroy};
@@ -108,7 +108,7 @@ Int32 doTopic(
     {
         LOG_ERROR(
             log,
-            "KafkaWal failed to {} topic={}, error={} detail={}",
+            "Failed to {} topic={}, error={} detail={}",
             action,
             name,
             rd_kafka_err2str(err),
@@ -119,7 +119,7 @@ Int32 doTopic(
     auto res = topics_result_func(rkev);
     if (res == nullptr)
     {
-        LOG_ERROR(log, "KafkaWal failed to {} topic={}, unknown error", action, name);
+        LOG_ERROR(log, "Failed to {} topic={}, unknown error", action, name);
         return ErrorCodes::UNKNOWN_EXCEPTION;
     }
 
@@ -129,7 +129,7 @@ Int32 doTopic(
         auto result_topics = topics_func(res, &cnt);
         if (cnt != 1 || result_topics == nullptr)
         {
-            LOG_ERROR(log, "KafkaWal failed to {} topic={}, unknown error", action, name);
+            LOG_ERROR(log, "Failed to {} topic={}, unknown error", action, name);
             return ErrorCodes::UNKNOWN_EXCEPTION;
         }
 
@@ -137,7 +137,7 @@ Int32 doTopic(
         {
             LOG_ERROR(
                 log,
-                "KafkaWal failed to {} topic={}, error={} detail={}",
+                "Failed to {} topic={}, error={} detail={}",
                 action,
                 name,
                 rd_kafka_err2str(err),
@@ -161,7 +161,7 @@ initRdKafkaHandle(rd_kafka_type_t type, KConfParams & params, DistributedWriteAh
     KConfPtr kconf{rd_kafka_conf_new(), rd_kafka_conf_destroy};
     if (!kconf)
     {
-        LOG_ERROR(stats->log, "KafkaWAL failed to create kafka conf, error={}", rd_kafka_err2str(rd_kafka_last_error()));
+        LOG_ERROR(stats->log, "Failed to create kafka conf, error={}", rd_kafka_err2str(rd_kafka_last_error()));
         throw Exception("KafkaWAL failed to create kafka conf", mapErrorCode(rd_kafka_last_error()));
     }
 
@@ -171,8 +171,8 @@ initRdKafkaHandle(rd_kafka_type_t type, KConfParams & params, DistributedWriteAh
         auto ret = rd_kafka_conf_set(kconf.get(), param.first.c_str(), param.second.c_str(), errstr, sizeof(errstr));
         if (ret != RD_KAFKA_CONF_OK)
         {
-            LOG_ERROR(stats->log, "KafkaWAL failed to set kafka param_name={} param_value={} error={}", param.first, param.second, ret);
-            throw Exception("KafkaWAL failed to create kafka conf", ErrorCodes::INVALID_CONFIG_PARAMETER);
+            LOG_ERROR(stats->log, "Failed to set kafka param_name={} param_value={} error={}", param.first, param.second, ret);
+            throw Exception("Failed to create kafka conf", ErrorCodes::INVALID_CONFIG_PARAMETER);
         }
     }
 
@@ -187,8 +187,8 @@ initRdKafkaHandle(rd_kafka_type_t type, KConfParams & params, DistributedWriteAh
         rd_kafka_new(type, kconf.release(), errstr, sizeof(errstr)), rd_kafka_destroy);
     if (!kafka_handle)
     {
-        LOG_ERROR(stats->log, "KafkaWAL failed to create kafka handle, error={}", errstr);
-        throw Exception("KafkaWAL failed to create kafka handle", mapErrorCode(rd_kafka_last_error()));
+        LOG_ERROR(stats->log, "Failed to create kafka handle, error={}", errstr);
+        throw Exception("Failed to create kafka handle", mapErrorCode(rd_kafka_last_error()));
     }
 
     return kafka_handle;
@@ -200,8 +200,8 @@ initRdKafkaTopicHandle(const String & topic, KConfParams & params, rd_kafka_t * 
     KTopicConfPtr tconf{rd_kafka_topic_conf_new(), rd_kafka_topic_conf_destroy};
     if (!tconf)
     {
-        LOG_ERROR(stats->log, "KafkaWAL failed to create kafka topic conf, error={}", rd_kafka_err2str(rd_kafka_last_error()));
-        throw Exception("KafkaWAL failed to created kafka topic conf", mapErrorCode(rd_kafka_last_error()));
+        LOG_ERROR(stats->log, "Failed to create kafka topic conf, error={}", rd_kafka_err2str(rd_kafka_last_error()));
+        throw Exception("Failed to created kafka topic conf", mapErrorCode(rd_kafka_last_error()));
     }
 
     char errstr[512] = {'\0'};
@@ -213,12 +213,12 @@ initRdKafkaTopicHandle(const String & topic, KConfParams & params, rd_kafka_t * 
         {
             LOG_ERROR(
                 stats->log,
-                "KafkaWAL failed to set kafka topic param, topic={} param_name={} param_value={} error={}",
+                "Failed to set kafka topic param, topic={} param_name={} param_value={} error={}",
                 topic,
                 param.first,
                 param.second,
                 errstr);
-            throw Exception("KafkaWAL failed to set kafka topic param", ErrorCodes::INVALID_CONFIG_PARAMETER);
+            throw Exception("Failed to set kafka topic param", ErrorCodes::INVALID_CONFIG_PARAMETER);
         }
     }
 
@@ -228,8 +228,8 @@ initRdKafkaTopicHandle(const String & topic, KConfParams & params, rd_kafka_t * 
     if (!topic_handle)
     {
         LOG_ERROR(
-            stats->log, "KafkaWAL failed to create kafka topic handle, topic={} error={}", topic, rd_kafka_err2str(rd_kafka_last_error()));
-        throw Exception("KafkaWAL failed to create kafka topic handle", mapErrorCode(rd_kafka_last_error()));
+            stats->log, "Failed to create kafka topic handle, topic={} error={}", topic, rd_kafka_err2str(rd_kafka_last_error()));
+        throw Exception("Failed to create kafka topic handle", mapErrorCode(rd_kafka_last_error()));
     }
 
     return topic_handle;
@@ -278,12 +278,12 @@ void logErr(struct rd_kafka_s * rk, int err, const char * reason, void * opaque)
     {
         char errstr[512] = {'\0'};
         rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
-        LOG_ERROR(stats->log, "KafkaWAL fatal error found, error={}", errstr);
+        LOG_ERROR(stats->log, "Fatal error found, error={}", errstr);
     }
     else
     {
         LOG_WARNING(
-            stats->log, "KafkaWAL error found, error={}, reason={}", rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)), reason);
+            stats->log, "Error occured, error={}, reason={}", rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)), reason);
     }
 }
 
@@ -291,7 +291,7 @@ void logThrottle(struct rd_kafka_s * /*rk*/, const char * broker_name, int32_t b
 {
     auto * stats = static_cast<DistributedWriteAheadLogKafka::Stats *>(opaque);
     LOG_WARNING(
-        stats->log, "KafkaWAL throttling found on broker={}, broker_id={}, throttle_time_ms={}", broker_name, broker_id, throttle_time_ms);
+        stats->log, "Throttling occured on broker={}, broker_id={}, throttle_time_ms={}", broker_name, broker_id, throttle_time_ms);
 }
 
 void logOffsetCommits(struct rd_kafka_s * /*rk*/, rd_kafka_resp_err_t err, struct rd_kafka_topic_partition_list_s * offsets, void * opaque)
@@ -299,7 +299,7 @@ void logOffsetCommits(struct rd_kafka_s * /*rk*/, rd_kafka_resp_err_t err, struc
     auto * stats = static_cast<DistributedWriteAheadLogKafka::Stats *>(opaque);
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR && err != RD_KAFKA_RESP_ERR__NO_OFFSET)
     {
-        LOG_ERROR(stats->log, "KafkaWAL failed to commit offsets, error={}", rd_kafka_err2str(err));
+        LOG_ERROR(stats->log, "Failed to commit offsets, error={}", rd_kafka_err2str(err));
     }
 
     for (int i = 0; offsets != nullptr && i < offsets->cnt; ++i)
@@ -307,7 +307,7 @@ void logOffsetCommits(struct rd_kafka_s * /*rk*/, rd_kafka_resp_err_t err, struc
         rd_kafka_topic_partition_t * rktpar = &offsets->elems[i];
         LOG_INFO(
             stats->log,
-            "KafkaWAL commits offsets, topic={} partition={} offset={} error={}",
+            "Commits offsets, topic={} partition={} offset={} error={}",
             rktpar->topic,
             rktpar->partition,
             rktpar->offset,
@@ -420,7 +420,7 @@ void DistributedWriteAheadLogKafka::startup()
 {
     if (inited.test_and_set())
     {
-        LOG_ERROR(log, "KafkaWAL has already started");
+        LOG_ERROR(log, "Already started");
         return;
     }
 
@@ -441,7 +441,7 @@ void DistributedWriteAheadLogKafka::backgroundPollProducer()
     rd_kafka_resp_err_t ret = rd_kafka_flush(producer_handle.get(), 10000);
     if (ret != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        LOG_ERROR(log, "KafkaWAL failed to flush kafka, error={}", rd_kafka_err2str(ret));
+        LOG_ERROR(log, "Failed to flush kafka, error={}", rd_kafka_err2str(ret));
     }
 }
 
@@ -455,7 +455,7 @@ void DistributedWriteAheadLogKafka::backgroundPollConsumer()
     auto err = rd_kafka_commit(consumer_handle.get(), nullptr, 0);
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR && err != RD_KAFKA_RESP_ERR__NO_OFFSET)
     {
-        LOG_ERROR(log, "KafkaWal failed to commit offsets, error={}", rd_kafka_err2str(err));
+        LOG_ERROR(log, "Failed to commit offsets, error={}", rd_kafka_err2str(err));
     }
 }
 
@@ -532,14 +532,14 @@ void DistributedWriteAheadLogKafka::backgroundPollConsumer()
                 {
                     LOG_WARNING(
                         log,
-                        "KafkaWAL consumer reach end of stream, topic={}, partition={}, offset={}",
+                        "Consumer reach end of stream, topic={}, partition={}, offset={}",
                         rd_kafka_topic_name(msg->rkt),
                         msg->partition,
                         msg->offset);
                     /// FIXME, remove the topic partition from subscribe ?
                 }
 
-                LOG_WARNING(log, "KafkaWAL consumer failed, error={}", rd_kafka_err2str(msg->err));
+                LOG_WARNING(log, "Consumer failed, error={}", rd_kafka_err2str(msg->err));
             }
         }
     }
@@ -547,7 +547,7 @@ void DistributedWriteAheadLogKafka::backgroundPollConsumer()
     rd_kafka_resp_err_t ret = rd_kafka_consumer_close(consumer_handle.get());
     if (ret != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        LOG_ERROR(log, "KafkaWAL failed to close consumer, error={}", rd_kafka_err2str(ret));
+        LOG_ERROR(log, "Failed to close consumer, error={}", rd_kafka_err2str(ret));
     }
 }
 #endif
@@ -762,7 +762,7 @@ DistributedWriteAheadLogKafka::handleError(int err, const Record & record, const
     auto kerr = static_cast<rd_kafka_resp_err_t>(err);
     LOG_ERROR(
         log,
-        "KafkaWAL failed to write record to topic={} partition_key={} error={}",
+        "Failed to write record to topic={} partition_key={} error={}",
         ctx.topic,
         record.partition_key,
         rd_kafka_err2str(kerr));
@@ -785,7 +785,7 @@ inline Int32 DistributedWriteAheadLogKafka::initConsumerTopicHandleIfNecessary(D
         {
             LOG_ERROR(
                 log,
-                "KafkaWAL failed to start consuming topic={} partition={} offset={} error={}",
+                "Failed to start consuming topic={} partition={} offset={} error={}",
                 walctx.topic,
                 walctx.partition,
                 walctx.offset,
@@ -805,7 +805,7 @@ inline Int32 DistributedWriteAheadLogKafka::initConsumerTopicHandleIfNecessary(D
                 /// when seek failed, we don't actually bother returning an error. Application shall handle message duplication
                 LOG_WARNING(
                     log,
-                    "KafkaWAL failed to start consuming topic={} partition={} offset={} error={}",
+                    "Failed to start consuming topic={} partition={} offset={} error={}",
                     walctx.topic,
                     walctx.partition,
                     walctx.offset,
@@ -870,7 +870,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
                     {
                         LOG_ERROR(
                             std::get<3>(*wrapped),
-                            "KafkaWAL failed to consume topic={} partition={} error={}",
+                            "Failed to consume topic={} partition={} error={}",
                             std::get<4>(*wrapped).topic,
                             std::get<4>(*wrapped).partition,
                             getCurrentExceptionMessage(true, true));
@@ -883,7 +883,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
         {
             LOG_ERROR(
                 std::get<3>(*wrapped),
-                "KafkaWAL failed to consume topic={} partition={} error={}",
+                "Failed to consume topic={} partition={} error={}",
                 std::get<4>(*wrapped).topic,
                 std::get<4>(*wrapped).partition,
                 rd_kafka_message_errstr(rkmessage));
@@ -895,7 +895,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
     {
         LOG_ERROR(
             log,
-            "KafkaWAL failed to consume topic={} partition={} offset={} error={}",
+            "Failed to consume topic={} partition={} offset={} error={}",
             walctx.topic,
             walctx.partition,
             walctx.offset,
@@ -916,7 +916,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
             {
                 LOG_ERROR(
                     log,
-                    "KafkaWAL failed to consume topic={} partition={} error={}",
+                    "Failed to consume topic={} partition={} error={}",
                     walctx.topic,
                     walctx.partition,
                     getCurrentExceptionMessage(true, true));
@@ -968,7 +968,7 @@ IDistributedWriteAheadLog::ConsumeResult DistributedWriteAheadLogKafka::consume(
             {
                 LOG_ERROR(
                     log,
-                    "KafkaWAL failed to consume topic={} partition={} error={}",
+                    "Failed to consume topic={} partition={} error={}",
                     walctx.topic,
                     walctx.partition,
                     rd_kafka_message_errstr(rkmessage));
@@ -982,7 +982,7 @@ IDistributedWriteAheadLog::ConsumeResult DistributedWriteAheadLogKafka::consume(
     {
         LOG_ERROR(
             log,
-            "KafkaWAL failed to consuming topic={} partition={} error={}",
+            "Failed to consuming topic={} partition={} error={}",
             walctx.topic,
             walctx.partition,
             rd_kafka_err2str(rd_kafka_last_error()));
@@ -998,7 +998,7 @@ Int32 DistributedWriteAheadLogKafka::stopConsume(std::any & ctx)
     auto & walctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
     if (!walctx.topic_handle)
     {
-        LOG_ERROR(log, "KafkaWAL topic={} partition={} didn't start consuming yet", walctx.topic, walctx.partition);
+        LOG_ERROR(log, "Didn't start consuming topic={} partition={} yet", walctx.topic, walctx.partition);
         return ErrorCodes::RESOURCE_NOT_INITED;
     }
 
@@ -1006,7 +1006,7 @@ Int32 DistributedWriteAheadLogKafka::stopConsume(std::any & ctx)
     {
         LOG_ERROR(
             log,
-            "KafkaWAL failed to stop consuming topic={} partition={} error={}",
+            "Failed to stop consuming topic={} partition={} error={}",
             walctx.topic,
             walctx.partition,
             rd_kafka_err2str(rd_kafka_last_error()));
@@ -1036,7 +1036,7 @@ bool DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeCa
         {
             LOG_ERROR(
                 log,
-                "KafkaWAL failed to consume message for topic={} partition={} offset={} error={}",
+                "Failed to consume message for topic={} partition={} offset={} error={}",
                 walctx.topic,
                 walctx.partition,
                 walctx.offset,
@@ -1073,14 +1073,14 @@ Int32 DistributedWriteAheadLogKafka::commit(IDistributedWriteAheadLog::RecordSeq
         walctx.topic_handle = initConsumerTopic(walctx);
     }
 
-    LOG_INFO(log, "KafkaWAL stores commit offset={} for topic={} partition={}", sequence_number, walctx.topic, walctx.partition);
+    LOG_INFO(log, "Stores commit offset={} for topic={} partition={}", sequence_number, walctx.topic, walctx.partition);
 
     auto err = rd_kafka_offset_store(walctx.topic_handle.get(), walctx.partition, sequence_number);
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
         LOG_ERROR(
             log,
-            "KafkaWAL failed to commit offset={} for topic={} partition={} error={}",
+            "Failed to commit offset={} for topic={} partition={} error={}",
             sequence_number,
             walctx.topic,
             walctx.partition,
@@ -1103,7 +1103,7 @@ Int32 DistributedWriteAheadLogKafka::create(const String & name, std::any & ctx)
     topics[0] = rd_kafka_NewTopic_new(name.c_str(), walctx.partitions, walctx.replication_factor, errstr, sizeof(errstr));
     if (errstr[0] != '\0')
     {
-        LOG_ERROR(log, "KafkaWal failed to create topic={} error={}", name, errstr);
+        LOG_ERROR(log, "Failed to create topic={} error={}", name, errstr);
         return ErrorCodes::UNKNOWN_EXCEPTION;
     }
 
@@ -1118,7 +1118,7 @@ Int32 DistributedWriteAheadLogKafka::create(const String & name, std::any & ctx)
         auto err = rd_kafka_NewTopic_set_config(topics[0], param.first.c_str(), param.second.c_str());
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
         {
-            LOG_ERROR(log, "KafkaWal failed to set config for topic={} error={}", name, rd_kafka_err2str(err));
+            LOG_ERROR(log, "Failed to set config for topic={} error={}", name, rd_kafka_err2str(err));
             return mapErrorCode(err);
         }
     }
@@ -1179,7 +1179,7 @@ Int32 DistributedWriteAheadLogKafka::describe(const String & name, std::any & ct
     configs[0] = rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, name.c_str());
     if (configs[0] == nullptr)
     {
-        LOG_ERROR(log, "KafkaWal failed to describe topic, invalid arguments");
+        LOG_ERROR(log, "Failed to describe topic, invalid arguments");
         return ErrorCodes::BAD_ARGUMENTS;
     }
     std::shared_ptr<rd_kafka_ConfigResource_t> config_holder{configs[0], rd_kafka_ConfigResource_destroy};
@@ -1196,7 +1196,7 @@ Int32 DistributedWriteAheadLogKafka::describe(const String & name, std::any & ct
         auto rconfigs = rd_kafka_DescribeConfigs_result_resources(event, &cnt);
         if (cnt != 1 || rconfigs == nullptr)
         {
-            LOG_ERROR(log, "KafkaWal failed to describe topic={}, unknown error", name);
+            LOG_ERROR(log, "Failed to describe topic={}, unknown error", name);
             return ErrorCodes::UNKNOWN_EXCEPTION;
         }
 
@@ -1205,7 +1205,7 @@ Int32 DistributedWriteAheadLogKafka::describe(const String & name, std::any & ct
         {
             LOG_ERROR(
                 log,
-                "KafkaWal failed to describe topic={}, error={} detail={}",
+                "Failed to describe topic={}, error={} detail={}",
                 name,
                 rd_kafka_err2str(err),
                 rd_kafka_ConfigResource_error_string(rconfigs[0]));
