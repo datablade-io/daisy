@@ -67,7 +67,6 @@ void PlacementService::shutdown()
     LOG_INFO(log, "PlacementService stopped");
 }
 
-
 void PlacementService::processMetrics(const IDistributedWriteAheadLog::RecordPtrs & records) const
 {
     (void)records;
