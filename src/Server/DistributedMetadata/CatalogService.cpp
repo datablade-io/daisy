@@ -58,12 +58,23 @@ CatalogService::CatalogService(Context & global_context_)
 
 CatalogService::~CatalogService()
 {
-    stopped.test_and_set();
+    shutdown();
+}
 
+void CatalogService::shutdown()
+{
+    if (stopped.test_and_set())
+    {
+        /// already shutdown
+        return;
+    }
+
+    LOG_INFO(log, "CatalogService is stopping");
     if (cataloger)
     {
         cataloger->wait();
     }
+    LOG_INFO(log, "CatalogService stopped");
 }
 
 void CatalogService::broadcast()

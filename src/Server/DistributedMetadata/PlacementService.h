@@ -15,7 +15,7 @@ class Context;
 class CatalogService;
 
 
-class PlacementService
+class PlacementService : private boost::noncopyable
 {
 public:
     static PlacementService & instance(Context & context);
