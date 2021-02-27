@@ -18,6 +18,7 @@ SRCS(
     Distributed/DirectoryMonitor.cpp
     Distributed/DistributedBlockOutputStream.cpp
     Distributed/DistributedSettings.cpp
+    DistributedWriteAheadLog/IDistributedWriteAheadLog.cpp
     IStorage.cpp
     IndicesDescription.cpp
     JoinSettings.cpp
@@ -30,11 +31,13 @@ SRCS(
     MergeTree/BackgroundJobsExecutor.cpp
     MergeTree/BoolMask.cpp
     MergeTree/DataPartsExchange.cpp
+    MergeTree/DistributedMergeTreeBlockOutputStream.cpp
     MergeTree/EphemeralLockInZooKeeper.cpp
     MergeTree/IMergeTreeDataPart.cpp
     MergeTree/IMergeTreeDataPartWriter.cpp
     MergeTree/IMergeTreeReader.cpp
     MergeTree/IMergedBlockOutputStream.cpp
+    MergeTree/IngestingBlocks.cpp
     MergeTree/KeyCondition.cpp
     MergeTree/LevelMergeSelector.cpp
     MergeTree/MergeAlgorithm.cpp
@@ -119,6 +122,7 @@ SRCS(
     StorageDictionary.cpp
     StorageDistributed.cpp
     StorageExternalDistributed.cpp
+    StorageDistributedMergeTree.cpp
     StorageFactory.cpp
     StorageFile.cpp
     StorageGenerateRandom.cpp

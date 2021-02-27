@@ -1,7 +1,11 @@
 #include "DDLService.h"
+
+#include "CatalogService.h"
 #include "CommonUtils.h"
+#include "PlacementService.h"
 
 #include <Core/Block.h>
+#include <IO/HTTPCommon.h>
 #include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <common/logger_useful.h>
@@ -9,6 +13,7 @@
 #include <Interpreters/Context.h>
 #include <Interpreters/executeQuery.h>
 
+#include <Poco/Net/HTTPRequest.h>
 #include <Poco/Util/AbstractConfiguration.h>
 
 
@@ -16,7 +21,8 @@ namespace DB
 {
 namespace ErrorCodes
 {
-    extern int OK;
+    extern const int OK;
+    extern const int UNKNOWN_EXCEPTION;
 }
 
 namespace
@@ -32,7 +38,11 @@ String DDL_DEFAULT_TOPIC = "__system_ddls";
 }
 
 DDLService::DDLService(Context & global_context_)
-    : global_context(global_context_), dwal(DistributedWriteAheadLogPool::instance().getDefault()), log(&Poco::Logger::get("DDLService"))
+    : global_context(global_context_)
+    , catalog(CatalogService::instance(global_context_))
+    , placement(PlacementService::instance(global_context_))
+    , dwal(DistributedWriteAheadLogPool::instance().getDefault())
+    , log(&Poco::Logger::get("DDLService"))
 {
     init();
 }
@@ -47,7 +57,7 @@ DDLService::~DDLService()
     }
 }
 
-bool DDLService::validateSchema(const Block & block, const std::vector<String> & col_names)
+bool DDLService::validateSchema(const Block & block, const std::vector<String> & col_names) const
 {
     for (const auto & col_name : col_names)
     {
@@ -60,34 +70,145 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
     return true;
 }
 
-void DDLService::createTable(const Block & block)
+std::vector<Poco::URI> DDLService::placeReplicas(Int32 shards, Int32 replication_factor) const
 {
-    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
+    (void)shards;
+    (void)replication_factor;
+    return {};
+}
+
+Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
+{
+    LOG_INFO(log, "Execute table statement={} on uri={}", query, uri.toString());
+
+    /// One second for connect/send/receive
+    ConnectionTimeouts timeouts({1, 0}, {1, 0}, {1, 0});
+
+    auto session = makePooledHTTPSession(uri, timeouts, 1);
+
+    try
+    {
+        Poco::Net::HTTPRequest request{Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
+        request.setHost(uri.getHost());
+        request.setChunkedTransferEncoding(true);
+
+        auto ostr = &session->sendRequest(request);
+        ostr->write(query.c_str(), query.size());
+        ostr->flush();
+
+        if (!ostr->good())
+        {
+            LOG_ERROR(log, "Failed to execute table statement={} on uri={}", query, uri.toString());
+            return ErrorCodes::UNKNOWN_EXCEPTION;
+        }
+
+        Poco::Net::HTTPResponse response;
+        /// FIXME: handle table exists, table not exists etc error
+        receiveResponse(*session, request, response, false);
+
+        LOG_INFO(log, "Executed table statement={} on uri={} successfully", query, uri.toString());
+        return ErrorCodes::OK;
+    }
+    catch (const Poco::Exception & e)
+    {
+        session->attachSessionData(e.message());
+        LOG_ERROR(
+            log,
+            "Failed to execute table statement={} on uri={} error={} exception={}",
+            query,
+            uri.toString(),
+            e.message(),
+            getCurrentExceptionMessage(true, true));
+    }
+    catch (...)
+    {
+        LOG_ERROR(
+            log,
+            "Failed to execute table statement={} on uri={} exception={}",
+            query,
+            uri.toString(),
+            getCurrentExceptionMessage(true, true));
+    }
+    return ErrorCodes::UNKNOWN_EXCEPTION;
+}
+
+/// Try indefininitely
+Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
+{
+    /// FIXME, retry several times and report error
+    while (1)
+    {
+        try
+        {
+            auto err = postRequest(query, uri);
+            if (err == ErrorCodes::OK)
+            {
+                return err;
+            }
+        }
+        catch (...)
+        {
+            LOG_ERROR(
+                log, "Failed to send request={} to uri={} exception={}", query, uri.toString(), getCurrentExceptionMessage(true, true));
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+}
+
+void DDLService::createTable(const Block & block) const
+{
+    if (!validateSchema(block, {"ddl", "shards", "replication_factor", "timestamp", "query_id"}))
     {
         return;
     }
+
+    /// FIXME : check catalog service if table exists
+
+    Int32 shards = block.getByName("shards").column->getInt(0);
+    Int32 replication_factor = block.getByName("replication_factor").column->getInt(0);
+
+    /// 1) Ask placement service to do shard placement
+    std::vector<Poco::URI> target_hosts{placeReplicas(shards, replication_factor)};
+
+    assert(target_hosts.size() == static_cast<size_t>(shards * replication_factor));
 
     String query = block.getByName("ddl").column->getDataAt(0).toString();
-    (void)query;
+
+    /// 2) Create table on each target host accordign to placement
+    for (Int32 i = 0; i < replication_factor; ++i)
+    {
+        for (Int32 j = 0; j < shards; ++j)
+        {
+            /// FIXME, check table engine, grammar check
+            String create_query = query + ", dwal_partition=" + std::to_string(j);
+            doTable(create_query, target_hosts[i * replication_factor + j]);
+        }
+    }
+
+    /// FIXME: timestamp, query_id
+    /// 3) Notify task service, query_id's status
 }
 
-void DDLService::deleteTable(const Block & block)
+void DDLService::mutateTable(const Block & block) const
 {
-    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
+    if (!validateSchema(block, {"ddl", "table", "timestamp", "query_id"}))
     {
         return;
     }
-}
 
-void DDLService::alterTable(const Block & block)
-{
-    if (!validateSchema(block, {"ddl", "timestamp", "query_id"}))
+    String table = block.getByName("table").column->getDataAt(0).toString();
+
+    std::vector<Poco::URI> target_hosts{placedReplicas(table)};
+
+    String query = block.getByName("ddl").column->getDataAt(0).toString();
+    for (auto & uri : target_hosts)
     {
-        return;
+        doTable(query, uri);
     }
 }
 
-void DDLService::processDDL(const IDistributedWriteAheadLog::RecordPtrs & records)
+void DDLService::processDDL(const IDistributedWriteAheadLog::RecordPtrs & records) const
 {
     for (const auto & record : records)
     {
@@ -97,11 +218,11 @@ void DDLService::processDDL(const IDistributedWriteAheadLog::RecordPtrs & record
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
         {
-            deleteTable(record->block);
+            mutateTable(record->block);
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
         {
-            alterTable(record->block);
+            mutateTable(record->block);
         }
         else
         {
