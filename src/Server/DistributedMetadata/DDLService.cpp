@@ -49,12 +49,24 @@ DDLService::DDLService(Context & global_context_)
 
 DDLService::~DDLService()
 {
-    stopped.test_and_set();
+    shutdown();
+}
 
+void DDLService::shutdown()
+{
+    if (stopped.test_and_set())
+    {
+        /// already shutdown
+        return;
+    }
+
+    LOG_INFO(log, "DDLService is stopping");
     if (ddl)
     {
         ddl->wait();
     }
+    LOG_INFO(log, "DDLService stopped");
+
 }
 
 bool DDLService::validateSchema(const Block & block, const std::vector<String> & col_names) const

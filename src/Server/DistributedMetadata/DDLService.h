@@ -23,6 +23,7 @@ class DDLService : private boost::noncopyable
 public:
     explicit DDLService(Context & context_);
     ~DDLService();
+    void shutdown();
 
 private:
     void init();
