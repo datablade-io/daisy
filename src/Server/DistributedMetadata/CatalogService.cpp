@@ -23,7 +23,7 @@ namespace DB
 
 namespace ErrorCodes
 {
-    extern int OK;
+    extern const int OK;
 }
 
 namespace
@@ -39,6 +39,12 @@ String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
 
 
 inline String nodeIdentity() { return getFQDNOrHostName(); }
+}
+
+CatalogService & CatalogService::instance(Context & context)
+{
+    static CatalogService catalog{context};
+    return catalog;
 }
 
 CatalogService::CatalogService(Context & global_context_)

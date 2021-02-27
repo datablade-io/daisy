@@ -10,6 +10,10 @@ PEERDIR(
 
 
 SRCS(
+    DistributedMetadata/CatalogService.cpp
+    DistributedMetadata/CommonUtils.cpp
+    DistributedMetadata/DDLService.cpp
+    DistributedMetadata/PlacementService.cpp
     GRPCServer.cpp
     HTTP/HTMLForm.cpp
     HTTP/HTTPServer.cpp
