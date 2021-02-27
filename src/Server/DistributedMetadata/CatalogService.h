@@ -1,11 +1,11 @@
 #pragma once
 
-#include <boost/functional/hash.hpp>
-#include <boost/noncopyable.hpp>
-
 #include <DataStreams/IBlockStream_fwd.h>
 #include <Processors/QueryPipeline.h>
 #include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+
+#include <boost/functional/hash.hpp>
+#include <boost/noncopyable.hpp>
 
 #include <any>
 
@@ -50,6 +50,7 @@ public:
 
     explicit CatalogService(Context & context_);
     ~CatalogService();
+    void shutdown();
 
     /// `broadcast` broadcasts the metadata catalog on this node
     /// to CatalogService role nodes
