@@ -8,7 +8,7 @@ namespace DB
 {
 namespace ErrorCodes
 {
-    extern int OK;
+    extern const int OK;
 }
 
 /// try indefinitely to create dwal for catalog

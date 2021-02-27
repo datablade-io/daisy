@@ -17,6 +17,7 @@ namespace ErrorCodes
     extern const int RESOURCE_ALREADY_EXISTS;
     extern const int TIMEOUT_EXCEEDED;
     extern const int UNKNOWN_EXCEPTION;
+    extern const int BAD_ARGUMENTS;
     extern const int DWAL_FATAL_ERROR;
 }
 

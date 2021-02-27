@@ -46,6 +46,8 @@ public:
     using TablePtr = std::shared_ptr<Table>;
 
 public:
+    static CatalogService & instance(Context & context_);
+
     explicit CatalogService(Context & context_);
     ~CatalogService();
 
