@@ -2,15 +2,16 @@
 
 #include <common/logger_useful.h>
 
+
 namespace DB
 {
-IngestingBlocks & IngestingBlocks::instance()
+IngestingBlocks & IngestingBlocks::instance(Int32 timeout_sec)
 {
-    static IngestingBlocks blocks;
+    static IngestingBlocks blocks{timeout_sec};
     return blocks;
 }
 
-IngestingBlocks::IngestingBlocks() : log(&Poco::Logger::get("IngestingBlocks"))
+IngestingBlocks::IngestingBlocks(Int32 timeout_sec_) : timeout_sec(timeout_sec_), log(&Poco::Logger::get("IngestingBlocks"))
 {
 }
 

@@ -1,15 +1,8 @@
 #pragma once
 
-#include <DataStreams/IBlockStream_fwd.h>
-#include <Processors/QueryPipeline.h>
-#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+#include "MetadataService.h"
 
 #include <Poco/URI.h>
-
-#include <boost/noncopyable.hpp>
-
-#include <any>
-#include <optional>
 
 
 namespace DB
@@ -18,15 +11,22 @@ class Context;
 class CatalogService;
 class PlacementService;
 
-class DDLService : private boost::noncopyable
+class DDLService : public MetadataService
 {
 public:
+    static DDLService & instance(Context & global_context_);
+
     explicit DDLService(Context & context_);
-    ~DDLService();
-    void shutdown();
+    virtual ~DDLService() = default;
 
 private:
-    void init();
+    void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
+    String role() const override { return "ddl"; }
+    ConfigSettings configSettings() const override;
+    std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(10, 200); }
+
+private:
+    std::vector<Poco::URI> place(const std::function<std::vector<String>()> & func) const;
 
     /// Talk to Placement service to place shard replicas
     std::vector<Poco::URI> placeReplicas(Int32 shards, Int32 replication_factor) const;
@@ -36,25 +36,14 @@ private:
     Int32 doTable(const String & query, const Poco::URI & uri) const;
     void createTable(const Block & bock) const;
     void mutateTable(const Block & bock) const;
-    void processDDL(const IDistributedWriteAheadLog::RecordPtrs & records) const;
+    void commit(Int64 last_sn);
 
     bool validateSchema(const Block & block, const std::vector<String> & col_names) const;
 
-    void backgroundDDL();
-
 private:
-    /// global context
-    Context & global_context;
+    String http_port;
 
     CatalogService & catalog;
     PlacementService & placement;
-
-    std::any ddl_ctx;
-    DistributedWriteAheadLogPtr dwal;
-
-    std::atomic_flag stopped = ATOMIC_FLAG_INIT;
-    std::optional<ThreadPool> ddl;
-
-    Poco::Logger * log;
 };
 }

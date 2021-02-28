@@ -9,6 +9,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int OK;
+    extern const int RESOURCE_ALREADY_EXISTS;
 }
 
 /// try indefinitely to create dwal for catalog
@@ -21,12 +22,19 @@ void createDWal(DistributedWriteAheadLogPtr & dwal, std::any & ctx, std::atomic_
     }
 
     LOG_INFO(log, "Didn't find topic={}, create one", kctx.topic);
+
     while (!stopped.test())
     {
-        if (dwal->create(kctx.topic, ctx) == ErrorCodes::OK)
+        auto err = dwal->create(kctx.topic, ctx);
+        if (err == ErrorCodes::OK)
         {
             /// FIXME, if the error is fatal. throws
             LOG_INFO(log, "Successfully created topic={}", kctx.topic);
+            break;
+        }
+        else if (err == ErrorCodes::RESOURCE_ALREADY_EXISTS)
+        {
+            LOG_INFO(log, "Already created topic={}", kctx.topic);
             break;
         }
         else

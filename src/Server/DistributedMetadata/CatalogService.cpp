@@ -1,19 +1,15 @@
 #include "CatalogService.h"
-#include "CommonUtils.h"
 
 #include <Core/Block.h>
 #include <DataStreams/AsynchronousBlockInputStream.h>
 #include <DataStreams/BlockIO.h>
 #include <IO/WriteBufferFromString.h>
+#include <Interpreters/Context.h>
+#include <Interpreters/executeQuery.h>
 #include <Processors/Executors/PullingAsyncPipelineExecutor.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Common/Exception.h>
 #include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
-
-#include <Interpreters/Context.h>
-#include <Interpreters/executeQuery.h>
 
 #include <Poco/Util/AbstractConfiguration.h>
 
@@ -28,17 +24,14 @@ namespace ErrorCodes
 
 namespace
 {
-/// globals
-String SYSTEM_ROLES_KEY = "system_settings.system_roles";
-String CATALOG_ROLE = "catalog";
+    /// globals
+    String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
+    String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
+    String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
+    String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
+    String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
 
-String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
-String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
-String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
-String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
-
-
-inline String nodeIdentity() { return getFQDNOrHostName(); }
+    inline String nodeIdentity() { return getFQDNOrHostName(); }
 }
 
 CatalogService & CatalogService::instance(Context & context)
@@ -47,34 +40,20 @@ CatalogService & CatalogService::instance(Context & context)
     return catalog;
 }
 
-CatalogService::CatalogService(Context & global_context_)
-    : global_context(global_context_)
-    , dwal(DistributedWriteAheadLogPool::instance().getDefault())
-    , log(&Poco::Logger::get("CatalogService"))
+CatalogService::CatalogService(Context & global_context_) : MetadataService(global_context_, "CatalogService")
 {
-    init();
-    broadcast();
 }
 
-CatalogService::~CatalogService()
+MetadataService::ConfigSettings CatalogService::configSettings() const
 {
-    shutdown();
-}
-
-void CatalogService::shutdown()
-{
-    if (stopped.test_and_set())
-    {
-        /// already shutdown
-        return;
-    }
-
-    LOG_INFO(log, "CatalogService is stopping");
-    if (cataloger)
-    {
-        cataloger->wait();
-    }
-    LOG_INFO(log, "CatalogService stopped");
+    return {
+        .name_key = CATALOG_NAME_KEY,
+        .default_name = CATALOG_DEFAULT_TOPIC,
+        .data_retention_key = CATALOG_DATA_RETENTION_KEY,
+        .default_data_retention = -1,
+        .replication_factor_key = CATALOG_REPLICATION_FACTOR_KEY,
+        .auto_offset_reset = "earliest",
+    };
 }
 
 void CatalogService::broadcast()
@@ -160,7 +139,7 @@ void CatalogService::commit(Block && block)
     int retries = 3;
     while (retries--)
     {
-        auto result = dwal->append(record, catalog_ctx);
+        auto result = dwal->append(record, dwal_ctx);
         if (result.err == 0)
         {
             return;
@@ -169,6 +148,20 @@ void CatalogService::commit(Block && block)
         LOG_ERROR(log, "Failed to commit, error={}", result.err);
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     }
+}
+
+std::vector<String> CatalogService::hosts() const
+{
+    std::vector<String> results;
+
+    std::shared_lock guard(rwlock);
+    results.reserve(indexedByHost.size());
+
+    for (const auto & p : indexedByHost)
+    {
+        results.push_back(p.first);
+    }
+    return results;
 }
 
 std::vector<CatalogService::TablePtr> CatalogService::tables() const
@@ -313,7 +306,7 @@ void CatalogService::mergeCatalog(const String & host, TableInnerContainer snaps
     indexedByHost[host].swap(snapshot);
 }
 
-void CatalogService::buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs & records)
+void CatalogService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
     for (const auto & record : records)
     {
@@ -322,60 +315,6 @@ void CatalogService::buildCatalogs(const IDistributedWriteAheadLog::RecordPtrs &
         TableInnerContainer snapshot{buildCatalog(record->idempotent_key, record->block)};
         mergeCatalog(record->idempotent_key, std::move(snapshot));
         assert(snapshot.empty());
-    }
-}
-
-void CatalogService::backgroundCataloger()
-{
-    createDWal(dwal, catalog_ctx, stopped, log);
-
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(catalog_ctx);
-
-    /// always consuming from beginning
-    while (!stopped.test())
-    {
-        auto result{dwal->consume(1000, 200, catalog_ctx)};
-        if (result.err != ErrorCodes::OK)
-        {
-            LOG_ERROR(log, "Failed to consume data, error={}", result.err);
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            continue;
-        }
-
-        if (result.records.empty())
-        {
-            continue;
-        }
-
-        buildCatalogs(result.records);
-    }
-}
-
-void CatalogService::init()
-{
-    const auto & config = global_context.getConfigRef();
-
-    /// if this node has `catalog` role, start background thread doing catalog work
-    Poco::Util::AbstractConfiguration::Keys role_keys;
-    config.keys(SYSTEM_ROLES_KEY, role_keys);
-
-    for (const auto & key : role_keys)
-    {
-        if (config.getString(SYSTEM_ROLES_KEY + "." + key, "") == CATALOG_ROLE)
-        {
-            LOG_INFO(log, "Detects the current log has `catalog` role");
-
-            /// catalog
-            String catalog_topic = config.getString(CATALOG_NAME_KEY, CATALOG_DEFAULT_TOPIC);
-            DistributedWriteAheadLogKafkaContext catalog_kctx{catalog_topic, 1, config.getInt(CATALOG_REPLICATION_FACTOR_KEY, 1)};
-            catalog_kctx.partition = 0;
-
-            cataloger.emplace(1);
-            cataloger->scheduleOrThrowOnError([this] { backgroundCataloger(); });
-            catalog_ctx = catalog_kctx;
-
-            break;
-        }
     }
 }
 }

@@ -1,17 +1,12 @@
 #include "DDLService.h"
 
 #include "CatalogService.h"
-#include "CommonUtils.h"
 #include "PlacementService.h"
 
 #include <Core/Block.h>
 #include <IO/HTTPCommon.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
-#include <common/logger_useful.h>
-
 #include <Interpreters/Context.h>
-#include <Interpreters/executeQuery.h>
+#include <common/logger_useful.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Util/AbstractConfiguration.h>
@@ -27,46 +22,38 @@ namespace ErrorCodes
 
 namespace
 {
-/// globals
-String SYSTEM_ROLES_KEY = "system_settings.system_roles";
-String DDL_ROLE = "ddl";
+    /// globals
+    String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
+    String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
+    String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
+    String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";
+    String DDL_DEFAULT_TOPIC = "__system_ddls";
+}
 
-String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
-String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
-String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
-String DDL_DEFAULT_TOPIC = "__system_ddls";
+DDLService & DDLService::instance(Context & global_context)
+{
+    static DDLService ddl_service{global_context};
+    return ddl_service;
 }
 
 DDLService::DDLService(Context & global_context_)
-    : global_context(global_context_)
+    : MetadataService(global_context_, "DDLService")
+    , http_port(":" + global_context_.getConfigRef().getString("http_port"))
     , catalog(CatalogService::instance(global_context_))
     , placement(PlacementService::instance(global_context_))
-    , dwal(DistributedWriteAheadLogPool::instance().getDefault())
-    , log(&Poco::Logger::get("DDLService"))
 {
-    init();
 }
 
-DDLService::~DDLService()
+MetadataService::ConfigSettings DDLService::configSettings() const
 {
-    shutdown();
-}
-
-void DDLService::shutdown()
-{
-    if (stopped.test_and_set())
-    {
-        /// already shutdown
-        return;
-    }
-
-    LOG_INFO(log, "DDLService is stopping");
-    if (ddl)
-    {
-        ddl->wait();
-    }
-    LOG_INFO(log, "DDLService stopped");
-
+    return {
+        .name_key = DDL_NAME_KEY,
+        .default_name = DDL_DEFAULT_TOPIC,
+        .data_retention_key = DDL_DATA_RETENTION_KEY,
+        .default_data_retention = 168,
+        .replication_factor_key = DDL_REPLICATION_FACTOR_KEY,
+        .auto_offset_reset = "earliest",
+    };
 }
 
 bool DDLService::validateSchema(const Block & block, const std::vector<String> & col_names) const
@@ -82,11 +69,30 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
     return true;
 }
 
+std::vector<Poco::URI> DDLService::place(const std::function<std::vector<String>()> & func) const
+{
+    std::vector<String> hosts{func()};
+    std::vector<Poco::URI> uris;
+    uris.reserve(hosts.size());
+
+    for (const auto & host : hosts)
+    {
+        uris.emplace_back(host + http_port);
+    }
+
+    return uris;
+}
+
 std::vector<Poco::URI> DDLService::placeReplicas(Int32 shards, Int32 replication_factor) const
 {
-    (void)shards;
-    (void)replication_factor;
-    return {};
+    auto func = [this, shards, replication_factor]() { return placement.place(shards, replication_factor); };
+    return place(func);
+}
+
+std::vector<Poco::URI> DDLService::placedReplicas(const String & table) const
+{
+    auto func = [this, &table]() { return placement.placed(table); };
+    return place(func);
 }
 
 Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
@@ -115,7 +121,7 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
         }
 
         Poco::Net::HTTPResponse response;
-        /// FIXME: handle table exists, table not exists etc error
+        /// FIXME: handle table exists, table not exists etc error explicitly
         receiveResponse(*session, request, response, false);
 
         LOG_INFO(log, "Executed table statement={} on uri={} successfully", query, uri.toString());
@@ -170,7 +176,7 @@ Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
 
 void DDLService::createTable(const Block & block) const
 {
-    if (!validateSchema(block, {"ddl", "shards", "replication_factor", "timestamp", "query_id"}))
+    if (!validateSchema(block, {"ddl", "table", "shards", "replication_factor", "timestamp", "query_id"}))
     {
         return;
     }
@@ -179,13 +185,22 @@ void DDLService::createTable(const Block & block) const
 
     Int32 shards = block.getByName("shards").column->getInt(0);
     Int32 replication_factor = block.getByName("replication_factor").column->getInt(0);
+    String query = block.getByName("ddl").column->getDataAt(0).toString();
 
     /// 1) Ask placement service to do shard placement
     std::vector<Poco::URI> target_hosts{placeReplicas(shards, replication_factor)};
 
-    assert(target_hosts.size() == static_cast<size_t>(shards * replication_factor));
-
-    String query = block.getByName("ddl").column->getDataAt(0).toString();
+    if (target_hosts.empty())
+    {
+        String table = block.getByName("table").column->getDataAt(0).toString();
+        LOG_ERROR(
+            log,
+            "Failed to create table={} because there are not enough hosts to place its total={} shard replicas, statement={}",
+            table,
+            shards * replication_factor, query);
+        /// FIXME, project task status
+        return;
+    }
 
     /// 2) Create table on each target host accordign to placement
     for (Int32 i = 0; i < replication_factor; ++i)
@@ -199,7 +214,7 @@ void DDLService::createTable(const Block & block) const
     }
 
     /// FIXME: timestamp, query_id
-    /// 3) Notify task service, query_id's status
+    /// 3) Project task status for query_id
 }
 
 void DDLService::mutateTable(const Block & block) const
@@ -213,14 +228,57 @@ void DDLService::mutateTable(const Block & block) const
 
     std::vector<Poco::URI> target_hosts{placedReplicas(table)};
 
+    if (target_hosts.empty())
+    {
+        /// Fail this mutation coz table is not found
+        /// FIXME: make sure `target_hosts` is a complete list of hosts which
+        /// has this table definition (shards * replication_factor)
+        LOG_ERROR(log, "Table {} is not found", table);
+
+        /// FIXME, project task status
+        return;
+    }
+
     String query = block.getByName("ddl").column->getDataAt(0).toString();
     for (auto & uri : target_hosts)
     {
         doTable(query, uri);
     }
+
+    /// FIXME, project task status
 }
 
-void DDLService::processDDL(const IDistributedWriteAheadLog::RecordPtrs & records) const
+void DDLService::commit(Int64 last_sn)
+{
+    /// FIXME, retries
+    try
+    {
+        auto err = dwal->commit(last_sn, dwal_ctx);
+        if (likely(err == 0))
+        {
+            LOG_INFO(log, "Successfully committed offset={}", last_sn);
+        }
+        else
+        {
+            /// It is ok as next commit will override this commit if it makes through.
+            /// If it failed and then crashes, we will redo and we will find resource
+            /// already exists or resource not exists errors which shall be handled in
+            /// DDL processing functions. In this case, for idempotent DDL like create
+            /// table or delete table, it shall be OK. For alter table, it may depend ?
+            LOG_ERROR(log, "Failed to commit offset={} error={}", last_sn, err);
+        }
+    }
+    catch (...)
+    {
+        LOG_ERROR(
+            log,
+            "Failed to commit offset={} exception={}",
+            last_sn,
+            getCurrentExceptionMessage(true, true));
+    }
+}
+
+void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
     for (const auto & record : records)
     {
@@ -242,60 +300,7 @@ void DDLService::processDDL(const IDistributedWriteAheadLog::RecordPtrs & record
             LOG_ERROR(log, "Unknown operation={}", static_cast<Int32>(record->op_code));
         }
     }
+
+    const_cast<DDLService *>(this)->commit(records.back()->sn);
 }
-
-void DDLService::backgroundDDL()
-{
-    createDWal(dwal, ddl_ctx, stopped, log);
-
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ddl_ctx);
-
-    /// FIXME, checkpoint
-    while (!stopped.test())
-    {
-        auto result{dwal->consume(10, 200, ddl_ctx)};
-        if (result.err != ErrorCodes::OK)
-        {
-            LOG_ERROR(log, "Failed to consume data, error={}", result.err);
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            continue;
-        }
-
-        if (result.records.empty())
-        {
-            continue;
-        }
-
-        processDDL(result.records);
-    }
-}
-
-void DDLService::init()
-{
-    const auto & config = global_context.getConfigRef();
-
-    /// if this node has `ddl` role, start background thread doing ddl work
-    Poco::Util::AbstractConfiguration::Keys role_keys;
-    config.keys(SYSTEM_ROLES_KEY, role_keys);
-
-    for (const auto & key : role_keys)
-    {
-        if (config.getString(SYSTEM_ROLES_KEY + "." + key, "") == DDL_ROLE)
-        {
-            LOG_INFO(log, "Detects the current log has `ddl` role");
-
-            /// ddl
-            String ddl_topic = config.getString(DDL_NAME_KEY, DDL_DEFAULT_TOPIC);
-            DistributedWriteAheadLogKafkaContext ddl_kctx{ddl_topic, 1, config.getInt(DDL_REPLICATION_FACTOR_KEY, 1)};
-            ddl_kctx.partition = 0;
-
-            ddl.emplace(1);
-            ddl->scheduleOrThrowOnError([this] { backgroundDDL(); });
-            ddl_ctx = ddl_kctx;
-
-            break;
-        }
-    }
-}
-
 }
