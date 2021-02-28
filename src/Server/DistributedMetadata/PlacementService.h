@@ -1,12 +1,6 @@
 #pragma once
 
-#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
-#include <Common/ThreadPool.h>
-
-#include <boost/noncopyable.hpp>
-
-#include <any>
-#include <optional>
+#include "MetadataService.h"
 
 
 namespace DB
@@ -14,32 +8,24 @@ namespace DB
 class Context;
 class CatalogService;
 
-
-class PlacementService : private boost::noncopyable
+class PlacementService : public MetadataService
 {
 public:
-    static PlacementService & instance(Context & context);
+    static PlacementService & instance(Context & global_context);
+
     explicit PlacementService(Context & global_context_);
-    ~PlacementService();
+    virtual ~PlacementService() = default;
 
-    void shutdown();
-
-private:
-    void init();
-    void processMetrics(const IDistributedWriteAheadLog::RecordPtrs & records) const;
-    void backgroundMetrics();
+    std::vector<String> place(Int32 shards, Int32 replication_factor) const;
+    std::vector<String> placed(const String & table) const;
 
 private:
-    Context & global_context;
+    void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
+    String role() const override { return "placement"; }
+    ConfigSettings configSettings() const override;
+    std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(100, 500); }
 
+private:
     CatalogService & catalog;
-
-    std::any placement_ctx;
-    DistributedWriteAheadLogPtr dwal;
-
-    std::atomic_flag stopped = ATOMIC_FLAG_INIT;
-    std::optional<ThreadPool> placement;
-
-    Poco::Logger * log;
 };
 }

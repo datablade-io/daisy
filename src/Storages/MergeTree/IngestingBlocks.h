@@ -18,10 +18,9 @@ namespace DB
 class IngestingBlocks : public boost::noncopyable
 {
 public:
-    static IngestingBlocks & instance();
+    static IngestingBlocks & instance(Int32 timeout_sec = 120);
 
-public:
-    IngestingBlocks();
+    explicit IngestingBlocks(Int32 timeout_sec = 120);
     ~IngestingBlocks() = default;
 
     /// add `block_id` of query `id`. One query `id` can have several `blocks`
@@ -41,9 +40,6 @@ public:
 
     /// set failure code for query `id`
     void fail(const String & id, UInt16 err);
-
-    /// set the timeout for inflight blocks
-    void setTimeout(Int32 timeout_sec_) { timeout_sec = timeout_sec_; }
 
 private:
     void removeExpiredBlockIds();
@@ -65,7 +61,8 @@ private:
     std::mutex lock;
     std::deque<std::pair<SteadyClock, String>> timedBlockIds;
 
-    Poco::Logger * log;
     Int32 timeout_sec = 120;
+
+    Poco::Logger * log;
 };
 }
