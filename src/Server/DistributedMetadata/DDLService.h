@@ -11,7 +11,7 @@ class Context;
 class CatalogService;
 class PlacementService;
 
-class DDLService : public MetadataService
+class DDLService final : public MetadataService
 {
 public:
     static DDLService & instance(Context & global_context_);

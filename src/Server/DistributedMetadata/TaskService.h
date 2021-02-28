@@ -2,9 +2,6 @@
 
 #include "MetadataService.h"
 
-/// #include <boost/functional/hash.hpp>
-
-
 namespace DB
 {
 class TaskService final : public MetadataService
