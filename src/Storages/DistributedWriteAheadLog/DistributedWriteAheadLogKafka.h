@@ -18,7 +18,7 @@ namespace DB
 struct DistributedWriteAheadLogKafkaContext
 {
     String topic;
-    Int32 partition = -1;
+    Int32 partition = 0;
 
     /// - absolute offset (0..N)
     /// - RD_KAFKA_OFFSET_BEGINNING, -2

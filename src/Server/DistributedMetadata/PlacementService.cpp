@@ -1,15 +1,13 @@
 #include "PlacementService.h"
-
 #include "CatalogService.h"
-#include "CommonUtils.h"
-
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
-#include <common/logger_useful.h>
 
 #include <Interpreters/Context.h>
+#include <common/logger_useful.h>
 
 #include <Poco/Util/AbstractConfiguration.h>
+
+#include <algorithm>
+#include <random>
 
 
 namespace DB
@@ -22,12 +20,10 @@ namespace ErrorCodes
 namespace
 {
 /// globals
-String SYSTEM_ROLES_KEY = "system_settings.system_roles";
-String PLACEMENT_ROLE = "placement";
-
 String PLACEMENT_KEY_PREFIX = "system_settings.system_node_metrics_dwal.";
 String PLACEMENT_NAME_KEY = PLACEMENT_KEY_PREFIX + "name";
 String PLACEMENT_REPLICATION_FACTOR_KEY = PLACEMENT_KEY_PREFIX + "replication_factor";
+String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retention";
 String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
 }
 
@@ -38,92 +34,61 @@ PlacementService & PlacementService::instance(Context & context)
 }
 
 PlacementService::PlacementService(Context & global_context_)
-    : global_context(global_context_)
-    , catalog(CatalogService::instance(global_context_))
-    , dwal(DistributedWriteAheadLogPool::instance().getDefault())
-    , log(&Poco::Logger::get("PlacementService"))
+    : MetadataService(global_context_, "PlacementService"), catalog(CatalogService::instance(global_context_))
 {
-    init();
 }
 
-PlacementService::~PlacementService()
+MetadataService::ConfigSettings PlacementService::configSettings() const
 {
-    shutdown();
+    return {
+        .name_key = PLACEMENT_NAME_KEY,
+        .default_name = PLACEMENT_DEFAULT_TOPIC,
+        .data_retention_key = PLACEMENT_DATA_RETENTION_KEY,
+        .default_data_retention = 2,
+        .replication_factor_key = PLACEMENT_REPLICATION_FACTOR_KEY,
+        .auto_offset_reset = "latest",
+    };
 }
 
-void PlacementService::shutdown()
+std::vector<String> PlacementService::place(Int32 shards, Int32 replication_factor) const
 {
-    if (stopped.test_and_set())
+    size_t total_replicas = static_cast<size_t>(shards * replication_factor);
+
+    std::vector<String> hosts{catalog.hosts()};
+    if (hosts.size() < total_replicas)
     {
-        /// already shutdown
-        return;
+        /// Hosts are not enough
+        return {};
     }
 
-    LOG_INFO(log, "PlacementService is stopping");
-    if (placement)
-    {
-        placement->wait();
-    }
-    LOG_INFO(log, "PlacementService stopped");
+    /// FIXME, for now use randomization
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(hosts.begin(), hosts.end(), g);
+
+    return std::vector<String>{hosts.begin(), hosts.begin() + total_replicas};
 }
 
-void PlacementService::processMetrics(const IDistributedWriteAheadLog::RecordPtrs & records) const
+std::vector<String> PlacementService::placed(const String & table) const
 {
+    auto tables{catalog.findTableByName(table)};
+
+    std::vector<String> hosts;
+    hosts.reserve(tables.size());
+
+    for (const auto & t : tables)
+    {
+        hosts.push_back(t->host);
+    }
+    return hosts;
+}
+
+void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
+{
+    /// node metrics schema: host, disk_free, tables, location, timestamp
     (void)records;
-}
 
-void PlacementService::backgroundMetrics()
-{
-    createDWal(dwal, placement_ctx, stopped, log);
-
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(placement_ctx);
-
-    /// FIXME, checkpoint
-    while (!stopped.test())
-    {
-        auto result{dwal->consume(100, 500, placement_ctx)};
-        if (result.err != ErrorCodes::OK)
-        {
-            LOG_ERROR(log, "Failed to consume data, error={}", result.err);
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            continue;
-        }
-
-        if (result.records.empty())
-        {
-            continue;
-        }
-
-        processMetrics(result.records);
-    }
-}
-
-void PlacementService::init()
-{
-    const auto & config = global_context.getConfigRef();
-
-    /// if this node has `placement` role, start background thread doing placement work
-    Poco::Util::AbstractConfiguration::Keys role_keys;
-    config.keys(SYSTEM_ROLES_KEY, role_keys);
-
-    for (const auto & key : role_keys)
-    {
-        if (config.getString(SYSTEM_ROLES_KEY + "." + key, "") == PLACEMENT_ROLE)
-        {
-            LOG_INFO(log, "Detects the current log has `placement` role");
-
-            /// placement
-            String topic = config.getString(PLACEMENT_NAME_KEY, PLACEMENT_DEFAULT_TOPIC);
-            DistributedWriteAheadLogKafkaContext placement_kctx{topic, 1, config.getInt(PLACEMENT_REPLICATION_FACTOR_KEY, 1)};
-            placement_kctx.partition = 0;
-
-            placement.emplace(1);
-            placement->scheduleOrThrowOnError([this] { backgroundMetrics(); });
-            placement_ctx = placement_kctx;
-
-            break;
-        }
-    }
+    /// checkpoint
 }
 
 }

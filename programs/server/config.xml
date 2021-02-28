@@ -1128,9 +1128,12 @@
         <system_ddl_dwal>
             <name>__system_ddls</name>
             <replication_factor>1</replication_factor>
+            <!-- 168 hours (7 days) -->
+            <data_retention>168</data_retention>
         </system_ddl_dwal>
 
         <!-- system_catalog_dwal is for distributed catalog service -->
+        <!-- it is compact -->
         <system_catalog_dwal>
             <name>__system_catalogs</name>
             <replication_factor>1</replication_factor>
@@ -1140,12 +1143,16 @@
         <system_node_metrics_dwal>
             <name>__system_node_metrics</name>
             <replication_factor>1</replication_factor>
+            <!-- 2 hours -->
+            <data_retention>2</data_retention>
         </system_node_metrics_dwal>
 
         <!-- system_task_dwal is for global task status -->
         <system_task_dwal>
             <name>__system_tasks</name>
             <replication_factor>1</replication_factor>
+            <!-- 168 hours (7 days) -->
+            <data_retention>168</data_retention>
         </system_task_dwal>
 
     </system_settings>
