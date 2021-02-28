@@ -12,7 +12,7 @@ namespace DB
 {
 class Context;
 
-class CatalogService : public MetadataService
+class CatalogService final : public MetadataService
 {
 public:
     struct Table

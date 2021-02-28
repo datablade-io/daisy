@@ -8,7 +8,7 @@ namespace DB
 class Context;
 class CatalogService;
 
-class PlacementService : public MetadataService
+class PlacementService final : public MetadataService
 {
 public:
     static PlacementService & instance(Context & global_context);
