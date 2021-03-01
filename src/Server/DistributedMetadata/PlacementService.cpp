@@ -50,7 +50,7 @@ MetadataService::ConfigSettings PlacementService::configSettings() const
     };
 }
 
-std::vector<String> PlacementService::place(Int32 shards, Int32 replication_factor) const
+std::vector<String> PlacementService::place(Int32 shards, Int32 replication_factor, const String & /* colocated_table */) const
 {
     size_t total_replicas = static_cast<size_t>(shards * replication_factor);
 

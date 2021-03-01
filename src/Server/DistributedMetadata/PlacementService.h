@@ -14,9 +14,9 @@ public:
     static PlacementService & instance(Context & global_context);
 
     explicit PlacementService(Context & global_context_);
-    virtual ~PlacementService() = default;
+    virtual ~PlacementService() override = default;
 
-    std::vector<String> place(Int32 shards, Int32 replication_factor) const;
+    std::vector<String> place(Int32 shards, Int32 replication_factor, const String & colocated_table) const;
     std::vector<String> placed(const String & table) const;
 
 private:
