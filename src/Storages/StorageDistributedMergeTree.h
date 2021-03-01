@@ -149,8 +149,6 @@ protected:
         bool has_force_restore_data_flag_);
 
 private:
-    void doInitWalSettings(const String & key);
-    void initWalSettings();
     void initWal();
     IDistributedWriteAheadLog::RecordSequenceNumber lastSequenceNumber();
 
@@ -185,23 +183,18 @@ private:
     Int32 shards;
     ExpressionActionsPtr sharding_key_expr;
 
-    /// from table settings for producer
+    /// From table settings for producer
     Int32 dwal_request_timeout_ms = 30000;
     Int32 dwal_request_required_acks = 1;
 
-    /// from table settings for consumer
+    /// From table settings for consumer
     String dwal_auto_offset_reset = "earliest";
+    Int32 dwal_partition = -1;
 
     /// For sharding
     bool sharding_key_is_deterministic = false;
     std::vector<UInt64> slot_to_shard;
     String sharding_key_column_name;
-
-    /// wal client pool size
-    Int32 dwal_replication_factor = 3;
-    Int32 dwal_pool_size = 2;
-    Int32 dwal_partition = -1;
-    std::any dwal_settings;
 
     /// cached ctx for reuse
     std::mutex append_ctx_mutex;

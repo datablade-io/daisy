@@ -9,12 +9,14 @@
 #include <DataTypes/DataTypeString.h>
 #include <IO/HTTPCommon.h>
 #include <Interpreters/Context.h>
+#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <common/logger_useful.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Util/AbstractConfiguration.h>
 
 #include <boost/algorithm/string/join.hpp>
+#include <boost/algorithm/string/split.hpp>
 
 
 namespace DB
@@ -28,11 +30,11 @@ namespace ErrorCodes
 namespace
 {
     /// globals
-    String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
-    String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
-    String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
-    String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";
-    String DDL_DEFAULT_TOPIC = "__system_ddls";
+    const String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
+    const String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
+    const String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
+    const String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";
+    const String DDL_DEFAULT_TOPIC = "__system_ddls";
 }
 
 DDLService & DDLService::instance(Context & global_context_)
@@ -215,12 +217,13 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     Block & block = record->block;
     assert(block.has("query_id"));
 
-    if (!validateSchema(block, {"ddl", "table", "shards", "replication_factor", "timestamp", "query_id", "user"}))
+    if (!validateSchema(block, {"ddl", "database", "table", "shards", "replication_factor", "timestamp", "query_id", "user"}))
     {
         return;
     }
 
     String query = block.getByName("ddl").column->getDataAt(0).toString();
+    String database = block.getByName("database").column->getDataAt(0).toString();
     String table = block.getByName("table").column->getDataAt(0).toString();
     Int32 shards = block.getByName("shards").column->getInt(0);
     Int32 replication_factor = block.getByName("replication_factor").column->getInt(0);
@@ -229,6 +232,10 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 
     /// FIXME : check with catalog to see if this DDL is fufilled
     /// Build a data structure to cached last 10000 DDLs, check aginst this data structure
+
+    /// Create a DWAL for this table. FIXME: retention_ms
+    std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table, shards, replication_factor}};
+    doCreateDWal(ctx);
 
     if (block.has("hosts"))
     {
@@ -304,7 +311,7 @@ void DDLService::mutateTable(const Block & block) const
 {
     assert(block.has("query_id"));
 
-    if (!validateSchema(block, {"ddl", "table", "timestamp", "query_id", "user"}))
+    if (!validateSchema(block, {"ddl", "database", "table", "timestamp", "query_id", "user"}))
     {
         return;
     }
@@ -375,6 +382,12 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
         {
             mutateTable(record->block);
+
+            /// delete DWAL
+            String database = record->block.getByName("database").column->getDataAt(0).toString();
+            String table = record->block.getByName("table").column->getDataAt(0).toString();
+            std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table}};
+            doDeleteDWal(ctx);
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
         {

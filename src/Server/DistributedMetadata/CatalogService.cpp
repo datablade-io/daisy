@@ -24,12 +24,12 @@ namespace ErrorCodes
 
 namespace
 {
-    /// globals
-    String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
-    String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
-    String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
-    String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
-    String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
+    /// Globals
+    const String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
+    const String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
+    const String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
+    const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
+    const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
 
     inline String nodeIdentity() { return getFQDNOrHostName(); }
 }

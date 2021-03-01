@@ -4,19 +4,13 @@
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/TreeRewriter.h>
 #include <Interpreters/createBlockSelector.h>
-
 #include <Processors/Pipe.h>
 #include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Storages/MergeTree/DistributedMergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
-
-#include <Common/Macros.h>
 #include <Common/randomSeed.h>
-#include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
-
-#include <Poco/Util/AbstractConfiguration.h>
 
 
 namespace DB
@@ -92,7 +86,6 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
         std::move(settings_),
         has_force_restore_data_flag_);
 
-    initWalSettings();
     initWal();
 
     for (Int32 shard = 0; shard < shards; ++shard)
@@ -367,21 +360,6 @@ size_t StorageDistributedMergeTree::getRandomShardIndex()
     return std::uniform_int_distribution<size_t>(0, shards - 1)(rng);
 }
 
-void StorageDistributedMergeTree::initWal()
-{
-    auto create_func = [this]() -> DistributedWriteAheadLogPtr {
-        auto & kafka_settings = std::any_cast<DistributedWriteAheadLogKafkaSettings &>(dwal_settings);
-        auto kwal
-            = std::make_shared<DistributedWriteAheadLogKafka>(std::make_unique<DistributedWriteAheadLogKafkaSettings>(kafka_settings));
-
-        kwal->startup();
-        return kwal;
-    };
-
-    auto & kafka_settings = std::any_cast<DistributedWriteAheadLogKafkaSettings &>(dwal_settings);
-    dwal = DistributedWriteAheadLogPool::instance().getWriteAheadLog(kafka_settings.cluster_id, create_func, dwal_pool_size);
-}
-
 std::any & StorageDistributedMergeTree::getDwalAppendCtx()
 {
     if (dwal_append_ctx.has_value())
@@ -653,79 +631,8 @@ void StorageDistributedMergeTree::backgroundConsumer()
     }
 }
 
-void StorageDistributedMergeTree::doInitWalSettings(const String & key)
+void StorageDistributedMergeTree::initWal()
 {
-    const auto & config = global_context.getConfigRef();
-
-    DistributedWriteAheadLogKafkaSettings kafka_settings;
-
-    std::vector<std::tuple<String, String, void *>> settings = {
-        {"cluster_id", "String", &kafka_settings.cluster_id},
-        {"security_protocol", "String", &kafka_settings.security_protocol},
-        {"brokers", "String", &kafka_settings.brokers},
-        {"replication_factor", "Int32", &dwal_replication_factor},
-        {"topic_metadata_refresh_interval_ms", "Int32", &kafka_settings.topic_metadata_refresh_interval_ms},
-        {"message_max_bytes", "Int32", &kafka_settings.message_max_bytes},
-        {"statistic_internal_ms", "Int32", &kafka_settings.statistic_internal_ms},
-        {"debug", "String", &kafka_settings.debug},
-        {"enable_idempotence", "Bool", &kafka_settings.enable_idempotence},
-        {"queue_buffering_max_messages", "Int32", &kafka_settings.queue_buffering_max_messages},
-        {"queue_buffering_max_kbytes", "Int32", &kafka_settings.queue_buffering_max_kbytes},
-        {"queue_buffering_max_ms", "Int32", &kafka_settings.queue_buffering_max_ms},
-        {"message_send_max_retries", "Int32", &kafka_settings.message_send_max_retries},
-        {"retry_backoff_ms", "Int32", &kafka_settings.retry_backoff_ms},
-        {"compression_codec", "String", &kafka_settings.compression_codec},
-        {"message_timeout_ms", "Int32", &kafka_settings.message_timeout_ms},
-        {"message_delivery_async_poll_ms", "Int32", &kafka_settings.message_delivery_async_poll_ms},
-        {"message_delivery_sync_poll_ms", "Int32", &kafka_settings.message_delivery_sync_poll_ms},
-        {"group_id", "String", &kafka_settings.group_id},
-        {"message_max_bytes", "Int32", &kafka_settings.message_max_bytes},
-        {"enable_auto_commit", "Bool", &kafka_settings.enable_auto_commit},
-        {"check_crcs", "Bool", &kafka_settings.check_crcs},
-        {"auto_commit_interval_ms", "Int32", &kafka_settings.auto_commit_interval_ms},
-        {"fetch_message_max_bytes", "Int32", &kafka_settings.fetch_message_max_bytes},
-        {"queued_min_messages", "Int32", &kafka_settings.queued_min_messages},
-        {"queued_max_messages_kbytes", "Int32", &kafka_settings.queued_max_messages_kbytes},
-        {"internal_pool_size", "Int32", &dwal_pool_size},
-    };
-
-    for (const auto & t : settings)
-    {
-        auto k = "system_settings.system_dwals." + key + "." + std::get<0>(t);
-        if (config.has(k))
-        {
-            const auto & type = std::get<1>(t);
-            if (type == "String")
-            {
-                *static_cast<String *>(std::get<2>(t)) = config.getString(k);
-            }
-            else if (type == "Int32")
-            {
-                auto i = config.getInt(k);
-                if (i <= 0)
-                {
-                    throw Exception("invalid setting " + std::get<0>(t), ErrorCodes::BAD_ARGUMENTS);
-                }
-                *static_cast<Int32 *>(std::get<2>(t)) = i;
-            }
-            else if (type == "Bool")
-            {
-                *static_cast<bool *>(std::get<2>(t)) = config.getBool(k);
-            }
-        }
-    }
-
-    if (kafka_settings.brokers.empty())
-    {
-        throw Exception("empty kafka brokers in system kafka settings", ErrorCodes::BAD_ARGUMENTS);
-    }
-
-    if (kafka_settings.group_id.empty())
-    {
-        /// FIXME
-        kafka_settings.group_id = getFQDNOrHostName();
-    }
-
     auto ssettings = storage_settings.get();
     auto & offset_reset = ssettings->dwal_auto_offset_reset.value;
     if (offset_reset == "earliest" || offset_reset == "latest")
@@ -737,20 +644,15 @@ void StorageDistributedMergeTree::doInitWalSettings(const String & key)
         throw Exception("invalid dwal_auto_offset_reset, only 'earliest' and 'latest' are supported", ErrorCodes::BAD_ARGUMENTS);
     }
 
-    if (dwal_replication_factor <= 0 || dwal_replication_factor > 5)
-    {
-        throw Exception("invalid dwal_replication_factor, shall be in [1, 5]", ErrorCodes::BAD_ARGUMENTS);
-    }
-
     auto acks = ssettings->dwal_request_required_acks.value;
-    if (acks >= -1 && acks <= dwal_replication_factor)
+    if (acks >= -1 && acks <= replication_factor)
     {
         dwal_request_required_acks = acks;
     }
     else
     {
         throw Exception(
-            "invalid dwal_request_required_acks, shall be in [-1, " + std::to_string(dwal_replication_factor) + "] range",
+            "invalid dwal_request_required_acks, shall be in [-1, " + std::to_string(replication_factor) + "] range",
             ErrorCodes::BAD_ARGUMENTS);
     }
 
@@ -770,48 +672,11 @@ void StorageDistributedMergeTree::doInitWalSettings(const String & key)
         throw Exception("invalid dwal_partition , shall be in [0, " + std::to_string(shards) + ") range", ErrorCodes::BAD_ARGUMENTS);
     }
 
-    /// save for late reuse
-    dwal_settings = kafka_settings;
-}
+    dwal = DistributedWriteAheadLogPool::instance(global_context).get(ssettings->dwal_cluster_id.value);
 
-void StorageDistributedMergeTree::initWalSettings()
-{
-    auto ssettings = storage_settings.get();
-    /// By default dwal_type is `kafka`, check other dwal type if something else is supported in future
-    (void) ssettings->dwal_type;
-
-    std::function<bool(const String & key)> match;
-
-    const auto & config = global_context.getConfigRef();
-
-    if (ssettings->dwal_cluster_id.value.empty())
+    if (!dwal)
     {
-        match = [&config](const String & key) { return config.getBool("system_settings.system_dwals." + key + ".system_default"); };
-    }
-    else
-    {
-        match = [&config, &ssettings](const String & key) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-            return config.getString("system_settings.system_dwals." + key + ".cluster_id", "") == ssettings->dwal_cluster_id.value;
-        };
-    }
-
-    bool found = false;
-    Poco::Util::AbstractConfiguration::Keys sys_kafka_keys;
-    config.keys("system_settings.system_dwals", sys_kafka_keys);
-
-    for (const auto & key : sys_kafka_keys)
-    {
-        if (match(key))
-        {
-            doInitWalSettings(key);
-            found = true;
-            break;
-        }
-    }
-
-    if (!found)
-    {
-        throw Exception("invalid dwal_cluster_id settings", ErrorCodes::BAD_ARGUMENTS);
+        throw Exception("Invalid Kafka cluster id " + ssettings->dwal_cluster_id.value, ErrorCodes::BAD_ARGUMENTS);
     }
 }
 }
