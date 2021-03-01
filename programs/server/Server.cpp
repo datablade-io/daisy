@@ -50,6 +50,7 @@
 #include <Interpreters/InterserverCredentials.h>
 #include <Interpreters/ExpressionJIT.h>
 #include <Access/AccessControlManager.h>
+#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Storages/StorageReplicatedMergeTree.h>
 #include <Storages/System/attachSystemTables.h>
 #include <AggregateFunctions/registerAggregateFunctions.h>
@@ -72,6 +73,10 @@
 #include <Server/PostgreSQLHandlerFactory.h>
 #include <Server/ProtocolServerAdapter.h>
 #include <Server/HTTP/HTTPServer.h>
+#include <Server/DistributedMetadata/TaskStatusService.h>
+#include <Server/DistributedMetadata/CatalogService.h>
+#include <Server/DistributedMetadata/DDLService.h>
+#include <Server/DistributedMetadata/PlacementService.h>
 
 
 #if !defined(ARCADIA_BUILD)
@@ -194,6 +199,23 @@ int waitServersToFinish(std::vector<DB::ProtocolServerAdapter> & servers, size_t
     return current_connections;
 }
 
+void initDistributedMetadataServices(DB::Context & global_context)
+{
+    /// Init DWAL pool
+    DB::DistributedWriteAheadLogPool::instance(global_context);
+
+    auto & task_status_service = DB::TaskStatusService::instance(global_context);
+    task_status_service.startup();
+
+    auto & catalog_service = DB::CatalogService::instance(global_context);
+    catalog_service.startup();
+
+    auto & placement_service = DB::PlacementService::instance(global_context);
+    placement_service.startup();
+
+    auto & ddl_service = DB::DDLService::instance(global_context);
+    ddl_service.startup();
+}
 }
 
 namespace DB
@@ -1095,6 +1117,9 @@ int Server::main(const std::vector<std::string> & /*args*/)
 #else
     LOG_INFO(log, "TaskStats is not implemented for this OS. IO accounting will be disabled.");
 #endif
+
+    /// init Distributed metadata services for DistributedMergeTree table engine
+    initDistributedMetadataServices(*global_context);
 
     auto servers = std::make_shared<std::vector<ProtocolServerAdapter>>();
     {
