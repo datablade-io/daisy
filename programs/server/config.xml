@@ -1151,8 +1151,8 @@
         <system_task_dwal>
             <name>__system_tasks</name>
             <replication_factor>1</replication_factor>
-            <!-- 168 hours (7 days) -->
-            <data_retention>168</data_retention>
+            <!-- 24 hours -->
+            <data_retention>24</data_retention>
         </system_task_dwal>
 
     </system_settings>

@@ -2,14 +2,19 @@
 
 #include "CatalogService.h"
 #include "PlacementService.h"
+#include "TaskStatusService.h"
 
 #include <Core/Block.h>
+#include <Core/ColumnWithTypeAndName.h>
+#include <DataTypes/DataTypeString.h>
 #include <IO/HTTPCommon.h>
 #include <Interpreters/Context.h>
 #include <common/logger_useful.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Util/AbstractConfiguration.h>
+
+#include <boost/algorithm/string/join.hpp>
 
 
 namespace DB
@@ -30,9 +35,9 @@ namespace
     String DDL_DEFAULT_TOPIC = "__system_ddls";
 }
 
-DDLService & DDLService::instance(Context & global_context)
+DDLService & DDLService::instance(Context & global_context_)
 {
-    static DDLService ddl_service{global_context};
+    static DDLService ddl_service{global_context_};
     return ddl_service;
 }
 
@@ -41,6 +46,7 @@ DDLService::DDLService(Context & global_context_)
     , http_port(":" + global_context_.getConfigRef().getString("http_port"))
     , catalog(CatalogService::instance(global_context_))
     , placement(PlacementService::instance(global_context_))
+    , task(TaskStatusService::instance(global_context_))
 {
 }
 
@@ -56,6 +62,41 @@ MetadataService::ConfigSettings DDLService::configSettings() const
     };
 }
 
+inline void DDLService::updateDDLStatus(
+    const String & query_id,
+    const String & user,
+    const String & status,
+    const String & query,
+    const String & progress,
+    const String & reason) const
+{
+    auto task_status = std::make_shared<TaskStatusService::TaskStatus>();
+    task_status->id = query_id;
+    task_status->user = user;
+    task_status->status = status;
+
+    task_status->context = query;
+    task_status->progress = progress;
+    task_status->reason = reason;
+
+    task.append(task_status);
+}
+
+void DDLService::progressDDL(const String & query_id, const String & user, const String & query, const String & progress) const
+{
+    updateDDLStatus(query_id, user, TaskStatusService::TaskStatus::INPROGRESS, query, progress, "");
+}
+
+void DDLService::succeedDDL(const String & query_id, const String & user, const String & query) const
+{
+    updateDDLStatus(query_id, user, TaskStatusService::TaskStatus::SUCCEEDED, query, "", "");
+}
+
+void DDLService::failDDL(const String & query_id, const String & user, const String & query, const String reason) const
+{
+    updateDDLStatus(query_id, user, TaskStatusService::TaskStatus::FAILED, query, "", reason);
+}
+
 bool DDLService::validateSchema(const Block & block, const std::vector<String> & col_names) const
 {
     for (const auto & col_name : col_names)
@@ -63,15 +104,22 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
         if (!block.has(col_name))
         {
             LOG_ERROR(log, "`{}` column is missing", col_name);
+
+            String query_id = block.getByName("query_id").column->getDataAt(0).toString();
+            String user = "";
+            if (block.has("user"))
+            {
+                user = block.getByName("user").column->getDataAt(0).toString();
+            }
+            failDDL(query_id, user, "", "invalid DDL");
             return false;
         }
     }
     return true;
 }
 
-std::vector<Poco::URI> DDLService::place(const std::function<std::vector<String>()> & func) const
+inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts) const
 {
-    std::vector<String> hosts{func()};
     std::vector<Poco::URI> uris;
     uris.reserve(hosts.size());
 
@@ -81,18 +129,6 @@ std::vector<Poco::URI> DDLService::place(const std::function<std::vector<String>
     }
 
     return uris;
-}
-
-std::vector<Poco::URI> DDLService::placeReplicas(Int32 shards, Int32 replication_factor) const
-{
-    auto func = [this, shards, replication_factor]() { return placement.place(shards, replication_factor); };
-    return place(func);
-}
-
-std::vector<Poco::URI> DDLService::placedReplicas(const String & table) const
-{
-    auto func = [this, &table]() { return placement.placed(table); };
-    return place(func);
 }
 
 Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
@@ -174,78 +210,128 @@ Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
     }
 }
 
-void DDLService::createTable(const Block & block) const
+void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 {
-    if (!validateSchema(block, {"ddl", "table", "shards", "replication_factor", "timestamp", "query_id"}))
+    Block & block = record->block;
+    assert(block.has("query_id"));
+
+    if (!validateSchema(block, {"ddl", "table", "shards", "replication_factor", "timestamp", "query_id", "user"}))
     {
         return;
     }
 
-    /// FIXME : check catalog service if table exists
-
+    String query = block.getByName("ddl").column->getDataAt(0).toString();
+    String table = block.getByName("table").column->getDataAt(0).toString();
     Int32 shards = block.getByName("shards").column->getInt(0);
     Int32 replication_factor = block.getByName("replication_factor").column->getInt(0);
-    String query = block.getByName("ddl").column->getDataAt(0).toString();
+    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
+    String user = block.getByName("user").column->getDataAt(0).toString();
 
-    /// 1) Ask placement service to do shard placement
-    std::vector<Poco::URI> target_hosts{placeReplicas(shards, replication_factor)};
+    /// FIXME : check with catalog to see if this DDL is fufilled
+    /// Build a data structure to cached last 10000 DDLs, check aginst this data structure
 
-    if (target_hosts.empty())
+    if (block.has("hosts"))
     {
-        String table = block.getByName("table").column->getDataAt(0).toString();
-        LOG_ERROR(
-            log,
-            "Failed to create table={} because there are not enough hosts to place its total={} shard replicas, statement={}",
-            table,
-            shards * replication_factor, query);
-        /// FIXME, project task status
-        return;
-    }
+        /// If `hosts` exists in the block, we already placed the replicas
+        /// then we move to the execution stage
 
-    /// 2) Create table on each target host accordign to placement
-    for (Int32 i = 0; i < replication_factor; ++i)
-    {
-        for (Int32 j = 0; j < shards; ++j)
+        String hosts_val = block.getByName("hosts").column->getDataAt(0).toString();
+        std::vector<String> hosts;
+        boost::algorithm::split(hosts, hosts_val, boost::is_any_of(","));
+        assert(hosts.size() > 0);
+
+        std::vector<Poco::URI> target_hosts{toURIs(hosts)};
+
+        /// Create table on each target host accordign to placement
+        for (Int32 i = 0; i < replication_factor; ++i)
         {
-            /// FIXME, check table engine, grammar check
-            String create_query = query + ", dwal_partition=" + std::to_string(j);
-            doTable(create_query, target_hosts[i * replication_factor + j]);
+            for (Int32 j = 0; j < shards; ++j)
+            {
+                /// FIXME, check table engine, grammar check
+                String create_query = query + ", dwal_partition=" + std::to_string(j);
+                doTable(create_query, target_hosts[i * replication_factor + j]);
+            }
+        }
+
+        succeedDDL(query_id, user, query);
+    }
+    else
+    {
+        /// Ask placement service to do shard placement
+        std::vector<String> target_hosts{placement.place(shards, replication_factor, "")};
+
+        if (target_hosts.empty())
+        {
+            LOG_ERROR(
+                log,
+                "Failed to create table={} because there are not enough hosts to place its total={} shard replicas, query={} "
+                "query_id={} user={}",
+                table,
+                shards * replication_factor,
+                query,
+                query_id,
+                user);
+            failDDL(query_id, user, query, "There are not enough hosts to place the table shard replicas");
+            return;
+        }
+
+        /// We got the placement, commit the placement decision
+        /// Add `hosts` column to block
+        auto string_type = std::make_shared<DataTypeString>();
+        auto host_col = string_type->createColumn();
+        String hosts{boost::algorithm::join(target_hosts, ",")};
+        host_col->insertData(hosts.data(), hosts.size());
+        ColumnWithTypeAndName host_col_with_type(std::move(host_col), string_type, "hosts");
+        block.insert(host_col_with_type);
+
+        block.checkNumberOfRows();
+
+        /// FIXME, retries, error handling
+        auto result = dwal->append(*record.get(), dwal_ctx);
+        if (result.err != ErrorCodes::OK)
+        {
+            LOG_ERROR(log, "Failed to commit placement decision for table={} query={}", table, query);
+            failDDL(query_id, user, query, "Internal server error");
+        }
+        else
+        {
+            progressDDL(query_id, user, query, "shard replicas placed");
         }
     }
-
-    /// FIXME: timestamp, query_id
-    /// 3) Project task status for query_id
 }
 
 void DDLService::mutateTable(const Block & block) const
 {
-    if (!validateSchema(block, {"ddl", "table", "timestamp", "query_id"}))
+    assert(block.has("query_id"));
+
+    if (!validateSchema(block, {"ddl", "table", "timestamp", "query_id", "user"}))
     {
-        return;
-    }
-
-    String table = block.getByName("table").column->getDataAt(0).toString();
-
-    std::vector<Poco::URI> target_hosts{placedReplicas(table)};
-
-    if (target_hosts.empty())
-    {
-        /// Fail this mutation coz table is not found
-        /// FIXME: make sure `target_hosts` is a complete list of hosts which
-        /// has this table definition (shards * replication_factor)
-        LOG_ERROR(log, "Table {} is not found", table);
-
-        /// FIXME, project task status
         return;
     }
 
     String query = block.getByName("ddl").column->getDataAt(0).toString();
+    String table = block.getByName("table").column->getDataAt(0).toString();
+    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
+    String user = block.getByName("user").column->getDataAt(0).toString();
+
+    std::vector<Poco::URI> target_hosts{toURIs(placement.placed(table))};
+
+    if (target_hosts.empty())
+    {
+        LOG_ERROR(log, "Table {} is not found, query={} query_id={} user={}", table, query, query_id, user);
+        failDDL(query_id, user, query, "Table not found");
+        return;
+    }
+
+    /// FIXME: make sure `target_hosts` is a complete list of hosts which
+    /// has this table definition (shards * replication_factor)
+
     for (auto & uri : target_hosts)
     {
         doTable(query, uri);
     }
 
-    /// FIXME, project task status
+    succeedDDL(query_id, user, query);
 }
 
 void DDLService::commit(Int64 last_sn)
@@ -280,11 +366,11 @@ void DDLService::commit(Int64 last_sn)
 
 void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
-    for (const auto & record : records)
+    for (auto & record : records)
     {
         if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_TABLE)
         {
-            createTable(record->block);
+            createTable(record);
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
         {
@@ -302,5 +388,7 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
     }
 
     const_cast<DDLService *>(this)->commit(records.back()->sn);
+
+    /// FIXME, update DDL task status after committing offset / local offset checkpoint ...
 }
 }

@@ -26,8 +26,8 @@ private:
     void tailingRecords();
     virtual void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) = 0;
     virtual String role() const = 0;
-    virtual String cleanupPolicy() const { return "delete"; };
-    virtual std::pair<Int32, Int32> batchSizeAndTimeout() const { return std::make_pair(100, 500); };
+    virtual String cleanupPolicy() const { return "delete"; }
+    virtual std::pair<Int32, Int32> batchSizeAndTimeout() const { return std::make_pair(100, 500); }
 
     /// create DWal on server
     void createDWal();
