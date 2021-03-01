@@ -14,16 +14,19 @@ namespace ErrorCodes
 {
     extern const int OK;
     extern const int RESOURCE_ALREADY_EXISTS;
+    extern const int RESOURCE_NOT_FOUND;
 }
 
 namespace
 {
-/// globals
-String SYSTEM_ROLES_KEY = "system_settings.system_roles";
+    /// Globals
+    const String SYSTEM_ROLES_KEY = "system_settings.system_roles";
 }
 
 MetadataService::MetadataService(Context & global_context_, const String & service_name)
-    : global_context(global_context_), dwal(DistributedWriteAheadLogPool::instance().getDefault()), log(&Poco::Logger::get(service_name))
+    : global_context(global_context_)
+    , dwal(DistributedWriteAheadLogPool::instance(global_context_).getDefault())
+    , log(&Poco::Logger::get(service_name))
 {
 }
 
@@ -48,11 +51,38 @@ void MetadataService::shutdown()
     LOG_INFO(log, "stopped");
 }
 
-/// try indefinitely to create dwal
-void MetadataService::createDWal()
+void MetadataService::doDeleteDWal(std::any & ctx)
 {
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_ctx);
-    if (dwal->describe(kctx.topic, dwal_ctx) == ErrorCodes::OK)
+    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
+
+    int retries = 3;
+    while (retries--)
+    {
+        auto err = dwal->remove(kctx.topic, ctx);
+        if (err == ErrorCodes::OK)
+        {
+            /// FIXME, if the error is fatal. throws
+            LOG_INFO(log, "Successfully deleted topic={}", kctx.topic);
+            break;
+        }
+        else if (err == ErrorCodes::RESOURCE_NOT_FOUND)
+        {
+            LOG_INFO(log, "Topic={} not exists", kctx.topic);
+            break;
+        }
+        else
+        {
+            LOG_INFO(log, "Failed to delete topic={}, will retry ...", kctx.topic);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        }
+    }
+}
+
+/// try indefinitely to create dwal
+void MetadataService::doCreateDWal(std::any & ctx)
+{
+    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
+    if (dwal->describe(kctx.topic, ctx) == ErrorCodes::OK)
     {
         return;
     }
@@ -61,7 +91,7 @@ void MetadataService::createDWal()
 
     while (!stopped.test())
     {
-        auto err = dwal->create(kctx.topic, dwal_ctx);
+        auto err = dwal->create(kctx.topic, ctx);
         if (err == ErrorCodes::OK)
         {
             /// FIXME, if the error is fatal. throws
@@ -70,7 +100,7 @@ void MetadataService::createDWal()
         }
         else if (err == ErrorCodes::RESOURCE_ALREADY_EXISTS)
         {
-            LOG_INFO(log, "Already created topic={}", kctx.topic);
+            LOG_INFO(log, "Topic={} already exists", kctx.topic);
             break;
         }
         else
@@ -79,6 +109,11 @@ void MetadataService::createDWal()
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         }
     }
+}
+
+void MetadataService::createDWal()
+{
+    doCreateDWal(dwal_ctx);
 }
 
 void MetadataService::tailingRecords()
@@ -107,7 +142,7 @@ void MetadataService::tailingRecords()
     }
 }
 
-void MetadataService::init()
+void MetadataService::startup()
 {
     const auto & config = global_context.getConfigRef();
 

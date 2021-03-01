@@ -19,7 +19,7 @@ class MetadataService : private boost::noncopyable
 public:
     MetadataService(Context & global_context_, const String & service_name);
     virtual ~MetadataService();
-    void init();
+    void startup();
     void shutdown();
 
 private:
@@ -31,6 +31,10 @@ private:
 
     /// create DWal on server
     void createDWal();
+
+protected:
+    void doCreateDWal(std::any & ctx);
+    void doDeleteDWal(std::any & ctx);
 
 protected:
     struct ConfigSettings
