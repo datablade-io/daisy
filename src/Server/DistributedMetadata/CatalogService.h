@@ -47,7 +47,7 @@ public:
     static CatalogService & instance(Context & context_);
 
     explicit CatalogService(Context & context_);
-    virtual ~CatalogService() = default;
+    virtual ~CatalogService() override = default;
 
     /// `broadcast` broadcasts the metadata catalog on this node
     /// to CatalogService role nodes
@@ -55,13 +55,14 @@ public:
 
     std::vector<TablePtr> findTableByName(const String & table) const;
     std::vector<TablePtr> findTableByHost(const String & host) const;
+    bool tableExists(const String & table) const;
     std::vector<TablePtr> tables() const;
     std::vector<String> hosts() const;
 
 private:
     void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
     String role() const override { return "catalog"; }
-    String cleanupPolicy() const override { return "compact"; };
+    String cleanupPolicy() const override { return "compact"; }
     ConfigSettings configSettings() const override;
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(1000, 200); }
 
