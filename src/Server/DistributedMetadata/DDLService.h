@@ -10,14 +10,15 @@ namespace DB
 class Context;
 class CatalogService;
 class PlacementService;
+class TaskStatusService;
 
 class DDLService final : public MetadataService
 {
 public:
     static DDLService & instance(Context & global_context_);
 
-    explicit DDLService(Context & context_);
-    virtual ~DDLService() = default;
+    explicit DDLService(Context & glboal_context_);
+    virtual ~DDLService() override = default;
 
 private:
     void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
@@ -26,17 +27,27 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(10, 200); }
 
 private:
-    std::vector<Poco::URI> place(const std::function<std::vector<String>()> & func) const;
-
-    /// Talk to Placement service to place shard replicas
-    std::vector<Poco::URI> placeReplicas(Int32 shards, Int32 replication_factor) const;
-    std::vector<Poco::URI> placedReplicas(const String & table) const;
+    std::vector<Poco::URI> toURIs(const std::vector<String> & hosts) const;
 
     Int32 postRequest(const String & query, const Poco::URI & uri) const;
     Int32 doTable(const String & query, const Poco::URI & uri) const;
-    void createTable(const Block & bock) const;
+    void createTable(IDistributedWriteAheadLog::RecordPtr record);
     void mutateTable(const Block & bock) const;
     void commit(Int64 last_sn);
+
+private:
+    void updateDDLStatus(
+        const String & query_id,
+        const String & user,
+        const String & status,
+        const String & query,
+        const String & progress,
+        const String & reason) const;
+
+    void progressDDL(const String & query_id, const String & user, const String & query, const String & progress) const;
+
+    void succeedDDL(const String & query_id, const String & user, const String & query = "") const;
+    void failDDL(const String & query_id, const String & user, const String & query = "", const String reason = "") const;
 
     bool validateSchema(const Block & block, const std::vector<String> & col_names) const;
 
@@ -45,5 +56,6 @@ private:
 
     CatalogService & catalog;
     PlacementService & placement;
+    TaskStatusService & task;
 };
 }
