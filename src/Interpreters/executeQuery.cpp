@@ -46,6 +46,7 @@
 #include <Interpreters/InterpreterSetQuery.h>
 #include <Interpreters/ApplyWithGlobalVisitor.h>
 #include <Interpreters/ReplaceQueryParameterVisitor.h>
+#include <Interpreters/EliminateSubqueryVisitor.h>
 #include <Interpreters/SelectQueryOptions.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/Context.h>
@@ -454,6 +455,13 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
 
     try
     {
+        /// Daisy: Try to Eliminate subquery
+        if (settings.optimize_subqueries)
+        {
+            EliminateSubqueryVisitor().visit(ast);
+            query = serializeAST(*ast);
+        }
+
         /// Replace ASTQueryParameter with ASTLiteral for prepared statements.
         if (context.hasQueryParameters())
         {
