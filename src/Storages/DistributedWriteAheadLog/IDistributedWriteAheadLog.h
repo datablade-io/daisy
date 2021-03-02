@@ -30,13 +30,22 @@ public:
     {
         /// Data
         ADD_DATA_BLOCK = 0,
-        ALTER_DATA_BLOCK = 1,
+        ALTER_DATA_BLOCK,
 
-        /// Metadata
-        CREATE_TABLE = 2,
-        DELETE_TABLE = 3,
-        ALTER_TABLE = 4,
-        MAX_OPS_CODE = 5,
+        /// Table Metadata
+        CREATE_TABLE,
+        DELETE_TABLE,
+        ALTER_TABLE,
+
+        /// Database
+        CREATE_DATABASE,
+        DELETE_DATABASE,
+
+        /// Dictionary
+        CREATE_DICTIONARY,
+        DELETE_DICTIONARY,
+
+        MAX_OPS_CODE,
 
         UNKNOWN = 0x3F,
     };
