@@ -837,6 +837,8 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
 
     assert(!context.getCurrentQueryId().empty());
 
+    auto * log = &Poco::Logger::get("InterpreterCreateQuery");
+
     TableProperties properties = setProperties(create);
 
     /// More verification happened in storage engine creation
@@ -847,7 +849,7 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
     auto wal = DistributedWriteAheadLogPool::instance(context.getGlobalContext()).getDefault();
     if (!wal)
     {
-        /// LOG_ERROR(log, "Failed to create table={} query={}, query_id={}. Distributed environment is not setup. Unable to create table with StorageDistributedMergeTree engine", create.table, query, context.getCurrentQueryId());
+        LOG_ERROR(log, "Failed to create table={} query={}, query_id={}. Distributed environment is not setup. Unable to create table with StorageDistributedMergeTree engine", create.table, query, context.getCurrentQueryId());
         throw Exception("Distributed environment is not setup. Unable to create table with StorageDistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
     }
 
@@ -906,7 +908,7 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
         block.insert(col_with_type);
     }
 
-    /// LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, context.getCurrentQueryId());
+    LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, context.getCurrentQueryId());
 
     const auto & config = context.getGlobalContext().getConfigRef();
     auto topic = config.getString("system_settings.system_ddl_dwal.name");
@@ -916,11 +918,11 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
     auto result = wal->append(record, ctx);
     if (result.err != ErrorCodes::OK)
     {
-        /// LOG_ERROR(log, "Failed to create DistributedMergeTree query={} query_id={} error={}", query, context.getCurrentQueryId(), result.err);
+        LOG_ERROR(log, "Failed to create DistributedMergeTree query={} query_id={} error={}", query, context.getCurrentQueryId(), result.err);
         throw Exception("Failed to create DistributedMergeTree", result.err);
     }
 
-    /// LOG_INFO(log, "Request of creating DistributedMergeTree query={} query_id={} has been accepted", query, context.getCurrentQueryId());
+    LOG_INFO(log, "Request of creating DistributedMergeTree query={} query_id={} has been accepted", query, context.getCurrentQueryId());
 
     /// FIXME, project tasks status
     handled = true;
