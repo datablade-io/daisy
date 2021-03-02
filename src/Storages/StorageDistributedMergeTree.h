@@ -26,7 +26,7 @@ class StorageDistributedMergeTree final : public ext::shared_ptr_helper<StorageD
 public:
     void startup() override;
     void shutdown() override;
-    ~StorageDistributedMergeTree() override;
+    ~StorageDistributedMergeTree() override = default;
 
     String getName() const override;
 
@@ -126,7 +126,8 @@ public:
 
     const String & getShardingKeyColumnName() const { return sharding_key_column_name; }
 
-    size_t getShards() const { return shards; }
+    Int32 getShards() const { return shards; }
+    Int32 getReplicationFactor() const { return replication_factor; }
 
     size_t getRandomShardIndex();
 
@@ -204,13 +205,13 @@ private:
 
     DistributedWriteAheadLogPtr dwal;
     IngestingBlocks & ingesting_blocks;
-    ThreadPool tailer;
+    std::optional<ThreadPool> tailer;
 
     // For random shard index generation
     mutable std::mutex rng_mutex;
     pcg64 rng;
 
-    /// forwarding storage
+    /// forwarding storage if it is not virtual
     std::shared_ptr<StorageMergeTree> storage;
 
     std::atomic_flag stopped;

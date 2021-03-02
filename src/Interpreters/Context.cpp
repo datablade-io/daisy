@@ -2581,4 +2581,18 @@ PartUUIDsPtr Context::getIgnoredPartUUIDs()
     return ignored_part_uuids;
 }
 
+bool Context::isDistributed() const
+{
+    if (getSettingsRef().disable_distributed)
+    {
+        /// distributed mode has been disabled
+        return false;
+    }
+
+    /// Check if `system_settings.system_dwals` has been configured
+    Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
+    getConfigRef().keys("system_settings.system_dwals", sys_dwal_keys);
+    return !sys_dwal_keys.empty();
+}
+
 }

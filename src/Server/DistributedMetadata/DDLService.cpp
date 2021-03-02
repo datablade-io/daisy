@@ -393,6 +393,14 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         {
             mutateTable(record->block);
         }
+        else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_DATABASE)
+        {
+            assert(0);
+        }
+        else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_DATABASE)
+        {
+            assert(0);
+        }
         else
         {
             assert(0);
