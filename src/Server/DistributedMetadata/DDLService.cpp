@@ -60,6 +60,8 @@ MetadataService::ConfigSettings DDLService::configSettings() const
         .data_retention_key = DDL_DATA_RETENTION_KEY,
         .default_data_retention = 168,
         .replication_factor_key = DDL_REPLICATION_FACTOR_KEY,
+        .request_required_acks = -1,
+        .request_timeout_ms = 10000,
         .auto_offset_reset = "earliest",
     };
 }
@@ -127,7 +129,8 @@ inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hos
 
     for (const auto & host : hosts)
     {
-        uris.emplace_back(host + http_port);
+        /// FIXME : HTTP for now
+        uris.emplace_back("http", host + http_port);
     }
 
     return uris;
@@ -255,7 +258,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             for (Int32 j = 0; j < shards; ++j)
             {
                 /// FIXME, check table engine, grammar check
-                String create_query = query + ", dwal_partition=" + std::to_string(j);
+                String create_query = query + ", shard=" + std::to_string(j);
                 doTable(create_query, target_hosts[i * replication_factor + j]);
             }
         }
@@ -271,9 +274,8 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         {
             LOG_ERROR(
                 log,
-                "Failed to create table={} because there are not enough hosts to place its total={} shard replicas, query={} "
+                "Failed to create table because there are not enough hosts to place its total={} shard replicas, query={} "
                 "query_id={} user={}",
-                table,
                 shards * replication_factor,
                 query,
                 query_id,
@@ -294,14 +296,15 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         block.checkNumberOfRows();
 
         /// FIXME, retries, error handling
-        auto result = dwal->append(*record.get(), dwal_ctx);
+        auto result = dwal->append(*record.get(), dwal_append_ctx);
         if (result.err != ErrorCodes::OK)
         {
-            LOG_ERROR(log, "Failed to commit placement decision for table={} query={}", table, query);
+            LOG_ERROR(log, "Failed to commit placement decision for query={}", query);
             failDDL(query_id, user, query, "Internal server error");
         }
         else
         {
+            LOG_ERROR(log, "Successfully find placement for query={}", query);
             progressDDL(query_id, user, query, "shard replicas placed");
         }
     }
@@ -346,7 +349,7 @@ void DDLService::commit(Int64 last_sn)
     /// FIXME, retries
     try
     {
-        auto err = dwal->commit(last_sn, dwal_ctx);
+        auto err = dwal->commit(last_sn, dwal_consume_ctx);
         if (likely(err == 0))
         {
             LOG_INFO(log, "Successfully committed offset={}", last_sn);

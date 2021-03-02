@@ -46,6 +46,8 @@ MetadataService::ConfigSettings PlacementService::configSettings() const
         .data_retention_key = PLACEMENT_DATA_RETENTION_KEY,
         .default_data_retention = 2,
         .replication_factor_key = PLACEMENT_REPLICATION_FACTOR_KEY,
+        .request_required_acks = 1,
+        .request_timeout_ms = 10000,
         .auto_offset_reset = "latest",
     };
 }

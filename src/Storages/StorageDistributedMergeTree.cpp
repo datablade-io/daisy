@@ -92,9 +92,9 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
 
     initWal();
 
-    for (Int32 shard = 0; shard < shards; ++shard)
+    for (Int32 shardId = 0; shardId < shards; ++shardId)
     {
-        slot_to_shard.push_back(shard);
+        slot_to_shard.push_back(shardId);
     }
 
     if (sharding_key_)
@@ -155,7 +155,7 @@ void StorageDistributedMergeTree::shutdown()
 
 String StorageDistributedMergeTree::getName() const
 {
-    return "StorageDistributedMergeTree";
+    return "DistributedMergeTree";
 }
 
 bool StorageDistributedMergeTree::supportsParallelInsert() const
@@ -366,28 +366,6 @@ size_t StorageDistributedMergeTree::getRandomShardIndex()
     return std::uniform_int_distribution<size_t>(0, shards - 1)(rng);
 }
 
-std::any & StorageDistributedMergeTree::getDwalAppendCtx()
-{
-    if (dwal_append_ctx.has_value())
-    {
-        return dwal_append_ctx;
-    }
-
-    std::lock_guard<std::mutex> lock(append_ctx_mutex);
-
-    /// cached ctx, reused by append. Multiple threads are accessing append context
-    /// since librdkafka topic handle is thread safe, so we are good
-    /// FIXME, take care of kafka naming restrictive
-    auto topic = getStorageID().getFullTableName();
-    DistributedWriteAheadLogKafkaContext append_ctx{topic};
-    append_ctx.request_required_acks = dwal_request_required_acks;
-    append_ctx.request_timeout_ms = dwal_request_timeout_ms;
-    append_ctx.topic_handle = static_cast<DistributedWriteAheadLogKafka *>(dwal.get())->initProducerTopic(append_ctx);
-    dwal_append_ctx = append_ctx;
-
-    return dwal_append_ctx;
-}
-
 IDistributedWriteAheadLog::RecordSequenceNumber StorageDistributedMergeTree::lastSequenceNumber()
 {
     /// FIXME, load from ckpt file
@@ -528,7 +506,7 @@ void StorageDistributedMergeTree::commit(
             else if (rec->op_code == IDistributedWriteAheadLog::OpCode::ALTER_DATA_BLOCK)
             {
                 /// FIXME: execute the later before doing any ingestion
-                throw Exception("not impelemented", ErrorCodes::NOT_IMPLEMENTED);
+                throw Exception("Not impelemented", ErrorCodes::NOT_IMPLEMENTED);
             }
         }
     }
@@ -547,7 +525,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
     /// std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
     auto topic = getStorageID().getFullTableName();
-    DistributedWriteAheadLogKafkaContext consume_ctx{topic, dwal_partition, lastSequenceNumber()};
+    DistributedWriteAheadLogKafkaContext consume_ctx{topic, shard, lastSequenceNumber()};
     consume_ctx.auto_offset_reset = dwal_auto_offset_reset;
     std::any dwal_consume_ctx{consume_ctx};
 
@@ -668,13 +646,30 @@ void StorageDistributedMergeTree::initWal()
         dwal_request_timeout_ms = timeout;
     }
 
-    dwal_partition = ssettings->dwal_partition.value;
+    shard = ssettings->shard.value;
 
-    dwal = DistributedWriteAheadLogPool::instance(global_context).get(ssettings->dwal_cluster_id.value);
+    if (ssettings->dwal_cluster_id.value.empty())
+    {
+        dwal = DistributedWriteAheadLogPool::instance(global_context).getDefault();
+    }
+    else
+    {
+        dwal = DistributedWriteAheadLogPool::instance(global_context).get(ssettings->dwal_cluster_id.value);
+    }
 
     if (!dwal)
     {
         throw Exception("Invalid Kafka cluster id " + ssettings->dwal_cluster_id.value, ErrorCodes::BAD_ARGUMENTS);
     }
+
+    /// cached ctx, reused by append. Multiple threads are accessing append context
+    /// since librdkafka topic handle is thread safe, so we are good
+    /// FIXME, take care of kafka naming restrictive
+    auto topic = getStorageID().getFullTableName();
+    DistributedWriteAheadLogKafkaContext append_ctx{topic};
+    append_ctx.request_required_acks = dwal_request_required_acks;
+    append_ctx.request_timeout_ms = dwal_request_timeout_ms;
+    append_ctx.topic_handle = static_cast<DistributedWriteAheadLogKafka *>(dwal.get())->initProducerTopic(append_ctx);
+    dwal_append_ctx = append_ctx;
 }
 }

@@ -33,6 +33,9 @@ struct DistributedWriteAheadLogKafkaContext
     Int32 partitions = 1;
     Int32 replication_factor = 1;
 
+    /// none, gzip, snappy, lz4, zstd, inherit
+    String compression_codec = "snappy";
+
     /// data retention for cleanup_policy `delete`
     Int32 retention_ms = 86400 * 1000;
 

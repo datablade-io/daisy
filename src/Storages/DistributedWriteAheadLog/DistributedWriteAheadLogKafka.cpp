@@ -163,7 +163,7 @@ initRdKafkaHandle(rd_kafka_type_t type, KConfParams & params, DistributedWriteAh
     if (!kconf)
     {
         LOG_ERROR(stats->log, "Failed to create kafka conf, error={}", rd_kafka_err2str(rd_kafka_last_error()));
-        throw Exception("KafkaWAL failed to create kafka conf", mapErrorCode(rd_kafka_last_error()));
+        throw Exception("Failed to create kafka conf", mapErrorCode(rd_kafka_last_error()));
     }
 
     char errstr[512] = {'\0'};
@@ -480,7 +480,7 @@ void DistributedWriteAheadLogKafka::flush(std::unordered_map<String, IDistribute
 
         if (callback == nullptr)
         {
-            LOG_WARNING(log, "KafkWal, there is no callback for consuming message topic$partition={}", item.first);
+            LOG_WARNING(log, "There is no callback for consuming message topic$partition={}", item.first);
             item.second.clear();
         }
         else
@@ -633,9 +633,9 @@ void DistributedWriteAheadLogKafka::shutdown()
         return;
     }
 
-    LOG_INFO(log, "KafkaWAL is stopping");
+    LOG_INFO(log, "Stopping");
     poller.wait();
-    LOG_INFO(log, "KafkaWAL stopped");
+    LOG_INFO(log, "Stopped");
 }
 
 IDistributedWriteAheadLog::AppendResult DistributedWriteAheadLogKafka::append(const Record & record, std::any & ctx)
@@ -851,7 +851,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
             {
                 LOG_WARNING(
                     std::get<3>(*wrapped),
-                    "KafakWal returns nullptr record when consuming topic={} partition={}",
+                    "Returns nullptr record when consuming topic={} partition={}",
                     std::get<4>(*wrapped).topic,
                     std::get<4>(*wrapped).partition);
             }
@@ -962,7 +962,7 @@ IDistributedWriteAheadLog::ConsumeResult DistributedWriteAheadLogKafka::consume(
                 else
                 {
                     LOG_WARNING(
-                        log, "KafakWal returns nullptr record when consuming topic={} partition={}", walctx.topic, walctx.partition);
+                        log, "Returns nullptr record when consuming topic={} partition={}", walctx.topic, walctx.partition);
                 }
             }
             else

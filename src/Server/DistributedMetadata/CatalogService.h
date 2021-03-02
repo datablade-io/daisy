@@ -70,7 +70,7 @@ private:
     void doBroadcast();
     void processQuery(BlockInputStreamPtr & in);
     void processQueryWithProcessors(QueryPipeline & pipeline);
-    void commit(Block && block);
+    void append(Block && block);
 
 private:
     using Pair = std::pair<String, Int32>; /// (table name, shard number)
