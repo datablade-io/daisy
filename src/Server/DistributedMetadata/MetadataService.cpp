@@ -43,12 +43,12 @@ void MetadataService::shutdown()
         return;
     }
 
-    LOG_INFO(log, "stopping");
+    LOG_INFO(log, "Stopping");
     if (pool)
     {
         pool->wait();
     }
-    LOG_INFO(log, "stopped");
+    LOG_INFO(log, "Stopped");
 }
 
 void MetadataService::doDeleteDWal(std::any & ctx)
@@ -113,7 +113,7 @@ void MetadataService::doCreateDWal(std::any & ctx)
 
 void MetadataService::createDWal()
 {
-    doCreateDWal(dwal_ctx);
+    doCreateDWal(dwal_append_ctx);
 }
 
 void MetadataService::tailingRecords()
@@ -121,11 +121,10 @@ void MetadataService::tailingRecords()
     createDWal();
 
     auto [ batch, timeout ] = batchSizeAndTimeout();
-    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_ctx);
 
     while (!stopped.test())
     {
-        auto result{dwal->consume(batch, timeout, dwal_ctx)};
+        auto result{dwal->consume(batch, timeout, dwal_consume_ctx)};
         if (result.err != ErrorCodes::OK)
         {
             LOG_ERROR(log, "Failed to consume data, error={}", result.err);
@@ -163,16 +162,29 @@ void MetadataService::startup()
             String topic = config.getString(conf.name_key, conf.default_name);
             auto replication_factor = config.getInt(conf.replication_factor_key, 1);
             DistributedWriteAheadLogKafkaContext kctx{topic, 1, replication_factor, cleanupPolicy()};
-            kctx.auto_offset_reset = conf.auto_offset_reset;
+            /// Topic settings
             kctx.retention_ms = config.getInt(conf.data_retention_key, conf.default_data_retention);
             if (kctx.retention_ms > 0)
             {
                 kctx.retention_ms *= 3600 * 1000;
             }
 
+            /// Consumer settings
+            kctx.auto_offset_reset = conf.auto_offset_reset;
+
+            /// Producer settings
+            kctx.request_required_acks = conf.request_required_acks;
+            kctx.request_timeout_ms = conf.request_timeout_ms;
+
+            /// kctx will be copied over to consume/append ctx
+            dwal_consume_ctx = kctx;
+
+            /// Append ctx is cached for multiple threads access
+            kctx.topic_handle = static_cast<DistributedWriteAheadLogKafka *>(dwal.get())->initProducerTopic(kctx);
+            dwal_append_ctx = std::move(kctx);
+
             pool.emplace(1);
             pool->scheduleOrThrowOnError([this] { tailingRecords(); });
-            dwal_ctx = kctx;
 
             break;
         }

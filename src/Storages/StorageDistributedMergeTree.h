@@ -130,6 +130,7 @@ public:
     Int32 getReplicationFactor() const { return replication_factor; }
 
     size_t getRandomShardIndex();
+    Int32 currentShard() const { return shard; }
 
     friend class DistributedMergeTreeBlockOutputStream;
     friend class MergeTreeData;
@@ -177,8 +178,6 @@ private:
     commit(const std::vector<IDistributedWriteAheadLog::RecordPtrs> & records, Block & block, Int64 & last_sn, std::any & dwal_consume_ctx);
     void doCommit(Block & block, Int64 & last_sn, std::any & dwal_consume_ctx);
 
-    std::any & getDwalAppendCtx();
-
 private:
     Int32 replication_factor;
     Int32 shards;
@@ -190,7 +189,8 @@ private:
 
     /// From table settings for consumer
     String dwal_auto_offset_reset = "earliest";
-    Int32 dwal_partition = -1;
+    /// Current shard. DWAL partion and table shard is 1:1 mapped
+    Int32 shard = -1;
 
     /// For sharding
     bool sharding_key_is_deterministic = false;
@@ -198,7 +198,6 @@ private:
     String sharding_key_column_name;
 
     /// cached ctx for reuse
-    std::mutex append_ctx_mutex;
     std::any dwal_append_ctx;
 
     IDistributedWriteAheadLog::RecordSequenceNumber dwal_last_sn = -1;

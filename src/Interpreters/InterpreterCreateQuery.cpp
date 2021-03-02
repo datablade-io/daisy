@@ -802,7 +802,7 @@ void InterpreterCreateQuery::assertOrSetUUID(ASTCreateQuery & create, const Data
     }
 }
 
-BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, ASTCreateQuery & create, bool & handled)
+BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_database, ASTCreateQuery & create, bool & handled)
 {
     handled = false;
     if (!context.isDistributed())
@@ -810,9 +810,9 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
         return {};
     }
 
-    if (create.storage == nullptr || create.storage->engine->name != "StorageDistributedMergeTree")
+    if (create.storage == nullptr || create.storage->engine->name != "DistributedMergeTree")
     {
-        /// We only support `StorageDistributedMergeTree` table engine for now
+        /// We only support `DistributedMergeTree` table engine for now
         return {};
     }
 
@@ -822,16 +822,34 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
 
     TableProperties properties = setProperties(create);
 
+    if (create.database.empty())
+    {
+        create.database = current_database;
+    }
+
     /// More verification happened in storage engine creation
     auto res = StorageFactory::instance().get(
         create, "" /* virtual */, context, context.getGlobalContext(), properties.columns, properties.constraints, false);
+
+    auto storage = typeid_cast<StorageDistributedMergeTree*>(res.get());
+    if (storage->currentShard() >= 0)
+    {
+        LOG_INFO(log, "Local DistributedMergeTree table creation with shard assigned");
+        return {};
+    }
 
     const auto & query = queryToString(create);
     auto wal = DistributedWriteAheadLogPool::instance(context.getGlobalContext()).getDefault();
     if (!wal)
     {
-        LOG_ERROR(log, "Failed to create table={} query={}, query_id={}. Distributed environment is not setup. Unable to create table with StorageDistributedMergeTree engine", create.table, query, context.getCurrentQueryId());
-        throw Exception("Distributed environment is not setup. Unable to create table with StorageDistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
+        LOG_ERROR(
+            log,
+            "Failed to execute query={}, query_id={}. Distributed environment is not setup. Unable to create table with "
+            "DistributedMergeTree engine",
+            query,
+            context.getCurrentQueryId());
+        throw Exception(
+            "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
     }
 
     Block block;
@@ -839,7 +857,7 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
 
     std::vector<std::pair<String, const String &>> string_cols = {
         std::make_pair("ddl", query),
-        std::make_pair("database", database),
+        std::make_pair("database", current_database),
         std::make_pair("table", create.table),
         std::make_pair("query_id", context.getCurrentQueryId()),
         std::make_pair("user", context.getUserName()),
@@ -854,7 +872,6 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & database, 
         block.insert(col_with_type);
     }
 
-    auto storage = typeid_cast<StorageDistributedMergeTree*>(res.get());
     Int32 shards = storage->getShards();
     Int32 replication_factor = storage->getReplicationFactor();
 

@@ -31,7 +31,8 @@ namespace
     const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
     const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
 
-    inline String nodeIdentity() { return getFQDNOrHostName(); }
+    /// FIXME : node id
+    const String NODE_ID = getFQDNOrHostName();
 }
 
 CatalogService & CatalogService::instance(Context & context)
@@ -39,6 +40,7 @@ CatalogService & CatalogService::instance(Context & context)
     static CatalogService catalog{context};
     return catalog;
 }
+
 
 CatalogService::CatalogService(Context & global_context_) : MetadataService(global_context_, "CatalogService")
 {
@@ -52,6 +54,8 @@ MetadataService::ConfigSettings CatalogService::configSettings() const
         .data_retention_key = CATALOG_DATA_RETENTION_KEY,
         .default_data_retention = -1,
         .replication_factor_key = CATALOG_REPLICATION_FACTOR_KEY,
+        .request_required_acks = -1,
+        .request_timeout_ms = 10000,
         .auto_offset_reset = "earliest",
     };
 }
@@ -77,7 +81,7 @@ void CatalogService::doBroadcast()
     /// CurrentThread::attachQueryContext(context);
     Context context = global_context;
     context.makeQueryContext();
-    BlockIO io{executeQuery(query, context)};
+    BlockIO io{executeQuery(query, context, true /* internal */)};
 
     if (io.pipeline.initialized())
     {
@@ -103,7 +107,8 @@ void CatalogService::processQueryWithProcessors(QueryPipeline & pipeline)
     {
         if (block)
         {
-            commit(std::move(block));
+            append(std::move(block));
+            assert(!block);
         }
     }
 }
@@ -123,29 +128,32 @@ void CatalogService::processQuery(BlockInputStreamPtr & in)
                 break;
             }
 
-            commit(std::move(block));
+            append(std::move(block));
+            assert(!block);
         }
     }
 
     async_in.readSuffix();
 }
 
-void CatalogService::commit(Block && block)
+void CatalogService::append(Block && block)
 {
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
-    record.idempotent_key = nodeIdentity();
+    record.partition_key = 0;
+    record.idempotent_key = NODE_ID;
 
     /// FIXME : reschedule
     int retries = 3;
     while (retries--)
     {
-        auto result = dwal->append(record, dwal_ctx);
-        if (result.err == 0)
+        const auto & result = dwal->append(record, dwal_append_ctx);
+        if (result.err == ErrorCodes::OK)
         {
+            LOG_INFO(log, "Appended {} table definitions in one block", record.block.rows());
             return;
         }
 
-        LOG_ERROR(log, "Failed to commit, error={}", result.err);
+        LOG_ERROR(log, "Failed to append table definition block, error={}", result.err);
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     }
 }

@@ -90,7 +90,7 @@ void DistributedWriteAheadLogPool::doInit(const Context & global_context, const 
                 auto i = config.getInt(k);
                 if (i <= 0)
                 {
-                    throw Exception("invalid setting " + std::get<0>(t), ErrorCodes::BAD_ARGUMENTS);
+                    throw Exception("Invalid setting " + std::get<0>(t), ErrorCodes::BAD_ARGUMENTS);
                 }
                 *static_cast<Int32 *>(std::get<2>(t)) = i;
             }
@@ -115,7 +115,7 @@ void DistributedWriteAheadLogPool::doInit(const Context & global_context, const 
 
     if (wals.contains(kafka_settings.cluster_id))
     {
-        throw Exception("duplicated Kafka cluster id " + kafka_settings.cluster_id, ErrorCodes::BAD_ARGUMENTS);
+        throw Exception("Duplicated Kafka cluster id " + kafka_settings.cluster_id, ErrorCodes::BAD_ARGUMENTS);
     }
 
     /// create DWALs

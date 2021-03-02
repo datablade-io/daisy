@@ -809,6 +809,10 @@ public:
     /// Mutex for currently_submerging_parts and currently_emerging_parts
     mutable std::mutex currently_submerging_emerging_mutex;
 
+    /// Daisy : starts
+    bool isVirtual() const { return relative_data_path.empty(); }
+    /// Daisy : ends
+
 protected:
 
     friend class IMergeTreeDataPart;
