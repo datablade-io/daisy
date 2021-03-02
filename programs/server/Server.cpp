@@ -1001,6 +1001,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
     LOG_INFO(log, "Loading metadata from {}", path);
 
+    /// Daisy: start. init Distributed metadata services for DistributedMergeTree table engine
+    initDistributedMetadataServices(*global_context);
+    /// Daisy: end.
+
     try
     {
         loadMetadataSystem(global_context);
@@ -1021,6 +1025,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
         throw;
     }
     LOG_DEBUG(log, "Loaded metadata.");
+
+    /// Daisy : start.
+    DB::CatalogService::instance(*global_context).broadcast();
+    /// Daisy : end.
 
     /// Init trace collector only after trace_log system table was created
     /// Disable it if we collect test coverage information, because it will work extremely slow.
@@ -1117,9 +1125,6 @@ int Server::main(const std::vector<std::string> & /*args*/)
 #else
     LOG_INFO(log, "TaskStats is not implemented for this OS. IO accounting will be disabled.");
 #endif
-
-    /// init Distributed metadata services for DistributedMergeTree table engine
-    initDistributedMetadataServices(*global_context);
 
     auto servers = std::make_shared<std::vector<ProtocolServerAdapter>>();
     {
