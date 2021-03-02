@@ -98,8 +98,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
 
         if (ingest_mode == "sync")
         {
-            auto ret
-                = storage.dwal->append(record, &DistributedMergeTreeBlockOutputStream::writeCallback, this, storage.getDwalAppendCtx());
+            auto ret = storage.dwal->append(record, &DistributedMergeTreeBlockOutputStream::writeCallback, this, storage.dwal_append_ctx);
             if (ret != 0)
             {
                 throw Exception("failed to insert data", ret);
@@ -108,7 +107,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
         }
         else if (ingest_mode == "ordered")
         {
-            auto ret = storage.dwal->append(record, storage.getDwalAppendCtx());
+            auto ret = storage.dwal->append(record, storage.dwal_append_ctx);
             if (ret.err != 0)
             {
                 throw Exception("failed to insert data", ret.err);
@@ -121,7 +120,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
                 record,
                 &StorageDistributedMergeTree::writeCallback,
                 storage.writeCallbackData(query_context.getQueryStatusPollId(), outstanding),
-                storage.getDwalAppendCtx());
+                storage.dwal_append_ctx);
             if (ret != 0)
             {
                 throw Exception("failed to insert data", ret);
@@ -170,7 +169,7 @@ void DistributedMergeTreeBlockOutputStream::flush()
         }
         else
         {
-            storage.dwal->poll(10, storage.getDwalAppendCtx());
+            storage.dwal->poll(10, storage.dwal_append_ctx);
         }
 
         /// 30 seconds timeout

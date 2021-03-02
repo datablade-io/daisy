@@ -40,10 +40,15 @@ protected:
     struct ConfigSettings
     {
         String name_key;
+        /// Topic
         String default_name;
         String data_retention_key;
         Int32 default_data_retention;
         String replication_factor_key;
+        /// Producer
+        Int32 request_required_acks = 1;
+        Int32 request_timeout_ms = 10000;
+        /// Consumer
         String auto_offset_reset = "earliest";
     };
     virtual ConfigSettings configSettings() const = 0;
@@ -51,7 +56,8 @@ protected:
 protected:
     Context & global_context;
 
-    std::any dwal_ctx;
+    std::any dwal_append_ctx;
+    std::any dwal_consume_ctx;
     DistributedWriteAheadLogPtr dwal;
 
     std::atomic_flag stopped = ATOMIC_FLAG_INIT;

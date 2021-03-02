@@ -128,10 +128,10 @@ struct Settings;
     M(UInt64, check_delay_period, 60, "Obsolete setting, does nothing.", 0) \
     M(Bool, allow_floating_point_partition_key, false, "Allow floating point as partition key", 0) \
     /** Settings for DistributedMergeTree */ \
+    M(Int64, shard, -1, "Current shard number", 0) \
     M(String, dwal_type, "kafka", "Backend distributed write-ahead log implementation", 0) \
     M(String, dwal_cluster_id, "", "Backend distributed write-ahead log cluster id", 0) \
     M(String, dwal_auto_offset_reset, "earliest", "Default offset to consume messages from if there is no initial one", 0) \
-    M(Int64, dwal_partition, -1, "Backend distributed write-ahead log partition", 0) \
     M(Int64, dwal_request_required_acks, 1, "Waited ack during data ingestion to the backend write-ahead log", 0) \
     M(Int64, dwal_request_timeout_ms, 30000, "Time out vallue for an ingest request to the backend write-ahead log", 0) \
     M(Int64, distributed_flush_threshhold_ms, 500, "Time threshhold for DistributedMergeTree to flush consumed data from write-ahead log", 0) \
