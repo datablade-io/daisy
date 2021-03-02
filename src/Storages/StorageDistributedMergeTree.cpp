@@ -72,19 +72,23 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     , replication_factor(replication_factor_)
     , shards(shards_)
     , ingesting_blocks(IngestingBlocks::instance())
-    , tailer(1)
     , rng(randomSeed())
 {
-    storage = StorageMergeTree::create(
-        table_id_,
-        relative_data_path_,
-        metadata_,
-        attach_,
-        context_,
-        date_column_name_,
-        merging_params_,
-        std::move(settings_),
-        has_force_restore_data_flag_);
+    if (!relative_data_path_.empty())
+    {
+        /// virtual table which is for data ingestion only
+        storage = StorageMergeTree::create(
+            table_id_,
+            relative_data_path_,
+            metadata_,
+            attach_,
+            context_,
+            date_column_name_,
+            merging_params_,
+            std::move(settings_),
+            has_force_restore_data_flag_);
+        tailer.emplace(1);
+    }
 
     initWal();
 
@@ -99,10 +103,6 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
         sharding_key_is_deterministic = isExpressionActionsDeterministics(sharding_key_expr);
         sharding_key_column_name = sharding_key_->getColumnName();
     }
-}
-
-StorageDistributedMergeTree::~StorageDistributedMergeTree()
-{
 }
 
 void StorageDistributedMergeTree::read(
@@ -132,8 +132,11 @@ Pipe StorageDistributedMergeTree::read(
 
 void StorageDistributedMergeTree::startup()
 {
-    storage->startup();
-    tailer.scheduleOrThrowOnError([this] { backgroundConsumer(); });
+    if (storage)
+    {
+        storage->startup();
+        tailer->scheduleOrThrowOnError([this] { backgroundConsumer(); });
+    }
 }
 
 void StorageDistributedMergeTree::shutdown()
@@ -143,8 +146,11 @@ void StorageDistributedMergeTree::shutdown()
         return;
     }
 
-    tailer.wait();
-    storage->shutdown();
+    if (storage)
+    {
+        tailer->wait();
+        storage->shutdown();
+    }
 }
 
 String StorageDistributedMergeTree::getName() const
