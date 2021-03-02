@@ -647,7 +647,7 @@ void StorageDistributedMergeTree::initWal()
     }
     else
     {
-        throw Exception("invalid dwal_auto_offset_reset, only 'earliest' and 'latest' are supported", ErrorCodes::BAD_ARGUMENTS);
+        throw Exception("Invalid dwal_auto_offset_reset, only 'earliest' and 'latest' are supported", ErrorCodes::BAD_ARGUMENTS);
     }
 
     auto acks = ssettings->dwal_request_required_acks.value;
@@ -658,7 +658,7 @@ void StorageDistributedMergeTree::initWal()
     else
     {
         throw Exception(
-            "invalid dwal_request_required_acks, shall be in [-1, " + std::to_string(replication_factor) + "] range",
+            "Invalid dwal_request_required_acks, shall be in [-1, " + std::to_string(replication_factor) + "] range",
             ErrorCodes::BAD_ARGUMENTS);
     }
 
@@ -668,15 +668,7 @@ void StorageDistributedMergeTree::initWal()
         dwal_request_timeout_ms = timeout;
     }
 
-    auto partition = ssettings->dwal_partition.value;
-    if (partition >= 0 && partition < shards)
-    {
-        dwal_partition = partition;
-    }
-    else
-    {
-        throw Exception("invalid dwal_partition , shall be in [0, " + std::to_string(shards) + ") range", ErrorCodes::BAD_ARGUMENTS);
-    }
+    dwal_partition = ssettings->dwal_partition.value;
 
     dwal = DistributedWriteAheadLogPool::instance(global_context).get(ssettings->dwal_cluster_id.value);
 
