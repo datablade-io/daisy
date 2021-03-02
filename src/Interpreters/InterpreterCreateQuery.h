@@ -72,6 +72,8 @@ private:
     BlockIO createTable(ASTCreateQuery & create);
     BlockIO createDictionary(ASTCreateQuery & create);
 
+    BlockIO createTableDistributed(const String & database, ASTCreateQuery & create, bool & handled);
+
     /// Calculate list of columns, constraints, indices, etc... of table. Rewrite query in canonical way.
     TableProperties setProperties(ASTCreateQuery & create) const;
     void validateTableStructure(const ASTCreateQuery & create, const TableProperties & properties) const;
