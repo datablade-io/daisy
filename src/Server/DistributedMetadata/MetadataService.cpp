@@ -1,9 +1,10 @@
 #include "MetadataService.h"
 
+#include <Interpreters/Context.h>
 #include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
+#include <Common/setThreadName.h>
 #include <common/logger_useful.h>
-#include <Interpreters/Context.h>
 
 #include <Poco/Util/AbstractConfiguration.h>
 
@@ -118,6 +119,7 @@ void MetadataService::createDWal()
 
 void MetadataService::tailingRecords()
 {
+    setThreadName(log->name().c_str());
     createDWal();
 
     auto [ batch, timeout ] = batchSizeAndTimeout();

@@ -66,7 +66,7 @@ public:
         Block block;
 
         /// fields which are not on the wire
-        UInt64 partition_key;
+        UInt64 partition_key = 0;
 
         RecordSequenceNumber sn = -1;
 

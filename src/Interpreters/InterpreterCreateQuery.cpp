@@ -838,7 +838,7 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
         return {};
     }
 
-    const auto & query = queryToString(create);
+    auto query = queryToString(create);
     auto wal = DistributedWriteAheadLogPool::instance(context.getGlobalContext()).getDefault();
     if (!wal)
     {
@@ -855,7 +855,7 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
     Block block;
     /// Schema: (ddl, database, table, shards, replication_factor, timestamp, query_id, user)
 
-    std::vector<std::pair<String, const String &>> string_cols = {
+    std::vector<std::pair<String, String>> string_cols = {
         std::make_pair("ddl", query),
         std::make_pair("database", current_database),
         std::make_pair("table", create.table),
@@ -913,6 +913,7 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
     std::any ctx{DistributedWriteAheadLogKafkaContext{topic}};
 
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::CREATE_TABLE, std::move(block)};
+
     auto result = wal->append(record, ctx);
     if (result.err != ErrorCodes::OK)
     {

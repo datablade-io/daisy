@@ -146,11 +146,14 @@ void StorageDistributedMergeTree::shutdown()
         return;
     }
 
+    auto topic = getStorageID().getFullTableName();
+    LOG_INFO(log, topic + " stopping");
     if (storage)
     {
         tailer->wait();
         storage->shutdown();
     }
+    LOG_INFO(log, topic + " stopped");
 }
 
 String StorageDistributedMergeTree::getName() const
@@ -525,6 +528,8 @@ void StorageDistributedMergeTree::backgroundConsumer()
     /// std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
     auto topic = getStorageID().getFullTableName();
+    setThreadName("DistMergeTree");
+
     DistributedWriteAheadLogKafkaContext consume_ctx{topic, shard, lastSequenceNumber()};
     consume_ctx.auto_offset_reset = dwal_auto_offset_reset;
     std::any dwal_consume_ctx{consume_ctx};
@@ -538,8 +543,6 @@ void StorageDistributedMergeTree::backgroundConsumer()
     auto flush_threshhold_count = ssettings->distributed_flush_threshhold_count;
     auto flush_threshhold_size = ssettings->distributed_flush_threshhold_size;
 
-    auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
-
     RecordPtrsContainer records;
 
     Int32 retries = 0;
@@ -549,6 +552,12 @@ void StorageDistributedMergeTree::backgroundConsumer()
 
     Block block;
     Int64 last_sn = -1;
+
+    auto callback = [](IDistributedWriteAheadLog::RecordPtrs recs, void * data) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+        auto batches = static_cast<RecordPtrsContainer *>(data);
+        batches->push_back(std::move(recs));
+        assert(recs.empty());
+    };
 
     while (!stopped.test())
     {
@@ -582,21 +591,14 @@ void StorageDistributedMergeTree::backgroundConsumer()
                     records.clear();
                 }
 
-                LOG_ERROR(log, "Failed to commit data for topic={} partition={}, retries={}, exception={}", dwalctx.topic, dwalctx.partition, retries, getCurrentExceptionMessage(true, true));
+                LOG_ERROR(log, "Failed to commit data for topic={} partition={}, retries={}, exception={}", topic, shard, retries, getCurrentExceptionMessage(true, true));
                 ++retries;
                 std::this_thread::sleep_for(std::chrono::milliseconds(std::min(1000 * retries, 7000)));
                 continue;
             }
         }
 
-        dwal->consume(
-            [](IDistributedWriteAheadLog::RecordPtrs recs, void * data) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-                auto batches = static_cast<RecordPtrsContainer *>(data);
-                batches->push_back(std::move(recs));
-                assert(recs.empty());
-            },
-            &records,
-            dwal_consume_ctx);
+        dwal->consume(callback, &records, dwal_consume_ctx);
 
         if (!records.empty())
         {
@@ -608,7 +610,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
         }
     }
 
-    /// commit what we have in memory before shutdown
+    /// Commit what we have in memory before shutdown
     if (!records.empty())
     {
         commit(records, block, last_sn, dwal_consume_ctx);
