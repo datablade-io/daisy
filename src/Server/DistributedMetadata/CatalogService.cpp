@@ -271,46 +271,65 @@ CatalogService::TableInnerContainer CatalogService::buildCatalog(const String & 
     return snapshot;
 }
 
+/// `snapshot` is indexed by (tablename, shard) which is unique across all cluster
 void CatalogService::mergeCatalog(const String & host, TableInnerContainer snapshot)
 {
     std::unique_lock guard(rwlock);
 
+    /// auto indexedByHostCopy{indexedByHost};
+    /// auto indexedByNameCopy{indexedByName};
+    /// auto snapshotCopy{snapshot};
+
     auto iter = indexedByHost.find(host);
     if (iter == indexedByHost.end())
     {
-        /// Not found, add all tables from this host to `indexedByName`
+        /// New host. Add all tables from this host to `indexedByName`
         for (const auto & p : snapshot)
         {
-            auto & by_host_shard = indexedByName[p.second->name];
-            Pair key = std::make_pair(p.second->host, p.second->shard);
+            indexedByName[p.second->name].emplace(std::make_pair(host, p.second->shard), p.second);
+        }
+        indexedByHost.emplace(host, snapshot);
+        return;
+    }
 
-            assert(!by_host_shard.contains(key));
+    /// Found host. Merge existing tables from this host to `indexedByName`
+    /// and delete `deleted` table entries from `indexedByName`
+    for (const auto & p : iter->second)
+    {
+        /// ((tablename, shard), table) pair
+        if (!snapshot.contains(p.first))
+        {
+            auto iter_by_name = indexedByName.find(p.second->name);
+            assert(iter_by_name != indexedByName.end());
 
-            by_host_shard.emplace(std::make_pair(key, p.second));
+            /// Deleted table, remove from `indexByName`
+            auto removed = iter_by_name->second.erase(std::make_pair(p.second->host, p.second->shard));
+            assert(removed == 1);
+            (void)removed;
+
+            if (iter_by_name->second.empty())
+            {
+                removed = indexedByName.erase(p.second->name);
+                assert(removed == 1);
+            }
         }
     }
-    else
+
+    /// Add new tables or override existing tables in `indexedByName`
+    for (const auto & p : snapshot)
     {
-        /// Found, merge new / existing tables from this host to `indexedByName`
-        /// and delete `deleted` table entries from `indexedByName`
-         for (const auto & p : iter->second)
-         {
-             /// ((tablename, shard), table) pair
-             if (!snapshot.contains(p.first))
-             {
-                 /// deleted table, remove from `indexByName`
-                 auto removed = indexedByName[p.second->name].erase(std::make_pair(p.second->host, p.second->shard));
-                 assert(removed == 1);
-                 (void)removed;
-             }
-             else
-             {
-                 indexedByName[p.second->name].insert_or_assign(std::make_pair(p.second->host, p.second->shard), p.second);
-             }
-         }
+        auto iter_by_name = indexedByName.find(p.second->name);
+        if (iter_by_name == indexedByName.end())
+        {
+            indexedByName[p.second->name].emplace(std::make_pair(host, p.second->shard), p.second);
+        }
+        else
+        {
+            indexedByName[p.second->name].insert_or_assign(std::make_pair(p.second->host, p.second->shard), p.second);
+        }
     }
 
-    /// replace all tables for this host in `indexedByHost`
+    /// Replace all tables for this host in `indexedByHost`
     indexedByHost[host].swap(snapshot);
 }
 

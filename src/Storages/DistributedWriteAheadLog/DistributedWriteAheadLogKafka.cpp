@@ -1,6 +1,7 @@
 #include "DistributedWriteAheadLogKafka.h"
 
 #include <Common/Exception.h>
+#include <Common/setThreadName.h>
 #include <common/logger_useful.h>
 
 #include <librdkafka/rdkafka.h>
@@ -434,6 +435,7 @@ void DistributedWriteAheadLogKafka::startup()
 
 void DistributedWriteAheadLogKafka::backgroundPollProducer()
 {
+    setThreadName("KafkaWal_Producer_Poll");
     while (!stopped.test())
     {
         rd_kafka_poll(producer_handle.get(), settings->message_delivery_async_poll_ms);
@@ -448,6 +450,7 @@ void DistributedWriteAheadLogKafka::backgroundPollProducer()
 
 void DistributedWriteAheadLogKafka::backgroundPollConsumer()
 {
+    setThreadName("KafkaWal_Consumer_Poll");
     while (!stopped.test())
     {
         rd_kafka_poll(consumer_handle.get(), 100);

@@ -25,6 +25,7 @@ namespace ErrorCodes
 {
     extern const int OK;
     extern const int UNKNOWN_EXCEPTION;
+    extern const int UNRETRIABLE_ERROR;
 }
 
 namespace
@@ -130,7 +131,7 @@ inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hos
     for (const auto & host : hosts)
     {
         /// FIXME : HTTP for now
-        uris.emplace_back("http", host + http_port);
+        uris.emplace_back("http://" + host + http_port);
     }
 
     return uris;
@@ -143,10 +144,10 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
     /// One second for connect/send/receive
     ConnectionTimeouts timeouts({1, 0}, {1, 0}, {1, 0});
 
-    auto session = makePooledHTTPSession(uri, timeouts, 1);
-
+    PooledHTTPSessionPtr session;
     try
     {
+        session = makePooledHTTPSession(uri, timeouts, 1);
         Poco::Net::HTTPRequest request{Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
         request.setHost(uri.getHost());
         request.setChunkedTransferEncoding(true);
@@ -163,14 +164,36 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
 
         Poco::Net::HTTPResponse response;
         /// FIXME: handle table exists, table not exists etc error explicitly
-        receiveResponse(*session, request, response, false);
+        auto & istr = session->receiveResponse(response);
+        auto status = response.getStatus();
+        if (status == Poco::Net::HTTPResponse::HTTP_OK || status == Poco::Net::HTTPResponse::HTTP_CREATED || status == Poco::Net::HTTPResponse::HTTP_ACCEPTED)
+        {
+            LOG_INFO(log, "Executed table statement={} on uri={} successfully", query, uri.toString());
+            return ErrorCodes::OK;
+        }
+        else
+        {
+            std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
+            error_message << istr.rdbuf();
+            /// FIXME, revise HTTP status code for the legacy HTTP API
+            const auto & msg = error_message.str();
+            if (msg.find("Code: 57") != std::string_view::npos)
+            {
+                /// Table already exists. FIXME: enhance table creation idempotent by adding query id
+                return ErrorCodes::UNRETRIABLE_ERROR;
+            }
 
-        LOG_INFO(log, "Executed table statement={} on uri={} successfully", query, uri.toString());
-        return ErrorCodes::OK;
+            /// FIXME, other un-retriable error codes
+            return ErrorCodes::UNKNOWN_EXCEPTION;
+        }
     }
     catch (const Poco::Exception & e)
     {
-        session->attachSessionData(e.message());
+        if (!session.isNull())
+        {
+            session->attachSessionData(e.message());
+        }
+
         LOG_ERROR(
             log,
             "Failed to execute table statement={} on uri={} error={} exception={}",
@@ -178,6 +201,13 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
             uri.toString(),
             e.message(),
             getCurrentExceptionMessage(true, true));
+
+        /// FIXME, more error code handling
+        auto code = e.code();
+        if (code == 1000 || code == 422)
+        {
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
     }
     catch (...)
     {
@@ -195,12 +225,14 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
 Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
 {
     /// FIXME, retry several times and report error
-    while (1)
+    Int32 err = ErrorCodes::OK;
+
+    while (!stopped.test())
     {
         try
         {
-            auto err = postRequest(query, uri);
-            if (err == ErrorCodes::OK)
+            err = postRequest(query, uri);
+            if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
             {
                 return err;
             }
@@ -213,6 +245,8 @@ Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
+
+    return err;
 }
 
 void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
@@ -259,7 +293,12 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             {
                 /// FIXME, check table engine, grammar check
                 String create_query = query + ", shard=" + std::to_string(j);
-                doTable(create_query, target_hosts[i * replication_factor + j]);
+                auto err = doTable(create_query, target_hosts[i * replication_factor + j]);
+                if (err == ErrorCodes::UNRETRIABLE_ERROR)
+                {
+                    failDDL(query_id, user, query, "Unable to fulfill the request due to unrecoverable failure");
+                    return;
+                }
             }
         }
 
@@ -293,8 +332,6 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         ColumnWithTypeAndName host_col_with_type(std::move(host_col), string_type, "hosts");
         block.insert(host_col_with_type);
 
-        block.checkNumberOfRows();
-
         /// FIXME, retries, error handling
         auto result = dwal->append(*record.get(), dwal_append_ctx);
         if (result.err != ErrorCodes::OK)
@@ -304,7 +341,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         }
         else
         {
-            LOG_ERROR(log, "Successfully find placement for query={}", query);
+            LOG_INFO(log, "Successfully find placement for query={} placement={}", query, hosts);
             progressDDL(query_id, user, query, "shard replicas placed");
         }
     }
