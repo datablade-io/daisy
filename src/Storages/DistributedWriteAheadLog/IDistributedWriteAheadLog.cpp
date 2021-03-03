@@ -52,7 +52,7 @@ IDistributedWriteAheadLog::RecordPtr IDistributedWriteAheadLog::Record::read(con
     readIntBinary(flags, rb);
 
     /// FIXME, more graceful version handling
-    assert(Record::version(flags) != IDistributedWriteAheadLog::WAL_VERSION);
+    assert(Record::version(flags) == IDistributedWriteAheadLog::WAL_VERSION);
 
     NativeBlockInputStream input{rb, 0};
 
