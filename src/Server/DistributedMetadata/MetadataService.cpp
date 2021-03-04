@@ -119,7 +119,13 @@ void MetadataService::createDWal()
 
 void MetadataService::tailingRecords()
 {
-    setThreadName(log->name().c_str());
+    auto thr_name = log->name();
+    if (thr_name.size() > 15)
+    {
+        thr_name = String{log->name().begin(), log->name().begin() + 14};
+    }
+
+    setThreadName(thr_name.c_str());
     createDWal();
 
     auto [ batch, timeout ] = batchSizeAndTimeout();
