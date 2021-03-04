@@ -27,13 +27,57 @@ DistributedWriteAheadLogPool & DistributedWriteAheadLogPool::instance(Context & 
     return pool;
 }
 
-DistributedWriteAheadLogPool::DistributedWriteAheadLogPool(Context & global_context)
-    : log(&Poco::Logger::get("DistributedWriteAheadLogPool"))
+DistributedWriteAheadLogPool::DistributedWriteAheadLogPool(Context & global_context_)
+    : global_context(global_context_), log(&Poco::Logger::get("DistributedWriteAheadLogPool"))
 {
-    init(global_context);
 }
 
-void DistributedWriteAheadLogPool::doInit(const Context & global_context, const String & key)
+DistributedWriteAheadLogPool::~DistributedWriteAheadLogPool()
+{
+    shutdown();
+}
+
+void DistributedWriteAheadLogPool::startup()
+{
+    if (inited.test_and_set())
+    {
+        LOG_ERROR(log, "Already started");
+        return;
+    }
+
+    const auto & config = global_context.getConfigRef();
+
+    Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
+    config.keys(SYSTEM_DWALS_KEY, sys_dwal_keys);
+
+    for (const auto & key : sys_dwal_keys)
+    {
+        init(key);
+    }
+
+    if (!wals.empty() && default_wal == nullptr)
+    {
+        throw Exception("Default Kafka DWAL cluster is not assigned", ErrorCodes::BAD_ARGUMENTS);
+    }
+}
+
+void DistributedWriteAheadLogPool::shutdown()
+{
+    if (stopped.test_and_set())
+    {
+        return;
+    }
+
+    for (auto & dwals : wals)
+    {
+        for (auto & dwal : dwals.second)
+        {
+            dwal->shutdown();
+        }
+    }
+}
+
+void DistributedWriteAheadLogPool::init(const String & key)
 {
     /// FIXME; for now, we only support kafka, so assume it is kafka
     /// assert(key.startswith("system_kafka"));
@@ -133,24 +177,6 @@ void DistributedWriteAheadLogPool::doInit(const Context & global_context, const 
         }
     }
     indexes[kafka_settings.cluster_id] = 0;
-}
-
-void DistributedWriteAheadLogPool::init(Context & global_context)
-{
-    const auto & config = global_context.getConfigRef();
-
-    Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
-    config.keys(SYSTEM_DWALS_KEY, sys_dwal_keys);
-
-    for (const auto & key : sys_dwal_keys)
-    {
-        doInit(global_context, key);
-    }
-
-    if (!wals.empty() && default_wal == nullptr)
-    {
-        throw Exception("Default Kafka DWAL cluster is not assigned", ErrorCodes::BAD_ARGUMENTS);
-    }
 }
 
 DistributedWriteAheadLogPtr DistributedWriteAheadLogPool::get(const String & id) const
