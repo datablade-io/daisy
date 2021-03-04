@@ -428,16 +428,34 @@ void DistributedWriteAheadLogKafka::startup()
         return;
     }
 
+    LOG_INFO(log, "Starting");
+
     initProducer();
     initConsumer();
 
     poller.scheduleOrThrowOnError([this] { backgroundPollProducer(); });
     poller.scheduleOrThrowOnError([this] { backgroundPollConsumer(); });
+
+    LOG_INFO(log, "Started");
+}
+
+void DistributedWriteAheadLogKafka::shutdown()
+{
+    if (stopped.test_and_set())
+    {
+        return;
+    }
+
+    LOG_INFO(log, "Stopping");
+    poller.wait();
+    LOG_INFO(log, "Stopped");
 }
 
 void DistributedWriteAheadLogKafka::backgroundPollProducer()
 {
-    setThreadName("KafkaWal_Producer_Poll");
+    LOG_INFO(log, "Polling producer started");
+    setThreadName("KWalPPoller");
+
     while (!stopped.test())
     {
         rd_kafka_poll(producer_handle.get(), settings->message_delivery_async_poll_ms);
@@ -448,11 +466,14 @@ void DistributedWriteAheadLogKafka::backgroundPollProducer()
     {
         LOG_ERROR(log, "Failed to flush kafka, error={}", rd_kafka_err2str(ret));
     }
+    LOG_INFO(log, "Polling producer stopped");
 }
 
 void DistributedWriteAheadLogKafka::backgroundPollConsumer()
 {
-    setThreadName("KafkaWal_Consumer_Poll");
+    LOG_INFO(log, "Polling consumer started");
+    setThreadName("KWalCPoller");
+
     while (!stopped.test())
     {
         rd_kafka_poll(consumer_handle.get(), 100);
@@ -463,6 +484,8 @@ void DistributedWriteAheadLogKafka::backgroundPollConsumer()
     {
         LOG_ERROR(log, "Failed to commit offsets, error={}", rd_kafka_err2str(err));
     }
+
+    LOG_INFO(log, "Polling consumer stopped");
 }
 
 #if 0
@@ -629,18 +652,6 @@ void DistributedWriteAheadLogKafka::initConsumer()
 
     /// Forward all events to consumer queue. there may have in-balance consuming problems
     /// rd_kafka_poll_set_consumer(consumer_handle.get());
-}
-
-void DistributedWriteAheadLogKafka::shutdown()
-{
-    if (stopped.test_and_set())
-    {
-        return;
-    }
-
-    LOG_INFO(log, "Stopping");
-    poller.wait();
-    LOG_INFO(log, "Stopped");
 }
 
 IDistributedWriteAheadLog::AppendResult DistributedWriteAheadLogKafka::append(const Record & record, std::any & ctx)
