@@ -140,7 +140,7 @@ void CatalogService::append(Block && block)
 {
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
     record.partition_key = 0;
-    record.idempotent_key = NODE_ID;
+    record.idempotent_key = global_context.getNodeIdentity();
 
     /// FIXME : reschedule
     int retries = 3;

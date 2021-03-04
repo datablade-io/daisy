@@ -197,6 +197,7 @@ private:
     std::optional<ReadTaskCallback> next_task_callback;
 
     /// Daisy : starts
+    String node_identity;
     String query_status_poll_id;
     String idempotent_key;
     String ingest_mode;
@@ -471,10 +472,15 @@ public:
 
     String getCurrentDatabase() const;
     String getCurrentQueryId() const { return client_info.current_query_id; }
+    /// Daisy : starts
     String getQueryStatusPollId() const { return query_status_poll_id; }
+    /// Parse poll id and return `host` in ID, throws if poll_id is invalid or validations didn't pass
+    String parseQueryStatusPollId(const String & poll_id) const;
+    String getNodeIdentity() const { return node_identity; }
     const String & getIdempotentKey() const { return idempotent_key; }
     const String & getIngestMode() const { return ingest_mode; }
     bool isDistributed() const;
+    /// Daisy : ends
 
     /// Id of initiating query for distributed queries; or current query id if it's not a distributed query.
     String getInitialQueryId() const;
@@ -484,9 +490,12 @@ public:
     /// exists because it should be set before databases loading.
     void setCurrentDatabaseNameInGlobalContext(const String & name);
     void setCurrentQueryId(const String & query_id);
-    void setQueryStatusPollId(const String & query_status_poll_id_) { query_status_poll_id = query_status_poll_id_; }
+    /// Daisy : starts
+    void setupNodeIdentity();
+    void setupQueryStatusPollId();
     void setIdempotentKey(const String & idempotent_key_) { idempotent_key = idempotent_key_; }
     void setIngestMode(const String & ingest_mode_) { ingest_mode = ingest_mode_; }
+    /// Daisy : starts
 
     void killCurrentQuery();
 

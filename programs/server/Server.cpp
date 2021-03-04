@@ -1002,6 +1002,7 @@ int Server::main(const std::vector<std::string> & /*args*/)
     LOG_INFO(log, "Loading metadata from {}", path);
 
     /// Daisy: start. init Distributed metadata services for DistributedMergeTree table engine
+    global_context->setupNodeIdentity();
     initDistributedMetadataServices(*global_context);
     /// Daisy: end.
 

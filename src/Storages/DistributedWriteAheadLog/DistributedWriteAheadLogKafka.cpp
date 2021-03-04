@@ -45,11 +45,13 @@ Int32 mapErrorCode(rd_kafka_resp_err_t err)
         case RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS:
             return ErrorCodes::RESOURCE_ALREADY_EXISTS;
 
+        case RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC:
+            /// fallthrough
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
             return ErrorCodes::RESOURCE_NOT_FOUND;
 
         case RD_KAFKA_RESP_ERR__INVALID_ARG:
-            return ErrorCodes::INVALID_CONFIG_PARAMETER;
+            return ErrorCodes::BAD_ARGUMENTS;
 
         case RD_KAFKA_RESP_ERR__FATAL:
             throw Exception("Fatal error occured, shall tear down the whole program", ErrorCodes::DWAL_FATAL_ERROR);
@@ -730,10 +732,11 @@ Int32 DistributedWriteAheadLogKafka::doAppend(const Record & record, DeliveryRep
         /// Block if internal queue is full
         RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_FREE | RD_KAFKA_MSG_F_BLOCK),
         /// Message payload and length. Note we didn't copy the data so the ownership
-        /// of data is still in this function
+        /// of data will move moved to producev if it succeeds
         RD_KAFKA_V_VALUE(data.data(), data.size()),
-        /// Partioner key and its length
-        /// RD_KAFKA_V_KEY(&record.partition_key, sizeof(record.partition_key)),
+        /// For compaction
+        RD_KAFKA_V_KEY(record.idempotent_key.data(), record.idempotent_key.size()),
+        /// Partioner
         RD_KAFKA_V_PARTITION(record.partition_key),
         /// Headers, the memory ownership will be moved to librdkafka
         /// unless producev fails
@@ -1205,6 +1208,11 @@ Int32 DistributedWriteAheadLogKafka::describe(const String & name, std::any & ct
         }
 
         auto err = rd_kafka_ConfigResource_error(rconfigs[0]);
+        if (err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC || err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+        {
+            return ErrorCodes::RESOURCE_NOT_FOUND;
+        }
+
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
         {
             LOG_ERROR(
