@@ -36,7 +36,7 @@ bool IngestingBlocks::add(const String & id, UInt16 block_id)
     if (!hasId)
     {
         auto now = std::chrono::steady_clock::now();
-        /// if there are multiple blocks for an `id`
+        /// If there are multiple blocks for an `id`
         /// only stamp the first block
         std::lock_guard guard(lock);
         timedBlockIds.emplace_back(now, id);
@@ -49,7 +49,7 @@ bool IngestingBlocks::add(const String & id, UInt16 block_id)
 
 inline void IngestingBlocks::removeExpiredBlockIds()
 {
-    /// remove expired block ids
+    /// Remove expired block ids
     std::vector<std::pair<String, size_t>> expired;
     {
         auto now = std::chrono::steady_clock::now();
@@ -61,19 +61,19 @@ inline void IngestingBlocks::removeExpiredBlockIds()
 
             if (std::chrono::duration_cast<std::chrono::seconds>(now - p.first).count() >= timeout_sec)
             {
-                /// remove from timedBlockIds
                 expired.push_back({});
                 expired.back().first = p.second;
 
-                timedBlockIds.pop_front();
-
-                /// remove from blockIds
+                /// Remove from blockIds
                 std::unique_lock rwguard(rwlock);
                 auto iter = blockIds.find(p.second);
                 assert(iter != blockIds.end());
 
                 expired.back().second = iter->second.ids.size();
                 blockIds.erase(iter);
+
+                /// Remove from timedBlockIds
+                timedBlockIds.pop_front();
             }
             else
             {
@@ -84,12 +84,21 @@ inline void IngestingBlocks::removeExpiredBlockIds()
 
     for (const auto & p : expired)
     {
-        LOG_WARNING(log, "query id={} timed out and there are {} remaing pending blocks waiting to be committed", p.first, p.second);
+        if (p.second > 0)
+        {
+            LOG_WARNING(log, "Timed out and there are {} pending data blocks waiting to be committed for query_id={}", p.second, p.first);
+        }
+        else
+        {
+            LOG_TRACE(log, "Timed out and the data blocks associated with query_id={} have been successfully ingested", p.first);
+        }
     }
 }
 
 bool IngestingBlocks::remove(const String & id, UInt16 block_id)
 {
+    LOG_TRACE(log, "Removing query_id={} block_id={}", id, block_id);
+
     std::unique_lock guard(rwlock);
     auto iter = blockIds.find(id);
     if (iter != blockIds.end())

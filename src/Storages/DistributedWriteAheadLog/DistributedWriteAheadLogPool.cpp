@@ -147,7 +147,7 @@ void DistributedWriteAheadLogPool::init(Context & global_context)
         doInit(global_context, key);
     }
 
-    if (default_wal == nullptr)
+    if (!wals.empty() && default_wal == nullptr)
     {
         throw Exception("Default Kafka DWAL cluster is not assigned", ErrorCodes::BAD_ARGUMENTS);
     }

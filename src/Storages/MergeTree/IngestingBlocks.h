@@ -15,7 +15,7 @@
 
 namespace DB
 {
-class IngestingBlocks : public boost::noncopyable
+class IngestingBlocks final : public boost::noncopyable
 {
 public:
     static IngestingBlocks & instance(Int32 timeout_sec = 120);

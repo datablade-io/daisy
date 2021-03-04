@@ -76,7 +76,7 @@ void CatalogService::doBroadcast()
 {
     assert(dwal);
 
-    String query = "SELECT * FROM system.tables WHERE database != 'system'";
+    String query = "SELECT * FROM system.tables WHERE (database != 'system') OR (database = 'system' AND name='tables')";
 
     /// CurrentThread::attachQueryContext(context);
     Context context = global_context;
