@@ -12,6 +12,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int TIMEOUT_EXCEEDED;
+    extern const int OK;
 }
 
 DistributedMergeTreeBlockOutputStream::DistributedMergeTreeBlockOutputStream(
@@ -108,7 +109,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
         else if (ingest_mode == "ordered")
         {
             auto ret = storage.dwal->append(record, storage.dwal_append_ctx);
-            if (ret.err != 0)
+            if (ret.err != ErrorCodes::OK)
             {
                 throw Exception("failed to insert data", ret.err);
             }
@@ -131,7 +132,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
 
 void DistributedMergeTreeBlockOutputStream::writeCallback(const IDistributedWriteAheadLog::AppendResult & result)
 {
-    if (result.err)
+    if (result.err != ErrorCodes::OK)
     {
         err = result.err;
     }
@@ -163,7 +164,7 @@ void DistributedMergeTreeBlockOutputStream::flush()
             /// successfully ingest all data
             return;
         }
-        else if (err)
+        else if (err != ErrorCodes::OK)
         {
             throw Exception("failed to insert data", err);
         }

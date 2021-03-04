@@ -517,6 +517,14 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
             /// reset Input callbacks if query is not INSERT SELECT
             context.resetInputCallbacks();
 
+        /// Daisy : starts
+        if (insert_query)
+        {
+            /// Setup poll ID for ingestion status querying
+            context.getQueryContext().setupQueryStatusPollId();
+        }
+        /// Daisy : ends
+
         auto interpreter = InterpreterFactory::get(ast, context, SelectQueryOptions(stage).setInternal(internal));
 
         std::shared_ptr<const EnabledQuota> quota;
