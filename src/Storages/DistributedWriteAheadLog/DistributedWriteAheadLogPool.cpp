@@ -2,7 +2,6 @@
 
 #include <Interpreters/Context.h>
 #include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
 #include <Poco/Util/AbstractConfiguration.h>
@@ -110,7 +109,7 @@ void DistributedWriteAheadLogPool::doInit(const Context & global_context, const 
     if (kafka_settings.group_id.empty())
     {
         /// FIXME
-        kafka_settings.group_id = getFQDNOrHostName();
+        kafka_settings.group_id = global_context.getNodeIdentity();
     }
 
     if (wals.contains(kafka_settings.cluster_id))

@@ -18,7 +18,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int TYPE_MISMATCH;
-    extern const int BAD_ARGUMENTS;
+    extern const int INVALID_CONFIG_PARAMETER;
     extern const int NOT_IMPLEMENTED;
 }
 
@@ -377,6 +377,8 @@ IDistributedWriteAheadLog::RecordSequenceNumber StorageDistributedMergeTree::las
 
 StorageDistributedMergeTree::WriteCallbackData * StorageDistributedMergeTree::writeCallbackData(const String & query_status_poll_id, UInt16 block_id)
 {
+    assert(!query_status_poll_id.empty());
+
     auto added = ingesting_blocks.add(query_status_poll_id, block_id);
     assert(added);
     (void)added;
@@ -627,7 +629,7 @@ void StorageDistributedMergeTree::initWal()
     }
     else
     {
-        throw Exception("Invalid dwal_auto_offset_reset, only 'earliest' and 'latest' are supported", ErrorCodes::BAD_ARGUMENTS);
+        throw Exception("Invalid dwal_auto_offset_reset, only 'earliest' and 'latest' are supported", ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
     auto acks = ssettings->dwal_request_required_acks.value;
@@ -639,7 +641,7 @@ void StorageDistributedMergeTree::initWal()
     {
         throw Exception(
             "Invalid dwal_request_required_acks, shall be in [-1, " + std::to_string(replication_factor) + "] range",
-            ErrorCodes::BAD_ARGUMENTS);
+            ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
     auto timeout = ssettings->dwal_request_timeout_ms.value;
@@ -661,7 +663,7 @@ void StorageDistributedMergeTree::initWal()
 
     if (!dwal)
     {
-        throw Exception("Invalid Kafka cluster id " + ssettings->dwal_cluster_id.value, ErrorCodes::BAD_ARGUMENTS);
+        throw Exception("Invalid Kafka cluster id " + ssettings->dwal_cluster_id.value, ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
     /// cached ctx, reused by append. Multiple threads are accessing append context
