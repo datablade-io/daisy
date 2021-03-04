@@ -202,7 +202,8 @@ int waitServersToFinish(std::vector<DB::ProtocolServerAdapter> & servers, size_t
 void initDistributedMetadataServices(DB::Context & global_context)
 {
     /// Init DWAL pool
-    DB::DistributedWriteAheadLogPool::instance(global_context);
+    auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
+    pool.startup();
 
     auto & task_status_service = DB::TaskStatusService::instance(global_context);
     task_status_service.startup();
@@ -216,6 +217,25 @@ void initDistributedMetadataServices(DB::Context & global_context)
     auto & ddl_service = DB::DDLService::instance(global_context);
     ddl_service.startup();
 }
+
+void deinitDistributedMetadataServices(DB::Context & global_context)
+{
+    auto & ddl_service = DB::DDLService::instance(global_context);
+    ddl_service.shutdown();
+
+    auto & placement_service = DB::PlacementService::instance(global_context);
+    placement_service.shutdown();
+
+    auto & catalog_service = DB::CatalogService::instance(global_context);
+    catalog_service.shutdown();
+
+    auto & task_status_service = DB::TaskStatusService::instance(global_context);
+    task_status_service.shutdown();
+
+    auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
+    pool.shutdown();
+}
+
 }
 
 namespace DB
@@ -1429,6 +1449,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
                     " Tip: To increase wait time add to config: <shutdown_wait_unfinished>60</shutdown_wait_unfinished>", current_connections);
             else
                 LOG_INFO(log, "Closed connections.");
+
+            /// Daisy : start.
+            deinitDistributedMetadataServices(*global_context);
+            /// Daisy : end.
 
             dns_cache_updater.reset();
             main_config_reloader.reset();
