@@ -6,6 +6,8 @@
 namespace DB
 {
 /// Pooling DistributedWriteAheadLog. Singleton
+/// The pool will be initied during system startup and will be read only after that.
+/// So it doesn't hold any mutext in the multithread access env.
 class DistributedWriteAheadLogPool : private boost::noncopyable
 {
 public:

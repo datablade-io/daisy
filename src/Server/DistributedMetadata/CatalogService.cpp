@@ -8,7 +8,6 @@
 #include <Interpreters/executeQuery.h>
 #include <Processors/Executors/PullingAsyncPipelineExecutor.h>
 #include <Common/Exception.h>
-#include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
 #include <Poco/Util/AbstractConfiguration.h>
@@ -30,9 +29,6 @@ namespace
     const String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
     const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
     const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
-
-    /// FIXME : node id
-    const String NODE_ID = getFQDNOrHostName();
 }
 
 CatalogService & CatalogService::instance(Context & context)
@@ -62,6 +58,11 @@ MetadataService::ConfigSettings CatalogService::configSettings() const
 
 void CatalogService::broadcast()
 {
+    if (!global_context.isDistributed())
+    {
+        return;
+    }
+
     try
     {
         doBroadcast();
