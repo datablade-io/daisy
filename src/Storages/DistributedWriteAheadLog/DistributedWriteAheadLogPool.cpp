@@ -45,6 +45,8 @@ void DistributedWriteAheadLogPool::startup()
         return;
     }
 
+    LOG_INFO(log, "Starting");
+
     const auto & config = global_context.getConfigRef();
 
     Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
@@ -59,6 +61,8 @@ void DistributedWriteAheadLogPool::startup()
     {
         throw Exception("Default Kafka DWAL cluster is not assigned", ErrorCodes::BAD_ARGUMENTS);
     }
+
+    LOG_INFO(log, "Started");
 }
 
 void DistributedWriteAheadLogPool::shutdown()
@@ -68,6 +72,8 @@ void DistributedWriteAheadLogPool::shutdown()
         return;
     }
 
+    LOG_INFO(log, "Stopping");
+
     for (auto & dwals : wals)
     {
         for (auto & dwal : dwals.second)
@@ -75,6 +81,8 @@ void DistributedWriteAheadLogPool::shutdown()
             dwal->shutdown();
         }
     }
+
+    LOG_INFO(log, "Stopped");
 }
 
 void DistributedWriteAheadLogPool::init(const String & key)
