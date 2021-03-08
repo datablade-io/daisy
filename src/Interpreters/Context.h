@@ -8,6 +8,7 @@
 #include <DataStreams/IBlockStream_fwd.h>
 #include <Interpreters/ClientInfo.h>
 #include <Interpreters/DatabaseCatalog.h>
+#include <Interpreters/TimePicker.h>
 #include <Parsers/IAST_fwd.h>
 #include <Access/RowPolicy.h>
 #include <Common/MultiVersion.h>
@@ -286,6 +287,7 @@ private:
                                                     /// to DatabaseOnDisk::commitCreateTable(...) or IStorage::alter(...) without changing
                                                     /// thousands of signatures.
                                                     /// And I hope it will be replaced with more common Transaction sometime.
+    TimePicker time_picker; /// parameters for time predicates of main table
 
     /// Use copy constructor or createGlobal() instead
     Context();
@@ -733,6 +735,11 @@ public:
     const NameToNameMap & getQueryParameters() const;
     void setQueryParameter(const String & name, const String & value);
     void setQueryParameters(const NameToNameMap & parameters) { query_parameters = parameters; }
+
+    bool hasTimePicker() const { return (time_picker.getStart().size() | time_picker.getEnd().size()); }
+    const TimePicker & getTimePicker() const { return time_picker; }
+    void setTimePickerStart(const String & start) { time_picker.setStart(start); }
+    void setTimePickerEnd(const String & end) { time_picker.setEnd(end); }
 
 #if USE_EMBEDDED_COMPILER
     std::shared_ptr<CompiledExpressionCache> getCompiledExpressionCache() const;

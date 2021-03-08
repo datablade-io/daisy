@@ -803,6 +803,17 @@ bool DynamicQueryHandler::customizeQueryParam(Context & context, const std::stri
         return true;
     }
 
+    if (key == "time_start")
+    {
+        context.setTimePickerStart(value);
+        return true;
+    }
+    if (key == "time_end")
+    {
+        context.setTimePickerEnd(value);
+        return true;
+    }
+
     return false;
 }
 

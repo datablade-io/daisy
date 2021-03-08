@@ -44,6 +44,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/QueryLog.h>
 #include <Interpreters/InterpreterSetQuery.h>
+#include <Interpreters/AddTimePickerVisitor.h>
 #include <Interpreters/ApplyWithGlobalVisitor.h>
 #include <Interpreters/ReplaceQueryParameterVisitor.h>
 #include <Interpreters/SelectQueryOptions.h>
@@ -472,6 +473,14 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
         if (settings.enable_global_with_statement)
         {
             ApplyWithGlobalVisitor().visit(ast);
+            query = serializeAST(*ast);
+        }
+
+        // Add time picker into AST
+        if (context.hasTimePicker())
+        {
+            AddTimePickerVisitor visitor(context);
+            visitor.visit(ast);
             query = serializeAST(*ast);
         }
 
