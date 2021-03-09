@@ -1,7 +1,3 @@
-//
-// Created by zhanghong3 on 2021/3/3.
-//
-
 #ifndef CLICKHOUSE_SCHEMAVALIDATOR_H
 #define CLICKHOUSE_SCHEMAVALIDATOR_H
 
