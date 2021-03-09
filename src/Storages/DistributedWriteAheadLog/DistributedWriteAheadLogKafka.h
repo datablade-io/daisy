@@ -29,32 +29,34 @@ struct DistributedWriteAheadLogKafkaContext
 
     /// ************************************************
 
-    /// admin API settings
+    /// Admin API settings
     Int32 partitions = 1;
     Int32 replication_factor = 1;
 
     /// none, gzip, snappy, lz4, zstd, inherit
     String compression_codec = "snappy";
 
-    /// data retention for cleanup_policy `delete`
+    /// Data retention for cleanup_policy `delete`
     Int32 retention_ms = 86400 * 1000;
 
-    /// compact or delete
+    /// `compact` or `delete`
     String cleanup_policy = "delete";
 
     /// ************************************************
 
-    /// per topic producer settings
+    /// Per topic producer settings
     Int32 request_required_acks = 1;
     Int32 request_timeout_ms = 30000;
 
     /// ************************************************
 
-    /// per topic consumer settings
+    /// Per topic consumer settings
     String auto_offset_reset = "earliest";
 
-    /// per topic librdkafka client side settings for consumer
-    /// Int32 consume_callback_max_messages = 1000000;
+    /// Per topic librdkafka client side settings for consumer
+    Int32 consume_callback_max_messages = 1000000;
+    Int32 consume_callback_max_messages_size = 33554432; /// 32 MB
+    Int32 consume_callback_timeout_ms = 1000;
 
     static String topicPartitonKey(const String & topic, Int32 partition) { return topic + "$" + std::to_string(partition); }
 

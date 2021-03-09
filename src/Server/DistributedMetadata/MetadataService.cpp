@@ -147,13 +147,15 @@ void MetadataService::tailingRecords()
 
         processRecords(result.records);
     }
+
+    dwal->stopConsume(dwal_consume_ctx);
 }
 
 void MetadataService::startup()
 {
     const auto & config = global_context.getConfigRef();
 
-    /// if this node has `target` role, start background thread tailing records
+    /// If this node has `target` role, start background thread tailing records
     Poco::Util::AbstractConfiguration::Keys role_keys;
     config.keys(SYSTEM_ROLES_KEY, role_keys);
 
