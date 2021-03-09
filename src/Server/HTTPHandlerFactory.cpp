@@ -12,6 +12,7 @@
 #include "InterserverIOHTTPHandler.h"
 #include "PrometheusRequestHandler.h"
 #include "WebUIRequestHandler.h"
+#include "DAEHTTPHandler.h"
 
 
 namespace DB
@@ -176,6 +177,13 @@ void addCommonDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IS
 void addDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IServer & server, AsynchronousMetrics & async_metrics)
 {
     addCommonDefaultHandlersFactory(factory, server);
+
+    /// Daisy: start. Add dae httpRequest process handler
+    auto dae_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<DAEHTTPHandler>>(server, "dae");
+    dae_handler->attachNonStrictPath("/dae");
+    dae_handler->allowPostAndGetAndPATCHAndDELETEParamsRequest();
+    factory.addHandler(dae_handler);
+    /// Daisy: end.
 
     auto query_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<DynamicQueryHandler>>(server, "query");
     query_handler->allowPostAndGetParamsRequest();
