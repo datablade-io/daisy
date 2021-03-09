@@ -4,46 +4,24 @@
 #include "HTTPHandlerRequestFilter.h"
 
 #include <Compression/CompressedReadBuffer.h>
-#include <Compression/CompressedWriteBuffer.h>
-#include <Core/ExternalTable.h>
 #include <DataStreams/IBlockInputStream.h>
 #include <Disks/StoragePolicy.h>
-#include <IO/CascadeWriteBuffer.h>
 #include <IO/ConcatReadBuffer.h>
-#include <IO/MemoryReadWriteBuffer.h>
-#include <IO/ReadBufferFromIStream.h>
-#include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromFile.h>
-#include <IO/WriteBufferFromString.h>
-#include <IO/WriteBufferFromTemporaryFile.h>
 #include <IO/WriteHelpers.h>
-#include <IO/copyData.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/QueryParameterVisitor.h>
 #include <Interpreters/executeQuery.h>
 #include <Server/HTTP/WriteBufferFromHTTPServerResponse.h>
-#include <Server/HTTPHandlerFactory.h>
-#include <Server/HTTPHandlerRequestFilter.h>
 #include <Server/IServer.h>
-#include <Common/SettingsChanges.h>
 #include <Common/StringUtils/StringUtils.h>
-#include <Common/escapeForFileName.h>
 #include <Common/setThreadName.h>
 #include <Common/typeid_cast.h>
 #include <common/getFQDNOrHostName.h>
 #include <ext/scope_guard.h>
 
-#if !defined(ARCADIA_BUILD)
-#    include <Common/config.h>
-#endif
-
-#include <Poco/File.h>
-#include <Poco/Net/HTTPBasicCredentials.h>
-#include <Poco/Net/HTTPStream.h>
-#include <Poco/Net/NetException.h>
-
-#include <chrono>
 #include <iomanip>
+#include <Poco/Net/HTTPStream.h>
 
 namespace DB
 {
