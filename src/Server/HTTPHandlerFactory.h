@@ -113,6 +113,19 @@ public:
         });
     }
 
+    /// Daisy: start. Handle POST GET PATCH DELETE with params
+    void allowPostAndGetAndPATCHAndDELETEParamsRequest()
+    {
+        return addFilter([](const auto & request)
+        {
+            return request.getMethod() == Poco::Net::HTTPRequest::HTTP_GET
+                || request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST
+                || request.getMethod() == Poco::Net::HTTPRequest::HTTP_PATCH
+                || request.getMethod() == Poco::Net::HTTPRequest::HTTP_DELETE;
+        });
+    }
+    /// Daisy: end.
+
     std::unique_ptr<HTTPRequestHandler> createRequestHandler(const HTTPServerRequest & request) override
     {
         return filter(request) ? creator() : nullptr;

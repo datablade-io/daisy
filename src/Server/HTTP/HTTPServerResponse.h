@@ -11,6 +11,7 @@
 namespace DB
 {
 
+
 class HTTPServerRequest;
 
 class HTTPServerResponse : public HTTPResponse
