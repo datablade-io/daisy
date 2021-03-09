@@ -888,7 +888,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
 
             if (csize >= wctx.consume_callback_max_messages_size || crows >= wctx.consume_callback_max_messages)
             {
-                auto & callback_func = std::get<0>(*wrapped);
+                auto callback_func = std::get<0>(*wrapped);
                 if (likely(callback_func))
                 {
                     try
