@@ -7,17 +7,17 @@
 
 using namespace DB;
 
-static String optimize_subquery(String query)
+static String optimize_subquery(const String & query)
 {
     const char * start = query.data();
     const char * end = start + query.size();
     ParserQuery parser(end);
-    ASTPtr ast = parseQuery(parser, start, query.data() + query.size(), "", 0, 0);
+    ASTPtr ast = parseQuery(parser, start, end, "", 0, 0);
     EliminateSubqueryVisitor().visit(ast);
     return serializeAST(*ast);
 }
 
-TEST(EliminateSubquery, OptimizeQuery)
+TEST(EliminateSubquery, OptimizedQuery)
 {
     EXPECT_EQ(optimize_subquery("SELECT count(*) FROM (SELECT * FROM access1)"), "SELECT count(*) FROM access1");
     EXPECT_EQ(optimize_subquery("SELECT count(1) FROM (SELECT * FROM access1 a)"), "SELECT count(1) FROM access1 AS a");
@@ -70,3 +70,13 @@ TEST(EliminateSubquery, OptimizeQuery)
         optimize_subquery("SELECT a, b from (select * from users1) UNION SELECT c, d from (select * from users2)"),
         "SELECT a, b FROM users1 UNION  SELECT c, d FROM users2");
 }
+
+TEST(EliminateSubquery, FailedOptimizedQuery)
+{
+    EXPECT_EQ(
+        optimize_subquery("SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)"),
+        "SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)"
+    );
+}
+
+

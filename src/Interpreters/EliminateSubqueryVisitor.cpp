@@ -60,6 +60,7 @@ void EliminateSubqueryVisitor::visit(ASTTableExpression & tableExpression, ASTSe
     {
         return;
     }
+
     auto & select = tableExpression.subquery->children.at(0);
     if (auto * select_with_union_query = select->as<ASTSelectWithUnionQuery>())
     {
@@ -71,7 +72,6 @@ void EliminateSubqueryVisitor::visit(ASTTableExpression & tableExpression, ASTSe
         {
             // handle sub query in table expression recursively
             visit(*sub_query);
-
 
             if (sub_query->groupBy() || sub_query->having() || sub_query->orderBy() || sub_query->limitBy() || sub_query->limitByLength()
                 || sub_query->limitByOffset() || sub_query->limitLength() || sub_query->limitOffset() || sub_query->distinct
