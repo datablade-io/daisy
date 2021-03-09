@@ -56,10 +56,12 @@ std::map<String, std::map<String, String> > DDLTablesAction::update_schema = {
 String
 DDLTablesAction::postParamsJoin(HTTPServerRequest & request, const Poco::Path & path)
 {
-    Poco::JSON::Parser parser;
+    std::string data;
+    auto size = request.getContentLength();
+    data.resize(size);
+    request.getStream().readStrict(data.data(), size);
 
-    
-    std::string data = BaseSettingsHelpers::readString(request.getStream());
+    Poco::JSON::Parser parser;
     Poco::JSON::Object::Ptr payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
     validateCreateSchema(payload);
     return getCreateQuery(payload, path[DATABASES_DEPTH - 1]);
@@ -138,8 +140,12 @@ std::string DDLTablesAction::patchParamsJoin(HTTPServerRequest &request, const P
     path[0];
     request.getURI();
 
+    std::string data;
+    auto size = request.getContentLength();
+    data.resize(size);
+    request.getStream().readStrict(data.data(), size);
+
     Poco::JSON::Parser parser;
-    std::string data = BaseSettingsHelpers::readString(request.getStream());
     Poco::JSON::Object::Ptr payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
     return getUpdateQuery(payload, path[DATABASES_DEPTH - 1], path[path.depth()]);
 }
