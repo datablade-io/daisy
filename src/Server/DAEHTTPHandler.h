@@ -10,14 +10,16 @@
 
 namespace CurrentMetrics
 {
-    extern const Metric HTTPConnection;
+extern const Metric HTTPConnection;
 }
 
-namespace Poco { class Logger; }
+namespace Poco
+{
+class Logger;
+}
 
 namespace DB
 {
-
 class Output;
 class IServer;
 
@@ -29,7 +31,6 @@ public:
     void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response) override;
 
 private:
-
     IServer & server;
     Poco::Logger * log;
 
@@ -39,32 +40,17 @@ private:
     CurrentMetrics::Increment metric_increment{CurrentMetrics::HTTPConnection};
 
     void trySendExceptionToClient(
-            const std::string & s,
-            int exception_code,
-            HTTPServerRequest & request,
-            HTTPServerResponse & response,
-            Output & used_output);
+        const std::string & s, int exception_code, HTTPServerRequest & request, HTTPServerResponse & response, Output & used_output);
 
     void executeAction(
-            IServer & server_,
-            Poco::Logger * log_,
-            Context & context,
-            HTTPServerRequest & request,
-            HTMLForm & params,
-            HTTPServerResponse & response,
-            Output & used_output,
-            std::optional<CurrentThread::QueryScope> & query_scope);
+        IServer & server_,
+        Poco::Logger * log_,
+        Context & context,
+        HTTPServerRequest & request,
+        HTMLForm & params,
+        HTTPServerResponse & response,
+        Output & used_output,
+        std::optional<CurrentThread::QueryScope> & query_scope);
 };
 
 }
-
-
-
-
-
-
-
-
-
-
-

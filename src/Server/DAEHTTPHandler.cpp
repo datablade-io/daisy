@@ -1,7 +1,7 @@
 #include "DAEHTTPHandler.h"
 
-#include "HTTPHandlerRequestFilter.h"
 #include "DAEActhion/DDL/DDLTablesAction.h"
+#include "HTTPHandlerRequestFilter.h"
 
 #include <Compression/CompressedReadBuffer.h>
 #include <Compression/CompressedWriteBuffer.h>
@@ -14,7 +14,6 @@
 #include <IO/ReadBufferFromIStream.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromFile.h>
-#include <Server/HTTP/WriteBufferFromHTTPServerResponse.h>
 #include <IO/WriteBufferFromString.h>
 #include <IO/WriteBufferFromTemporaryFile.h>
 #include <IO/WriteHelpers.h>
@@ -22,6 +21,7 @@
 #include <Interpreters/Context.h>
 #include <Interpreters/QueryParameterVisitor.h>
 #include <Interpreters/executeQuery.h>
+#include <Server/HTTP/WriteBufferFromHTTPServerResponse.h>
 #include <Server/HTTPHandlerFactory.h>
 #include <Server/HTTPHandlerRequestFilter.h>
 #include <Server/IServer.h>
@@ -47,8 +47,7 @@
 
 namespace DB
 {
-
-std::map<std::string, std::function<IDAEAction*()>> IDAEFactory::dyn_acthion_map;
+std::map<std::string, std::function<IDAEAction *()>> IDAEFactory::dyn_acthion_map;
 
 // Register DAE Achtion
 REGISTER_IDAEACTION("ddl/tables", DDLTablesAction);
@@ -62,36 +61,25 @@ static Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int excepti
     {
         return HTTPResponse::HTTP_UNAUTHORIZED;
     }
-    else if (exception_code == ErrorCodes::CANNOT_PARSE_TEXT ||
-             exception_code == ErrorCodes::CANNOT_PARSE_ESCAPE_SEQUENCE ||
-             exception_code == ErrorCodes::CANNOT_PARSE_QUOTED_STRING ||
-             exception_code == ErrorCodes::CANNOT_PARSE_DATE ||
-             exception_code == ErrorCodes::CANNOT_PARSE_DATETIME ||
-             exception_code == ErrorCodes::CANNOT_PARSE_NUMBER ||
-             exception_code == ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED ||
-             exception_code == ErrorCodes::UNKNOWN_ELEMENT_IN_AST ||
-             exception_code == ErrorCodes::UNKNOWN_TYPE_OF_AST_NODE ||
-             exception_code == ErrorCodes::TOO_DEEP_AST ||
-             exception_code == ErrorCodes::TOO_BIG_AST ||
-             exception_code == ErrorCodes::UNEXPECTED_AST_STRUCTURE ||
-             exception_code == ErrorCodes::SYNTAX_ERROR ||
-             exception_code == ErrorCodes::INCORRECT_DATA ||
-             exception_code == ErrorCodes::TYPE_MISMATCH)
+    else if (
+        exception_code == ErrorCodes::CANNOT_PARSE_TEXT || exception_code == ErrorCodes::CANNOT_PARSE_ESCAPE_SEQUENCE
+        || exception_code == ErrorCodes::CANNOT_PARSE_QUOTED_STRING || exception_code == ErrorCodes::CANNOT_PARSE_DATE
+        || exception_code == ErrorCodes::CANNOT_PARSE_DATETIME || exception_code == ErrorCodes::CANNOT_PARSE_NUMBER
+        || exception_code == ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED || exception_code == ErrorCodes::UNKNOWN_ELEMENT_IN_AST
+        || exception_code == ErrorCodes::UNKNOWN_TYPE_OF_AST_NODE || exception_code == ErrorCodes::TOO_DEEP_AST
+        || exception_code == ErrorCodes::TOO_BIG_AST || exception_code == ErrorCodes::UNEXPECTED_AST_STRUCTURE
+        || exception_code == ErrorCodes::SYNTAX_ERROR || exception_code == ErrorCodes::INCORRECT_DATA
+        || exception_code == ErrorCodes::TYPE_MISMATCH)
     {
         return HTTPResponse::HTTP_BAD_REQUEST;
     }
-    else if (exception_code == ErrorCodes::UNKNOWN_TABLE ||
-             exception_code == ErrorCodes::UNKNOWN_FUNCTION ||
-             exception_code == ErrorCodes::UNKNOWN_IDENTIFIER ||
-             exception_code == ErrorCodes::UNKNOWN_TYPE ||
-             exception_code == ErrorCodes::UNKNOWN_STORAGE ||
-             exception_code == ErrorCodes::UNKNOWN_DATABASE ||
-             exception_code == ErrorCodes::UNKNOWN_SETTING ||
-             exception_code == ErrorCodes::UNKNOWN_DIRECTION_OF_SORTING ||
-             exception_code == ErrorCodes::UNKNOWN_AGGREGATE_FUNCTION ||
-             exception_code == ErrorCodes::UNKNOWN_FORMAT ||
-             exception_code == ErrorCodes::UNKNOWN_DATABASE_ENGINE ||
-             exception_code == ErrorCodes::UNKNOWN_TYPE_OF_QUERY)
+    else if (
+        exception_code == ErrorCodes::UNKNOWN_TABLE || exception_code == ErrorCodes::UNKNOWN_FUNCTION
+        || exception_code == ErrorCodes::UNKNOWN_IDENTIFIER || exception_code == ErrorCodes::UNKNOWN_TYPE
+        || exception_code == ErrorCodes::UNKNOWN_STORAGE || exception_code == ErrorCodes::UNKNOWN_DATABASE
+        || exception_code == ErrorCodes::UNKNOWN_SETTING || exception_code == ErrorCodes::UNKNOWN_DIRECTION_OF_SORTING
+        || exception_code == ErrorCodes::UNKNOWN_AGGREGATE_FUNCTION || exception_code == ErrorCodes::UNKNOWN_FORMAT
+        || exception_code == ErrorCodes::UNKNOWN_DATABASE_ENGINE || exception_code == ErrorCodes::UNKNOWN_TYPE_OF_QUERY)
     {
         return HTTPResponse::HTTP_NOT_FOUND;
     }
@@ -103,8 +91,7 @@ static Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int excepti
     {
         return HTTPResponse::HTTP_NOT_IMPLEMENTED;
     }
-    else if (exception_code == ErrorCodes::SOCKET_TIMEOUT ||
-             exception_code == ErrorCodes::CANNOT_OPEN_FILE)
+    else if (exception_code == ErrorCodes::SOCKET_TIMEOUT || exception_code == ErrorCodes::CANNOT_OPEN_FILE)
     {
         return HTTPResponse::HTTP_SERVICE_UNAVAILABLE;
     }
@@ -117,12 +104,9 @@ static Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int excepti
 }
 
 
-DAEHTTPHandler::DAEHTTPHandler(IServer & server_, const std::string & name)
-        : server(server_)
-        , log(&Poco::Logger::get(name))
+DAEHTTPHandler::DAEHTTPHandler(IServer & server_, const std::string & name) : server(server_), log(&Poco::Logger::get(name))
 {
     server_display_name = server.config().getString("display_name", getFQDNOrHostName());
-
 }
 
 
@@ -137,17 +121,14 @@ void DAEHTTPHandler::trySendExceptionToClient(
 
         /// If HTTP method is POST and Keep-Alive is turned on, we should read the whole request body
         /// to avoid reading part of the current request body in the next request.
-        if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST
-            && response.getKeepAlive()
-            && exception_code != ErrorCodes::HTTP_LENGTH_REQUIRED
-            && !request.getStream().eof())
+        if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST && response.getKeepAlive()
+            && exception_code != ErrorCodes::HTTP_LENGTH_REQUIRED && !request.getStream().eof())
         {
             request.getStream().ignoreAll();
         }
 
-        bool auth_fail = exception_code == ErrorCodes::UNKNOWN_USER ||
-                         exception_code == ErrorCodes::WRONG_PASSWORD ||
-                         exception_code == ErrorCodes::REQUIRED_PASSWORD;
+        bool auth_fail = exception_code == ErrorCodes::UNKNOWN_USER || exception_code == ErrorCodes::WRONG_PASSWORD
+            || exception_code == ErrorCodes::REQUIRED_PASSWORD;
 
         if (auth_fail)
         {
@@ -257,16 +238,15 @@ void DAEHTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerRespon
 }
 
 void DAEHTTPHandler::executeAction(
-        IServer & server_,
-        Poco::Logger * log_,
-        Context & context,
-        HTTPServerRequest & request,
-        HTMLForm & params,
-        HTTPServerResponse & response,
-        Output & used_output,
-        std::optional<CurrentThread::QueryScope> & query_scope)
+    IServer & server_,
+    Poco::Logger * log_,
+    Context & context,
+    HTTPServerRequest & request,
+    HTMLForm & params,
+    HTTPServerResponse & response,
+    Output & used_output,
+    std::optional<CurrentThread::QueryScope> & query_scope)
 {
-
     Poco::URI uri(request.getURI());
     Poco::Path path(uri.getPath());
     int pathDepth = path.depth();
@@ -282,9 +262,9 @@ void DAEHTTPHandler::executeAction(
     }
 
     String api_category = path[CATEGORY_DEPTH - 1]; // DDL、INGEST
-    IDAEAction *obj = IDAEFactory::produce(api_category + "/" + route);
+    IDAEAction * obj = IDAEFactory::produce(api_category + "/" + route);
 
-    if(obj == nullptr)
+    if (obj == nullptr)
     {
         throw Exception("Invalid path name " + uri.getPath() + " for DAE HTTPHandler. ", ErrorCodes::UNKNOWN_FUNCTION);
     }
@@ -294,7 +274,4 @@ void DAEHTTPHandler::executeAction(
     }
 }
 
-
-
 }
-
