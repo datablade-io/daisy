@@ -3,16 +3,12 @@
 #include <chrono>
 #include <Compression/CompressedReadBuffer.h>
 #include <Compression/CompressedWriteBuffer.h>
-#include <Core/ExternalTable.h>
 #include <DataStreams/IBlockInputStream.h>
 #include <Disks/StoragePolicy.h>
 #include <IO/CascadeWriteBuffer.h>
 #include <IO/ConcatReadBuffer.h>
 #include <IO/MemoryReadWriteBuffer.h>
-#include <IO/ReadBufferFromIStream.h>
 #include <IO/ReadBufferFromString.h>
-#include <IO/WriteBufferFromFile.h>
-#include <IO/WriteBufferFromString.h>
 #include <IO/WriteBufferFromTemporaryFile.h>
 #include <IO/WriteHelpers.h>
 #include <IO/copyData.h>
@@ -20,15 +16,11 @@
 #include <Interpreters/QueryParameterVisitor.h>
 #include <Interpreters/executeQuery.h>
 #include <Server/HTTP/WriteBufferFromHTTPServerResponse.h>
-#include <Server/HTTPHandlerFactory.h>
 #include <Server/HTTPHandlerRequestFilter.h>
 #include <Server/IServer.h>
 #include <Common/SettingsChanges.h>
 #include <Common/StringUtils/StringUtils.h>
-#include <Common/escapeForFileName.h>
-#include <Common/setThreadName.h>
 #include <Common/typeid_cast.h>
-#include <common/getFQDNOrHostName.h>
 #include <ext/scope_guard.h>
 
 #if !defined(ARCADIA_BUILD)
@@ -38,10 +30,6 @@
 #include <Poco/File.h>
 #include <Poco/Net/HTTPBasicCredentials.h>
 #include <Poco/Net/HTTPStream.h>
-#include <Poco/Net/NetException.h>
-
-#include <chrono>
-#include <iomanip>
 
 #include <Poco/JSON/Parser.h>
 
@@ -343,40 +331,7 @@ void IDAEAction::executeByQuery(
     else
         in_post_maybe_compressed = std::move(in_post);
 
-    std::unique_ptr<ReadBuffer> in;
-
-    static const NameSet reserved_param_names{
-        "compress",
-        "decompress",
-        "user",
-        "password",
-        "quota_key",
-        "query_id",
-        "stacktrace",
-        "buffer_size",
-        "wait_end_of_query",
-        "session_id",
-        "session_timeout",
-        "session_check"};
-
     Names reserved_param_suffixes;
-
-    auto param_could_be_skipped = [&](const String & name) {
-        /// Empty parameter appears when URL like ?&a=b or a=b&&c=d. Just skip them for user's convenience.
-        if (name.empty())
-            return true;
-
-        if (reserved_param_names.count(name))
-            return true;
-
-        for (const String & suffix : reserved_param_suffixes)
-        {
-            if (endsWith(name, suffix))
-                return true;
-        }
-
-        return false;
-    };
 
     /// Settings can be overridden in the query.
     /// Some parameters (database, default_format, everything used in the code above) do not
@@ -414,28 +369,6 @@ void IDAEAction::executeByQuery(
     std::string default_format = request.get("X-ClickHouse-Format", "");
 
     SettingsChanges settings_changes;
-    for (const auto & [key, value] : params)
-    {
-        if (key == "database")
-        {
-            if (database.empty())
-                database = value;
-        }
-        else if (key == "default_format")
-        {
-            if (default_format.empty())
-                default_format = value;
-        }
-        else if (param_could_be_skipped(key))
-        {
-        }
-        else
-        {
-            /// Other than query parameters are treated as settings.
-            //            if (!customizeQueryParam(context, key, value))
-            //                settings_changes.push_back({key, value});
-        }
-    }
 
     if (!database.empty())
         context.setCurrentDatabase(database);
@@ -447,9 +380,7 @@ void IDAEAction::executeByQuery(
     context.checkSettingsConstraints(settings_changes);
     context.applySettingsChanges(settings_changes);
 
-    // onst auto & query = getQuery(request, params, context);
-    std::unique_ptr<ReadBuffer> in_param = std::make_unique<ReadBufferFromString>(query);
-    in = has_external_data ? std::move(in_param) : std::make_unique<ConcatReadBuffer>(*in_param, *in_post_maybe_compressed);
+    std::unique_ptr<ReadBuffer> in = std::make_unique<ReadBufferFromString>(query);
 
     /// HTTP response compression is turned on only if the client signalled that they support it
     /// (using Accept-Encoding header) and 'enable_http_compression' setting is turned on.
@@ -479,25 +410,6 @@ void IDAEAction::executeByQuery(
         });
     };
 
-    /// These 2 progress mode options are mutually exclusive, and
-    /// send_progress_in_http_body overrides send_progress_in_http_headers
-    SendProgressMode send_progress_mode = SendProgressMode::progress_none;
-    if (settings.send_progress_in_http_headers)
-    {
-        send_progress_mode = SendProgressMode::progress_via_header;
-    }
-
-    if (settings.send_progress_in_http_body)
-    {
-        send_progress_mode = SendProgressMode::progress_via_body;
-    }
-    used_output.out->setSendProgressMode(send_progress_mode);
-
-    /// While still no data has been sent, we will report about query execution progress
-    /// by sending HTTP body or headers.
-    if (send_progress_mode != SendProgressMode::progress_none)
-        append_callback([&used_output](const Progress & progress) { used_output.out->onProgress(progress); });
-
     if (settings.readonly > 0 && settings.cancel_http_readonly_queries_on_client_close)
     {
         append_callback([&context, &request](const Progress &) {
@@ -507,8 +419,6 @@ void IDAEAction::executeByQuery(
                 context.killCurrentQuery();
         });
     }
-
-    // customizeContext(request, context);
 
     query_scope.emplace(context);
 
