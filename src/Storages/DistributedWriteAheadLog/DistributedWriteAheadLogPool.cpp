@@ -169,7 +169,9 @@ void DistributedWriteAheadLogPool::init(const String & key)
         throw Exception("Duplicated Kafka cluster id " + kafka_settings.cluster_id, ErrorCodes::BAD_ARGUMENTS);
     }
 
-    /// create DWALs
+    /// Create DWALs
+    LOG_INFO(log, "Creating Kafka DWAL with settings: {}", kafka_settings.string());
+
     for (Int32 i = 0; i < dwal_pool_size; ++i)
     {
         auto kwal
