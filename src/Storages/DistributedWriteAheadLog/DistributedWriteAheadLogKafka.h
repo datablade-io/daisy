@@ -4,6 +4,8 @@
 
 #include <Common/ThreadPool.h>
 
+#include <boost/algorithm/string/join.hpp>
+
 
 struct rd_kafka_s;
 struct rd_kafka_conf_s;
@@ -29,38 +31,41 @@ struct DistributedWriteAheadLogKafkaContext
 
     /// ************************************************
 
-    /// admin API settings
+    /// Admin API settings
     Int32 partitions = 1;
     Int32 replication_factor = 1;
 
     /// none, gzip, snappy, lz4, zstd, inherit
     String compression_codec = "snappy";
 
-    /// data retention for cleanup_policy `delete`
+    /// Data retention for cleanup_policy `delete`
     Int32 retention_ms = 86400 * 1000;
 
-    /// compact or delete
+    /// `compact` or `delete`
     String cleanup_policy = "delete";
 
     /// ************************************************
 
-    /// per topic producer settings
+    /// Per topic producer settings
     Int32 request_required_acks = 1;
     Int32 request_timeout_ms = 30000;
 
     /// ************************************************
 
-    /// per topic consumer settings
+    /// Per topic consumer settings
     String auto_offset_reset = "earliest";
 
-    /// per topic librdkafka client side settings for consumer
-    /// Int32 consume_callback_max_messages = 1000000;
+    /// Per topic librdkafka client side settings for consumer
+    Int32 consume_callback_max_messages = 100000;
+    Int32 consume_callback_max_rows = 1000000;
+    Int32 consume_callback_max_messages_size = 33554432; /// 32 MB
+    Int32 consume_callback_timeout_ms = 1000;
 
     static String topicPartitonKey(const String & topic, Int32 partition) { return topic + "$" + std::to_string(partition); }
 
     String key() { return topicPartitonKey(topic, partition); }
 
-    /// cached topic handle across call
+    /// Cached topic handle across call
     std::shared_ptr<rd_kafka_topic_s> topic_handle;
 
     DistributedWriteAheadLogKafkaContext(const String & topic_, Int32 partition_, Int64 offset_)
@@ -92,7 +97,7 @@ struct DistributedWriteAheadLogKafkaSettings
 
     /// https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
 
-    /// global settings for both producer and consumer /// global metrics
+    /// Global settings for both producer and consumer /// global metrics
     /// comma separated host/port: host1:port,host2:port,...
     String brokers;
     String security_protocol = "plaintext";
@@ -105,7 +110,7 @@ struct DistributedWriteAheadLogKafkaSettings
 
     /////////////////////////////////////////////////////
 
-    /// global settings for producer
+    /// Global settings for producer
     /// String transactional_id;
     /// Int32 transaction_timeout_ms = 60000;
     bool enable_idempotence = true;
@@ -117,14 +122,14 @@ struct DistributedWriteAheadLogKafkaSettings
     /// none, gzip, snappy, lz4, zstd, inherit
     String compression_codec = "snappy";
 
-    /// global librdkafka client side settings for producer
+    /// Global librdkafka client side settings for producer
     Int32 message_timeout_ms = 40000;
     Int32 message_delivery_async_poll_ms = 100;
     Int32 message_delivery_sync_poll_ms = 10;
 
     /////////////////////////////////////////////////////
 
-    /// global settings for consumer
+    /// Global settings for consumer
     String group_id = "";
     /// String group_instance_id
     /// String partition_assignment_strategy
@@ -135,9 +140,35 @@ struct DistributedWriteAheadLogKafkaSettings
     Int32 auto_commit_interval_ms = 5000;
     Int32 fetch_message_max_bytes = 1048576;
 
-    /// global librdkafka client side settings for consumer
+    /// Global librdkafka client side settings for consumer per topic+partition
     Int32 queued_min_messages = 1000000;
     Int32 queued_max_messages_kbytes = 65536;
+
+    String string() const
+    {
+        std::vector<String> settings;
+
+        settings.push_back("cluster_id=" + cluster_id);
+        settings.push_back("message_max_bytes=" + std::to_string(message_max_bytes));
+        settings.push_back("topic_metadata_refresh_interval_ms=" + std::to_string(topic_metadata_refresh_interval_ms));
+        settings.push_back("enable_idempotence=" + std::to_string(enable_idempotence));
+        settings.push_back("queue_buffering_max_messages=" + std::to_string(queue_buffering_max_messages));
+        settings.push_back("queue_buffering_max_kbytes=" + std::to_string(queue_buffering_max_kbytes));
+        settings.push_back("queue_buffering_max_ms=" + std::to_string(queue_buffering_max_ms));
+        settings.push_back("message_send_max_retries=" + std::to_string(message_send_max_retries));
+        settings.push_back("retry_backoff_ms=" + std::to_string(retry_backoff_ms));
+        settings.push_back("compression_codec=" + compression_codec);
+        settings.push_back("message_timeout_ms=" + std::to_string(message_timeout_ms));
+        settings.push_back("message_delivery_async_poll_ms=" + std::to_string(message_delivery_async_poll_ms));
+        settings.push_back("message_delivery_sync_poll_ms=" + std::to_string(message_delivery_sync_poll_ms));
+        settings.push_back("enable_auto_commit=" + std::to_string(enable_auto_commit));
+        settings.push_back("check_crcs=" + std::to_string(check_crcs));
+        settings.push_back("auto_commit_interval_ms=" + std::to_string(auto_commit_interval_ms));
+        settings.push_back("queued_min_messages=" + std::to_string(queued_min_messages));
+        settings.push_back("queued_max_messages_kbytes=" + std::to_string(queued_max_messages_kbytes));
+
+        return boost::algorithm::join(settings, " ");
+    }
 };
 
 class DistributedWriteAheadLogKafka final : public IDistributedWriteAheadLog
