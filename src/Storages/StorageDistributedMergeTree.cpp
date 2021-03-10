@@ -471,11 +471,7 @@ void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
     {
         /// Commit sequence number to dwal
         auto err = dwal->commit(commit_sn, dwal_consume_ctx);
-        if (likely(err == 0))
-        {
-            LOG_INFO(log, "Successfully committed offset={} for topic={} partition={}", commit_sn, dwalctx.topic, dwalctx.partition);
-        }
-        else
+        if (unlikely(err != 0))
         {
             /// it is ok as next commit will override this commit if it makes through
             LOG_ERROR(log, "Failed to commit offset={} for topic={} partition={} error={}", commit_sn, dwalctx.topic, dwalctx.partition, err);
@@ -509,7 +505,7 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
     part_commit_pool.scheduleOrThrowOnError([&, seq = seq_pair, moved_block = std::move(block), this] {
         const auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
 
-        LOG_TRACE(log, "Committing rows={} for topic={} partition={} to file system", moved_block.rows(), dwalctx.topic, dwalctx.partition);
+        LOG_DEBUG(log, "Committing rows={} for topic={} partition={} to file system", moved_block.rows(), dwalctx.topic, dwalctx.partition);
 
         while (1)
         {
