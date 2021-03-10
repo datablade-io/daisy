@@ -174,9 +174,12 @@ private:
 
     void backgroundConsumer();
     void mergeBlocks(Block & lhs, Block & rhs);
-    void
-    commit(const std::vector<IDistributedWriteAheadLog::RecordPtrs> & records, Block & block, Int64 & last_sn, std::any & dwal_consume_ctx);
-    void doCommit(Block & block, Int64 & last_sn, std::any & dwal_consume_ctx);
+
+    void commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx);
+
+    using SequencePair = std::pair<IDistributedWriteAheadLog::RecordSequenceNumber, IDistributedWriteAheadLog::RecordSequenceNumber>;
+    void doCommit(Block && block, const SequencePair & seq_pair, std::any & dwal_consume_ctx);
+    void commitSN(std::any & dwal_consume_ctx);
 
 private:
     Int32 replication_factor;
@@ -200,18 +203,24 @@ private:
     /// cached ctx for reuse
     std::any dwal_append_ctx;
 
-    IDistributedWriteAheadLog::RecordSequenceNumber dwal_last_sn = -1;
-
     DistributedWriteAheadLogPtr dwal;
     IngestingBlocks & ingesting_blocks;
+
+    /// forwarding storage if it is not virtual
+    std::shared_ptr<StorageMergeTree> storage;
     std::optional<ThreadPool> tailer;
+
+    ThreadPool & part_commit_pool;
+
+    std::mutex sns_mutex;
+    IDistributedWriteAheadLog::RecordSequenceNumber last_sn = -1;
+    IDistributedWriteAheadLog::RecordSequenceNumber prev_sn = -1;
+    std::set<SequencePair> local_committed_sns;
+    std::deque<SequencePair> outstanding_sns;
 
     // For random shard index generation
     mutable std::mutex rng_mutex;
     pcg64 rng;
-
-    /// forwarding storage if it is not virtual
-    std::shared_ptr<StorageMergeTree> storage;
 
     std::atomic_flag stopped;
 };
