@@ -361,6 +361,7 @@ struct ContextSharedPart
     ConfigurationPtr users_config;                          /// Config with the users, profiles and quotas sections.
     InterserverIOHandler interserver_io_handler;            /// Handler for interserver communication.
 
+    mutable std::optional<ThreadPool> part_commit_pool; /// Daisy: A thread pool that can build part and commit in background (used for DistributedMergeTree table engine)
     mutable std::optional<BackgroundSchedulePool> buffer_flush_schedule_pool; /// A thread pool that can do background flush for Buffer tables.
     mutable std::optional<BackgroundSchedulePool> schedule_pool;    /// A thread pool that can run different jobs in background (used in replicated tables)
     mutable std::optional<BackgroundSchedulePool> distributed_schedule_pool; /// A thread pool that can run different jobs in background (used for distributed sends)
@@ -466,6 +467,9 @@ struct ContextSharedPart
             schedule_pool.reset();
             distributed_schedule_pool.reset();
             message_broker_schedule_pool.reset();
+	    /// Daisy : starts
+            part_commit_pool.reset();
+	    /// Daisy : ends 
             ddl_worker.reset();
 
             /// Stop trace collector if any
@@ -2683,6 +2687,15 @@ bool Context::isDistributed() const
     Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
     getConfigRef().keys("system_settings.system_dwals", sys_dwal_keys);
     return !sys_dwal_keys.empty();
+}
+
+ThreadPool & Context::getPartCommitPool() const
+{
+    auto lock = getLock();
+    if (!shared->part_commit_pool)
+        /// FIXME, queue size may matter
+        shared->part_commit_pool.emplace(settings.part_commit_pool_size);
+    return *shared->part_commit_pool;
 }
 
 void Context::setupNodeIdentity()

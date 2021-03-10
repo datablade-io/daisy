@@ -480,6 +480,7 @@ public:
     const String & getIdempotentKey() const { return idempotent_key; }
     const String & getIngestMode() const { return ingest_mode; }
     bool isDistributed() const;
+    ThreadPool & getPartCommitPool() const;
     /// Daisy : ends
 
     /// Id of initiating query for distributed queries; or current query id if it's not a distributed query.

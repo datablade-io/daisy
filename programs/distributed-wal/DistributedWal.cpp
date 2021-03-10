@@ -327,7 +327,7 @@ BenchmarkSettings parseConsumeSettings(po::parsed_options & cmd_parsed, const ch
     auto options = desc.add_options();
     options("help", "help message");
     options("group_id", value<String>(), "consumer group id");
-    options("auto_offset_reset", value<String>()->default_value("stored"), "earliest|latest|stored");
+    options("auto_offset_reset", value<String>()->default_value(""), "earliest|latest|stored");
     options("queued_min_messages", value<Int32>()->default_value(10000), "number of queued messages in client side");
     options("kafka_topic_partition_offsets", value<String>(), "topic,partition,offset;topic,partition,offset;...");
     options("max_messages", value<Int32>()->default_value(100), "maximum message to consume");
@@ -388,6 +388,10 @@ BenchmarkSettings parseConsumeSettings(po::parsed_options & cmd_parsed, const ch
 
     bench_settings.wal_settings = move(settings);
     bench_settings.consumer_settings.auto_offset_reset = option_map["auto_offset_reset"].as<String>();
+    if (bench_settings.consumer_settings.auto_offset_reset == "stored")
+    {
+        bench_settings.consumer_settings.auto_offset_reset = "-1000";
+    }
     bench_settings.consumer_settings.consume_callback_max_messages = option_map["max_messages"].as<Int32>();
     bench_settings.consumer_settings.max_messages = option_map["max_messages"].as<Int32>();
     bench_settings.consumer_settings.wal_client_pool_size = option_map["wal_client_pool_size"].as<Int32>();
@@ -614,7 +618,7 @@ void ingestAsync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex
     {
         auto record = make_shared<IDistributedWriteAheadLog::Record>(
             IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, prepareData(bench_settings.producer_settings.batch_size));
-        record->partition_key = i;
+        record->partition_key = 0;
         record->idempotent_key = to_string(i);
 
         unique_ptr<Data> data{new Data(cmutex, inflights, result_queue, total, failed, i)};
@@ -639,14 +643,12 @@ void ingestAsync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex
         }
     }
 
-    /// we need poll-wait all inflights result to be delivered
+    /// We need poll-wait all inflights result to be delivered
     while (true)
     {
-        size_t outstanding = 0;
         {
             lock_guard<mutex> lock(cmutex);
-            outstanding = inflights.size();
-            if (outstanding == 0)
+            if (total + failed == bench_settings.producer_settings.iterations)
             {
                 break;
             }
@@ -654,12 +656,11 @@ void ingestAsync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex
 
         {
             lock_guard<mutex> lock(stdout_mutex);
-            cout << "thread id=" << this_thread::get_id() << " polling: " << outstanding << " records\n";
+            cout << "thread id=" << this_thread::get_id() << " polling: " << bench_settings.producer_settings.iterations - total - failed
+                 << " records\n";
         }
-        this_thread::sleep_for(100ms);
+        this_thread::sleep_for(1000ms);
     }
-
-    assert(total == bench_settings.producer_settings.iterations);
 
     {
         lock_guard<mutex> lock(stdout_mutex);
@@ -764,10 +765,9 @@ void doConsume(IDistributedWriteAheadLog::RecordPtrs records, void * data)
 
     auto cctx = static_cast<ConsumeContext *>(data);
 
+    cctx->consumed += records.size();
     for (const auto & record : records)
     {
-        cctx->consumed += 1;
-
         lock_guard<mutex> lock(cctx->stdout_mutex);
 
         cout << "partition=" << std::any_cast<Int32>(record->ctx) << " offset=" << record->sn << " idem=" << record->idempotent_key << endl;
@@ -790,6 +790,8 @@ void consume(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
 
             DistributedWriteAheadLogKafkaContext dcctx{tpo.topic, tpo.partition, tpo.offset};
             dcctx.auto_offset_reset = bench_settings.consumer_settings.auto_offset_reset;
+            dcctx.consume_callback_max_messages = bench_settings.consumer_settings.max_messages;
+
             any ctx{dcctx};
 
             atomic_int32_t consumed = 0;

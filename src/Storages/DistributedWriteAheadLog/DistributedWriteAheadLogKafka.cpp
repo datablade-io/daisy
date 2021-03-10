@@ -356,7 +356,7 @@ std::shared_ptr<rd_kafka_topic_s> DistributedWriteAheadLogKafka::initConsumerTop
         std::make_pair("enable.auto.commit", "true"), /// LEGACY topic settings
         std::make_pair("auto.commit.interval.ms", std::to_string(settings->auto_commit_interval_ms)), /// LEGACY topic settings
         std::make_pair("auto.offset.reset", walctx.auto_offset_reset),
-        /// std::make_pair("consume.callback.max.messages", std::to_string(walctx.consume_callback_max_messages)),
+        std::make_pair("consume.callback.max.messages", std::to_string(walctx.consume_callback_max_messages)),
     };
 
     return initRdKafkaTopicHandle(walctx.topic, topic_params, consumer_handle.get(), stats.get());
@@ -629,7 +629,7 @@ void DistributedWriteAheadLogKafka::initConsumer()
         std::make_pair("offset.store.method", "broker"),
         std::make_pair("enable.partition.eof", "false"),
         std::make_pair("queued.min.messages", std::to_string(settings->queued_min_messages)),
-        /// std::make_pair("queued.max.messages.kbytes", ""),
+        std::make_pair("queued.max.messages.kbytes", std::to_string(settings->queued_max_messages_kbytes)),
         /// consumer group membership heartbeat timeout
         /// std::make_pair("session.timeout.ms", ""),
     };
@@ -847,50 +847,65 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
     }
 
     RecordPtrs records;
-    records.reserve(100);
+    records.reserve(1000);
 
-    using WrappedDataType = std::
-        tuple<IDistributedWriteAheadLog::ConsumeCallback, void *, RecordPtrs &, Poco::Logger *, DistributedWriteAheadLogKafkaContext &>;
+    Int64 current_size = 0;
+    Int64 current_rows = 0;
 
-    WrappedDataType wrapped_data{callback, data, records, log, walctx};
+    using WrappedDataType = std::tuple<
+        IDistributedWriteAheadLog::ConsumeCallback,
+        void *,
+        RecordPtrs &,
+        Poco::Logger *,
+        DistributedWriteAheadLogKafkaContext &,
+        Int64 &,
+        Int64 &>;
+
+    WrappedDataType wrapped_data{callback, data, records, log, walctx, current_size, current_rows};
 
     auto kcallback = [](rd_kafka_message_t * rkmessage, void * kdata) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
         auto wrapped = static_cast<WrappedDataType *>(kdata);
+        auto & wctx = std::get<4>(*wrapped);
+        auto plog = std::get<3>(*wrapped);
+
         if (likely(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR))
         {
             auto & batches = std::get<2>(*wrapped);
+            auto & csize = std::get<5>(*wrapped);
+            auto & crows = std::get<6>(*wrapped);
+
             auto record = kafkaMsgToRecord(rkmessage);
             if (likely(record))
             {
-                batches.push_back(record);
+                csize += record->block.bytes();
+                crows += record->block.rows();
+                batches.push_back(std::move(record));
+                assert(!record);
             }
             else
             {
-                LOG_WARNING(
-                    std::get<3>(*wrapped),
-                    "Returns nullptr record when consuming topic={} partition={}",
-                    std::get<4>(*wrapped).topic,
-                    std::get<4>(*wrapped).partition);
+                LOG_WARNING(plog, "Returns nullptr record when consuming topic={} partition={}", wctx.topic, wctx.partition);
             }
 
-            /// 100 as batch size
-            if (batches.size() >= 100)
+            if (csize >= wctx.consume_callback_max_messages_size || crows >= wctx.consume_callback_max_rows)
             {
                 auto callback_func = std::get<0>(*wrapped);
-                if (likely(callback_func != nullptr))
+                if (likely(callback_func))
                 {
                     try
                     {
-                        callback_func(batches, std::get<1>(*wrapped));
-                        batches.clear();
+                        callback_func(std::move(batches), std::get<1>(*wrapped));
+                        assert(batches.empty());
+                        csize = 0;
+                        crows = 0;
                     }
                     catch (...)
                     {
                         LOG_ERROR(
-                            std::get<3>(*wrapped),
+                            plog,
                             "Failed to consume topic={} partition={} error={}",
-                            std::get<4>(*wrapped).topic,
-                            std::get<4>(*wrapped).partition,
+                            wctx.topic,
+                            wctx.partition,
                             getCurrentExceptionMessage(true, true));
                         throw;
                     }
@@ -900,16 +915,12 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
         else
         {
             LOG_ERROR(
-                std::get<3>(*wrapped),
-                "Failed to consume topic={} partition={} error={}",
-                std::get<4>(*wrapped).topic,
-                std::get<4>(*wrapped).partition,
-                rd_kafka_message_errstr(rkmessage));
+                plog, "Failed to consume topic={} partition={} error={}", wctx.topic, wctx.partition, rd_kafka_message_errstr(rkmessage));
         }
     };
 
-    /// wait for 1000 milliseconds maximum for new messages
-    if (rd_kafka_consume_callback(walctx.topic_handle.get(), walctx.partition, 1000, kcallback, &wrapped_data) == -1)
+    if (rd_kafka_consume_callback(walctx.topic_handle.get(), walctx.partition, walctx.consume_callback_timeout_ms, kcallback, &wrapped_data)
+        == -1)
     {
         LOG_ERROR(
             log,
@@ -921,14 +932,15 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
         return mapErrorCode(rd_kafka_last_error());
     }
 
-    /// the last batch
+    /// The last batch
     if (!records.empty())
     {
-        if (likely(callback != nullptr))
+        if (likely(callback))
         {
             try
             {
-                callback(records, data);
+                callback(std::move(records), data);
+                assert(records.empty());
             }
             catch (...)
             {
