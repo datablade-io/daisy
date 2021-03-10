@@ -629,7 +629,7 @@ void DistributedWriteAheadLogKafka::initConsumer()
         std::make_pair("offset.store.method", "broker"),
         std::make_pair("enable.partition.eof", "false"),
         std::make_pair("queued.min.messages", std::to_string(settings->queued_min_messages)),
-        /// std::make_pair("queued.max.messages.kbytes", ""),
+        std::make_pair("queued.max.messages.kbytes", std::to_string(settings->queued_max_messages_kbytes)),
         /// consumer group membership heartbeat timeout
         /// std::make_pair("session.timeout.ms", ""),
     };
@@ -879,23 +879,23 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
             {
                 csize += record->block.bytes();
                 crows += record->block.rows();
-                batches.push_back(record);
+                batches.push_back(std::move(record));
+                assert(!record);
             }
             else
             {
                 LOG_WARNING(plog, "Returns nullptr record when consuming topic={} partition={}", wctx.topic, wctx.partition);
             }
 
-            if (csize >= wctx.consume_callback_max_messages_size || crows >= wctx.consume_callback_max_messages)
+            if (csize >= wctx.consume_callback_max_messages_size || crows >= wctx.consume_callback_max_rows)
             {
                 auto callback_func = std::get<0>(*wrapped);
                 if (likely(callback_func))
                 {
                     try
                     {
-                        callback_func(batches, std::get<1>(*wrapped));
-
-                        batches.clear();
+                        callback_func(std::move(batches), std::get<1>(*wrapped));
+                        assert(batches.empty());
                         csize = 0;
                         crows = 0;
                     }
@@ -939,7 +939,8 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
         {
             try
             {
-                callback(records, data);
+                callback(std::move(records), data);
+                assert(records.empty());
             }
             catch (...)
             {

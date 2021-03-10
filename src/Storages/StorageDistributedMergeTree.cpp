@@ -435,6 +435,64 @@ void StorageDistributedMergeTree::mergeBlocks(Block & lhs, Block & rhs)
     lhs.checkNumberOfRows();
 }
 
+void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
+{
+    const auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
+
+    size_t outstanding_sns_size = 0;
+    size_t local_committed_sns_size = 0;
+
+    IDistributedWriteAheadLog::RecordSequenceNumber commit_sn = -1;
+    {
+        std::lock_guard lock(sns_mutex);
+        if (last_sn != prev_sn)
+        {
+            commit_sn = last_sn;
+            prev_sn = last_sn;
+        }
+        outstanding_sns_size = outstanding_sns.size();
+        local_committed_sns_size = local_committed_sns.size();
+    }
+
+    LOG_TRACE(
+        log,
+        "Sequence outstanding_sns_size={} local_committed_sns_size={} for topic={} partition={}",
+        outstanding_sns_size,
+        local_committed_sns_size,
+        dwalctx.topic,
+        dwalctx.partition);
+
+    if (commit_sn < 0)
+    {
+        return;
+    }
+
+    try
+    {
+        /// Commit sequence number to dwal
+        auto err = dwal->commit(commit_sn, dwal_consume_ctx);
+        if (likely(err == 0))
+        {
+            LOG_INFO(log, "Successfully committed offset={} for topic={} partition={}", commit_sn, dwalctx.topic, dwalctx.partition);
+        }
+        else
+        {
+            /// it is ok as next commit will override this commit if it makes through
+            LOG_ERROR(log, "Failed to commit offset={} for topic={} partition={} error={}", commit_sn, dwalctx.topic, dwalctx.partition, err);
+        }
+    }
+    catch (...)
+    {
+        LOG_ERROR(
+            log,
+            "Failed to commit offset={} for topic={} partition={} exception={}",
+            commit_sn,
+            dwalctx.topic,
+            dwalctx.partition,
+            getCurrentExceptionMessage(true, true));
+    }
+}
+
 void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & seq_pair, std::any & dwal_consume_ctx)
 {
     assert(block);
@@ -451,14 +509,33 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
     part_commit_pool.scheduleOrThrowOnError([&, seq = seq_pair, moved_block = std::move(block), this] {
         const auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
 
-        LOG_TRACE(log, "Committing rows={} for topic={} partition={}", moved_block.rows(), dwalctx.topic, dwalctx.partition);
+        LOG_TRACE(log, "Committing rows={} for topic={} partition={} to file system", moved_block.rows(), dwalctx.topic, dwalctx.partition);
 
-        /// FIXME : write offset to file system
-        auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), global_context);
-        output_stream->writePrefix();
-        output_stream->write(moved_block);
-        output_stream->writeSuffix();
-        output_stream->flush();
+        while (1)
+        {
+            try
+            {
+                /// FIXME : write offset to file system
+                auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), global_context);
+                output_stream->writePrefix();
+                output_stream->write(moved_block);
+                output_stream->writeSuffix();
+                output_stream->flush();
+                break;
+            }
+            catch (...)
+            {
+                LOG_ERROR(
+                    log,
+                    "Failed to commit rows={} for topic={} partition={} exception={} to file system",
+                    moved_block.rows(),
+                    dwalctx.topic,
+                    dwalctx.partition,
+                    getCurrentExceptionMessage(true, true));
+                /// FIXME : specific error handling. When we sleep here, it occupied the current thread
+                std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+            }
+        }
 
         std::lock_guard lock(sns_mutex);
 
@@ -501,46 +578,7 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
 
     assert(!block);
 
-    IDistributedWriteAheadLog::RecordSequenceNumber commit_sn = -1;
-    {
-        std::lock_guard lock(sns_mutex);
-        if (last_sn != prev_sn)
-        {
-            commit_sn = last_sn;
-            prev_sn = last_sn;
-        }
-    }
-
-    if (commit_sn < 0)
-    {
-        return;
-    }
-
-    const auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
-    try
-    {
-        /// Commit sequence number to dwal
-        auto err = dwal->commit(commit_sn, dwal_consume_ctx);
-        if (likely(err == 0))
-        {
-            LOG_INFO(log, "Successfully committed offset={} for topic={} partition={}", commit_sn, dwalctx.topic, dwalctx.partition);
-        }
-        else
-        {
-            /// it is ok as next commit will override this commit if it makes through
-            LOG_ERROR(log, "Failed to commit offset={} for topic={} partition={} error={}", commit_sn, dwalctx.topic, dwalctx.partition, err);
-        }
-    }
-    catch (...)
-    {
-        LOG_ERROR(
-            log,
-            "Failed to commit offset={} for topic={} partition={} exception={}",
-            commit_sn,
-            dwalctx.topic,
-            dwalctx.partition,
-            getCurrentExceptionMessage(true, true));
-    }
+    commitSN(dwal_consume_ctx);
 }
 
 void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx)
@@ -591,8 +629,18 @@ void StorageDistributedMergeTree::backgroundConsumer()
 
     auto ssettings = storage_settings.get();
     consume_ctx.consume_callback_timeout_ms = ssettings->distributed_flush_threshhold_ms.value;
-    consume_ctx.consume_callback_max_messages = ssettings->distributed_flush_threshhold_count;
+    consume_ctx.consume_callback_max_rows = ssettings->distributed_flush_threshhold_count;
     consume_ctx.consume_callback_max_messages_size = ssettings->distributed_flush_threshhold_size;
+
+    LOG_INFO(
+        log,
+        "Start consuming records from topic={} partition={} distributed_flush_threshhold_ms={} distributed_flush_threshhold_count={} "
+        "distributed_flush_threshhold_size={}",
+        topic,
+        shard,
+        consume_ctx.consume_callback_timeout_ms,
+        consume_ctx.consume_callback_max_rows,
+        consume_ctx.consume_callback_max_messages_size);
 
     std::any dwal_consume_ctx{consume_ctx};
 

@@ -179,6 +179,7 @@ private:
 
     using SequencePair = std::pair<IDistributedWriteAheadLog::RecordSequenceNumber, IDistributedWriteAheadLog::RecordSequenceNumber>;
     void doCommit(Block && block, const SequencePair & seq_pair, std::any & dwal_consume_ctx);
+    void commitSN(std::any & dwal_consume_ctx);
 
 private:
     Int32 replication_factor;

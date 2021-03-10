@@ -455,7 +455,7 @@ struct ContextShared
         schedule_pool.reset();
         distributed_schedule_pool.reset();
         message_broker_schedule_pool.reset();
-        part_commit_pool.reset();
+        part_commit_pool.reset(); /// Daisy
         ddl_worker.reset();
 
         /// Stop trace collector if any
