@@ -1,6 +1,6 @@
-#include "DAEHTTPHandler.h"
+#include "RestHTTPHandler.h"
 
-#include "DAEActhion/DDL/DDLTablesAction.h"
+#include "RestAction/DDL/DDLTablesAction.h"
 #include "HTTPHandlerRequestFilter.h"
 
 #include <Compression/CompressedReadBuffer.h>
@@ -25,10 +25,10 @@
 
 namespace DB
 {
-std::map<std::string, std::function<IDAEAction *()>> IDAEFactory::dyn_acthion_map;
+std::map<std::string, std::function<IRestAction *()>> RestActionFactory::dyn_acthion_map;
 
 // Register DAE Achtion
-REGISTER_IDAEACTION("ddl/tables", DDLTablesAction);
+REGISTER_IREATACTION("ddl/tables", DDLTablesAction);
 
 
 static Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int exception_code)
@@ -82,13 +82,13 @@ static Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int excepti
 }
 
 
-DAEHTTPHandler::DAEHTTPHandler(IServer & server_, const std::string & name) : server(server_), log(&Poco::Logger::get(name))
+RestHTTPHandler::RestHTTPHandler(IServer & server_, const std::string & name) : server(server_), log(&Poco::Logger::get(name))
 {
     server_display_name = server.config().getString("display_name", getFQDNOrHostName());
 }
 
 
-void DAEHTTPHandler::trySendExceptionToClient(
+void RestHTTPHandler::trySendExceptionToClient(
     const std::string & s, int exception_code, HTTPServerRequest & request, HTTPServerResponse & response, Output & used_output)
 {
     try
@@ -160,9 +160,9 @@ void DAEHTTPHandler::trySendExceptionToClient(
 }
 
 
-void DAEHTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse & response)
+void RestHTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse & response)
 {
-    setThreadName("DAEHTTPHandler");
+    setThreadName("RestHTTPHandler");
     ThreadStatus thread_status;
 
     /// Should be initialized before anything,
@@ -215,7 +215,7 @@ void DAEHTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerRespon
         used_output.out->finalize();
 }
 
-void DAEHTTPHandler::executeAction(
+void RestHTTPHandler::executeAction(
     IServer & server_,
     Poco::Logger * log_,
     Context & context,
@@ -240,7 +240,7 @@ void DAEHTTPHandler::executeAction(
     }
 
     String api_category = path[CATEGORY_DEPTH - 1]; // DDL、INGEST
-    IDAEAction * obj = IDAEFactory::produce(api_category + "/" + route);
+    IRestAction * obj = RestActionFactory::produce(api_category + "/" + route);
 
     if (obj == nullptr)
     {

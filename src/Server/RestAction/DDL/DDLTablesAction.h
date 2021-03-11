@@ -1,11 +1,11 @@
 #pragma once
 #include <Poco/JSON/Parser.h>
-#include "Server/DAEActhion/IDAEAction.h"
+#include "Server/RestAction/IRestAction.h"
 
 namespace DB
 {
 
-class DDLTablesAction : public IDAEAction
+class DDLTablesAction : public IRestAction
 {
 private:
     static std::map<String, std::map<String, String>> create_schema;
@@ -28,9 +28,7 @@ private:
 
 
 public:
-    DDLTablesAction(){
-        std::cout << "create DDLTablesAction ~ " << std::endl;
-    }
+    DDLTablesAction(){}
     ~DDLTablesAction() override{}
 
     void execute(

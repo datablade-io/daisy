@@ -100,14 +100,12 @@ namespace ErrorCodes
     extern const int HTTP_LENGTH_REQUIRED;
 }
 
-class IDAEAction
+class IRestAction
 {
 
 public:
-    IDAEAction(){
-        std::cout << "create IDAEAction ~ " << std::endl;
-    }
-    virtual ~IDAEAction(){}
+    IRestAction(){}
+    virtual ~IRestAction(){}
 
     virtual void execute(
             IServer & server,
@@ -138,7 +136,7 @@ private:
 };
 
 
-class IDAEFactory
+class RestActionFactory
 {
 public:
     template<typename T>
@@ -146,11 +144,11 @@ public:
     {
         ActionRegister(const String& key)
         {
-            IDAEFactory::get().dyn_acthion_map.emplace(key, [] { return new T(); });
+            RestActionFactory::get().dyn_acthion_map.emplace(key, [] { return new T(); });
         }
     };
 
-    static IDAEAction* produce(const String& key)
+    static IRestAction* produce(const String& key)
     {
         if (dyn_acthion_map.find(key) == dyn_acthion_map.end())
             throw Exception("Invalid path name " + key + " for DAE HTTPHandler. ", ErrorCodes::UNKNOWN_FUNCTION);
@@ -158,32 +156,32 @@ public:
         return dyn_acthion_map[key]();
     }
 
-    static std::unique_ptr<IDAEAction> produceUnique(const String& key)
+    static std::unique_ptr<IRestAction> produceUnique(const String& key)
     {
-        return std::unique_ptr<IDAEAction>(produce(key));
+        return std::unique_ptr<IRestAction>(produce(key));
     }
 
-    static std::shared_ptr<IDAEAction> produceShared(const String& key)
+    static std::shared_ptr<IRestAction> produceShared(const String& key)
     {
-        return std::shared_ptr<IDAEAction>(produce(key));
+        return std::shared_ptr<IRestAction>(produce(key));
     }
 
 private:
 
-    IDAEFactory(){}
-    IDAEFactory(const IDAEFactory&) = delete;
-    IDAEFactory(IDAEFactory&&) = delete;
+    RestActionFactory(){}
+    RestActionFactory(const RestActionFactory&) = delete;
+    RestActionFactory(RestActionFactory&&) = delete;
 
-    static IDAEFactory& get()
+    static RestActionFactory& get()
     {
-        static IDAEFactory instance;
+        static RestActionFactory instance;
         return instance;
     }
 
-    static std::map<String, std::function<IDAEAction*()>> dyn_acthion_map;
+    static std::map<String, std::function<IRestAction*()>> dyn_acthion_map;
 };
 
 #define REGISTER_ACTION_VNAME(T) regist_action_##T##_
-#define REGISTER_IDAEACTION(key, T) static IDAEFactory::ActionRegister<T> REGISTER_ACTION_VNAME(T)(key);
+#define REGISTER_IREATACTION(key, T) static RestActionFactory::ActionRegister<T> REGISTER_ACTION_VNAME(T)(key);
 }
 

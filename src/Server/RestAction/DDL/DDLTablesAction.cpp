@@ -1,5 +1,5 @@
 #include "DDLTablesAction.h"
-#include "Server/DAEActhion/Common/SchemaValidator.h"
+#include "Server/RestAction/Common/SchemaValidator.h"
 #include <vector>
 #include <Core/BaseSettings.h>
 #include <Poco/Path.h>
