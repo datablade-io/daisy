@@ -44,7 +44,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/QueryLog.h>
 #include <Interpreters/InterpreterSetQuery.h>
-#include <Interpreters/AddTimePickerVisitor.h>
+#include <Interpreters/AddTimeParamVisitor.h>
 #include <Interpreters/ApplyWithGlobalVisitor.h>
 #include <Interpreters/ReplaceQueryParameterVisitor.h>
 #include <Interpreters/SelectQueryOptions.h>
@@ -476,10 +476,10 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
             query = serializeAST(*ast);
         }
 
-        // Add time picker into AST
-        if (context.hasTimePicker())
+        /// Add time param into AST
+        if (!context.getTimeParam().empty())
         {
-            AddTimePickerVisitor visitor(context);
+            AddTimeParamVisitor visitor(context);
             visitor.visit(ast);
             query = serializeAST(*ast);
         }

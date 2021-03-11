@@ -805,12 +805,12 @@ bool DynamicQueryHandler::customizeQueryParam(Context & context, const std::stri
 
     if (key == "time_start")
     {
-        context.setTimePickerStart(value);
+        context.setTimeParamStart(value);
         return true;
     }
     if (key == "time_end")
     {
-        context.setTimePickerEnd(value);
+        context.setTimeParamEnd(value);
         return true;
     }
 
