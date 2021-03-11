@@ -23,10 +23,10 @@ namespace DB
 class Output;
 class IServer;
 
-class DAEHTTPHandler : public HTTPRequestHandler
+class RestHTTPHandler : public HTTPRequestHandler
 {
 public:
-    DAEHTTPHandler(IServer & server_, const std::string & name);
+    RestHTTPHandler(IServer & server_, const std::string & name);
 
     void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response) override;
 

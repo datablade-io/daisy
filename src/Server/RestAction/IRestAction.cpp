@@ -1,4 +1,4 @@
-#include "IDAEAction.h"
+#include "IRestAction.h"
 
 #include <chrono>
 #include <Compression/CompressedReadBuffer.h>
@@ -35,7 +35,7 @@
 
 namespace DB
 {
-void IDAEAction::pushDelayedResults(Output & used_output)
+void IRestAction::pushDelayedResults(Output & used_output)
 {
     std::vector<WriteBufferPtr> write_buffers;
     std::vector<ReadBufferPtr> read_buffers;
@@ -91,7 +91,7 @@ static std::chrono::steady_clock::duration parseSessionTimeout(const Poco::Util:
     return std::chrono::seconds(session_timeout);
 }
 
-void IDAEAction::executeByQuery(
+void IRestAction::executeByQuery(
     IServer & server,
     Poco::Logger * log,
     Context & context,
