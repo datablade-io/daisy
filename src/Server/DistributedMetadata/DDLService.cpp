@@ -221,6 +221,88 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
     return ErrorCodes::UNKNOWN_EXCEPTION;
 }
 
+Int32 DDLService::postRequest(const Poco::JSON::Object & payload, const Poco::URI & uri) const
+{
+    /// One second for connect/send/receive
+    ConnectionTimeouts timeouts({1, 0}, {1, 0}, {1, 0});
+
+    PooledHTTPSessionPtr session;
+    try
+    {
+        session = makePooledHTTPSession(uri, timeouts, 1);
+        Poco::Net::HTTPRequest request{Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
+        request.setHost(uri.getHost());
+        request.setChunkedTransferEncoding(true);
+
+        std::stringstream data_str_stream;
+        payload.stringify(data_str_stream);
+        request.add("data", data_str_stream.str());
+
+        auto ostr = &session->sendRequest(request);
+
+        if (!ostr->good())
+        {
+            LOG_ERROR(log, "Failed to execute table statement={} on uri={}", data_str_stream.str(), uri.toString());
+            return ErrorCodes::UNKNOWN_EXCEPTION;
+        }
+
+        Poco::Net::HTTPResponse response;
+        /// FIXME: handle table exists, table not exists etc error explicitly
+        auto & istr = session->receiveResponse(response);
+        auto status = response.getStatus();
+        if (status == Poco::Net::HTTPResponse::HTTP_OK || status == Poco::Net::HTTPResponse::HTTP_CREATED || status == Poco::Net::HTTPResponse::HTTP_ACCEPTED)
+        {
+            LOG_INFO(log, "Executed table statement={} on uri={} successfully", data_str_stream.str(), uri.toString());
+            return ErrorCodes::OK;
+        }
+        else
+        {
+            std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
+            error_message << istr.rdbuf();
+            /// FIXME, revise HTTP status code for the legacy HTTP API
+            const auto & msg = error_message.str();
+            if (msg.find("Code: 57") != std::string_view::npos)
+            {
+                /// Table already exists. FIXME: enhance table creation idempotent by adding query id
+                return ErrorCodes::UNRETRIABLE_ERROR;
+            }
+
+            /// FIXME, other un-retriable error codes
+            return ErrorCodes::UNKNOWN_EXCEPTION;
+        }
+    }
+    catch (const Poco::Exception & e)
+    {
+        if (!session.isNull())
+        {
+            session->attachSessionData(e.message());
+        }
+
+        LOG_ERROR(
+            log,
+            "Failed to execute table on uri={} error={} exception={}",
+            uri.toString(),
+            e.message(),
+            getCurrentExceptionMessage(true, true));
+
+        /// FIXME, more error code handling
+        auto code = e.code();
+        if (code == 1000 || code == 422)
+        {
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
+    }
+    catch (...)
+    {
+        LOG_ERROR(
+            log,
+            "Failed to execute table on uri={} exception={}",
+            uri.toString(),
+            getCurrentExceptionMessage(true, true));
+    }
+    return ErrorCodes::UNKNOWN_EXCEPTION;
+}
+
 /// Try indefininitely
 Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
 {
@@ -249,6 +331,33 @@ Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
     return err;
 }
 
+Int32 DDLService::doTable(const Poco::JSON::Object payload, const Poco::URI & uri) const
+{
+    /// FIXME, retry several times and report error
+    Int32 err = ErrorCodes::OK;
+
+    while (!stopped.test())
+    {
+        try
+        {
+            err = postRequest(payload, uri);
+            if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
+            {
+                return err;
+            }
+        }
+        catch (...)
+        {
+            LOG_ERROR(
+                log, "Failed to send request to uri={} exception={}", uri.toString(), getCurrentExceptionMessage(true, true));
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+
+    return err;
+}
+
 void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 {
     Block & block = record->block;
@@ -266,6 +375,10 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     Int32 replication_factor = block.getByName("replication_factor").column->getInt(0);
     String query_id = block.getByName("query_id").column->getDataAt(0).toString();
     String user = block.getByName("user").column->getDataAt(0).toString();
+
+    String data = block.getByName("payload").column->getDataAt(0).toString();
+    Poco::JSON::Parser parser;
+    Poco::JSON::Object::Ptr payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
 
     /// FIXME : check with catalog to see if this DDL is fufilled
     /// Build a data structure to cached last 10000 DDLs, check aginst this data structure
@@ -293,7 +406,9 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             {
                 /// FIXME, check table engine, grammar check
                 String create_query = query + ", shard=" + std::to_string(j);
-                auto err = doTable(create_query, target_hosts[i * replication_factor + j]);
+                payload->set("shard", std::to_string(j));
+//                auto err = doTable(create_query, target_hosts[i * replication_factor + j]);
+                auto err = doTable(*payload, target_hosts[i * replication_factor + j]);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
                     failDDL(query_id, user, query, "Unable to fulfill the request due to unrecoverable failure");
