@@ -250,12 +250,12 @@ inline IDistributedWriteAheadLog::RecordPtr kafkaMsgToRecord(rd_kafka_message_t 
     }
 
     record->sn = msg->offset;
-    record->ctx = msg->partition;
+    record->partition_key = msg->partition;
 
     rd_kafka_headers_t *hdrs = nullptr;
     if (rd_kafka_message_headers(msg, &hdrs) == RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        /// has header, shall have only one header
+        /// Has header, shall have only one header
         const void * value = nullptr;
         size_t size = 0;
         if (rd_kafka_header_get(hdrs, 0, IDEM_HEADER_NAME, &value, &size) == RD_KAFKA_RESP_ERR_NO_ERROR)

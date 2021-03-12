@@ -17,7 +17,7 @@ public:
     virtual ~PlacementService() override = default;
 
     std::vector<String> place(Int32 shards, Int32 replication_factor, const String & colocated_table) const;
-    std::vector<String> placed(const String & table) const;
+    std::vector<String> placed(const String & database, const String & table) const;
 
 private:
     void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
