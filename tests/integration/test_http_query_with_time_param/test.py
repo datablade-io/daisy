@@ -31,7 +31,7 @@ def prepare_data():
     for d in range(0, 5):
         for i in range(5):
             instance.query("""
-            INSERT INTO B(_time, n) VALUES('2021-01-2{date}', 123)
+            INSERT INTO B(_time, n) VALUES('2021-01-2{date}', 456)
             """.format(date=d))
 
 @pytest.fixture(scope="module", autouse=True)
@@ -98,6 +98,30 @@ def setup_nodes():
             "params":{
                 "time_start": "'2021-01-20'",
                 "time_end": "'2021-01-25'"
+            }
+        }
+    ),
+    (
+        "SELECT count(1) FROM (SELECT _time FROM A "
+        "WHERE _time >= '2021-01-20 00:00:00.000' AND _time < '2021-01-25 00:00:00.000' "
+        "UNION ALL SELECT _time FROM B)",
+        {
+            "query": "SELECT count(1) FROM (SELECT _time FROM A UNION ALL SELECT _time FROM B)",
+            "params":{
+                "time_start": "'2021-01-20'",
+                "time_end": "'2021-01-25'"
+            }
+        }
+    ),
+    (
+        "SELECT count(1) FROM (SELECT * FROM A "
+        "WHERE _time >= '2021-01-21 00:00:00.000' AND _time < '2021-01-23 00:00:00.000')",
+        {
+            "query": "SELECT count(1) FROM (SELECT _time FROM A "
+                     "WHERE _time >= '2021-01-20 00:00:00.000' AND _time < '2021-01-25 00:00:00.000')",
+            "params":{
+                "time_start": "'2021-01-21'",
+                "time_end": "'2021-01-23'"
             }
         }
     )
