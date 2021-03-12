@@ -222,6 +222,6 @@ private:
     mutable std::mutex rng_mutex;
     pcg64 rng;
 
-    std::atomic_flag stopped;
+    std::atomic_flag stopped = ATOMIC_FLAG_INIT;
 };
 }
