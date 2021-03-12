@@ -71,9 +71,9 @@ std::vector<String> PlacementService::place(Int32 shards, Int32 replication_fact
     return std::vector<String>{hosts.begin(), hosts.begin() + total_replicas};
 }
 
-std::vector<String> PlacementService::placed(const String & table) const
+std::vector<String> PlacementService::placed(const String & database, const String & table) const
 {
-    auto tables{catalog.findTableByName(table)};
+    auto tables{catalog.findTableByName(database, table)};
 
     std::vector<String> hosts;
     hosts.reserve(tables.size());

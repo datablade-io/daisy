@@ -357,11 +357,12 @@ void DDLService::mutateTable(const Block & block) const
     }
 
     String query = block.getByName("ddl").column->getDataAt(0).toString();
+    String database = block.getByName("database").column->getDataAt(0).toString();
     String table = block.getByName("table").column->getDataAt(0).toString();
     String query_id = block.getByName("query_id").column->getDataAt(0).toString();
     String user = block.getByName("user").column->getDataAt(0).toString();
 
-    std::vector<Poco::URI> target_hosts{toURIs(placement.placed(table))};
+    std::vector<Poco::URI> target_hosts{toURIs(placement.placed(database, table))};
 
     if (target_hosts.empty())
     {
