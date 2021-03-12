@@ -72,8 +72,6 @@ public:
 
         String idempotent_key;
 
-        std::any ctx;
-
         bool empty() const { return block.rows() == 0; }
 
         static UInt8 ALWAYS_INLINE version(UInt64 flags)
