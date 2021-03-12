@@ -17,7 +17,11 @@ class CatalogService final : public MetadataService
 public:
     struct Table
     {
+        /// `host` is network reachable like hostname, FQDN or IP
         String host;
+        /// host_identity can be unique uuid
+        String host_identity;
+
         String database;
         String name;
         String uuid;
@@ -42,6 +46,7 @@ public:
     };
 
     using TablePtr = std::shared_ptr<Table>;
+    using TablePtrs = std::vector<std::shared_ptr<Table>>;
 
 public:
     static CatalogService & instance(Context & context_);
@@ -53,10 +58,16 @@ public:
     /// to CatalogService role nodes
     void broadcast();
 
-    std::vector<TablePtr> findTableByName(const String & table) const;
+    std::vector<TablePtr> findTableByName(const String & database, const String & table) const;
     std::vector<TablePtr> findTableByHost(const String & host) const;
-    bool tableExists(const String & table) const;
+    std::vector<TablePtr> findTableByDB(const String & database) const;
+
+    bool tableExists(const String & database, const String & table) const;
+
     std::vector<TablePtr> tables() const;
+    std::vector<String> databases() const;
+
+    /// FIXME : remove `hosts` when Placement service is ready
     std::vector<String> hosts() const;
 
 private:
@@ -73,18 +84,26 @@ private:
     void append(Block && block);
 
 private:
-    using Pair = std::pair<String, Int32>; /// (table name, shard number)
-    using TableInnerContainer = std::unordered_map<Pair, TablePtr, boost::hash<Pair>>;
-    using TableContainer = std::unordered_map<String, TableInnerContainer>;
+    using HostShard = std::pair<String, Int32>;
+    using TableShard = std::pair<String, Int32>;
+    using DatabaseTable = std::pair<String, String>;
+    using DatabaseTableShard = std::pair<String, TableShard>;
 
-    TableInnerContainer buildCatalog(const String & host, const Block & bock);
-    void mergeCatalog(const String & host, TableInnerContainer snapshot);
+    /// In the cluster, (database, table, shard) is unique
+    using TableContainerPerHost = std::unordered_map<DatabaseTableShard, TablePtr, boost::hash<DatabaseTableShard>>;
+
+    TableContainerPerHost buildCatalog(const String & host, const Block & bock);
+    void mergeCatalog(const String & host, TableContainerPerHost snapshot);
 
 private:
+    using TableContainerByHostShard = std::unordered_map<HostShard, TablePtr, boost::hash<HostShard>>;
+
     mutable std::shared_mutex rwlock;
-    /// indexed by table name which is enfored to
-    /// be unique across the whole system / cluster
-    TableContainer indexedByName; /// (tablename, (host, shard))
-    TableContainer indexedByHost; /// (host, (tablename, shard))
+
+    /// (database, table) -> ((host, shard) -> TablePtr))
+    std::unordered_map<DatabaseTable, TableContainerByHostShard, boost::hash<DatabaseTable>> indexedByName;
+
+    /// host -> ((database, table, shard) -> TablePtr))
+    std::unordered_map<String, TableContainerPerHost> indexedByHost;
 };
 }

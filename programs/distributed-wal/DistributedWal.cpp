@@ -770,7 +770,7 @@ void doConsume(IDistributedWriteAheadLog::RecordPtrs records, void * data)
     {
         lock_guard<mutex> lock(cctx->stdout_mutex);
 
-        cout << "partition=" << std::any_cast<Int32>(record->ctx) << " offset=" << record->sn << " idem=" << record->idempotent_key << endl;
+        cout << "partition=" << record->partition_key << " offset=" << record->sn << " idem=" << record->idempotent_key << endl;
         dumpData(record->block);
     }
 
