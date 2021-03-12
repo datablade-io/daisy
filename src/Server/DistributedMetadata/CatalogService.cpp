@@ -12,6 +12,8 @@
 
 #include <Poco/Util/AbstractConfiguration.h>
 
+#include <regex>
+
 
 namespace DB
 {
@@ -29,6 +31,18 @@ namespace
     const String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
     const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
     const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
+
+    Int32 parseShard(const String & engine_full)
+    {
+        /// shard = <shard_number>
+        static std::regex shard_regex("shard\\s*=\\s*(\\d+)");
+
+        std::smatch shard_match;
+
+        assert(std::regex_search(engine_full, shard_match, shard_regex));
+
+        return std::stoi(shard_match.str(1));
+    }
 }
 
 CatalogService & CatalogService::instance(Context & context)
@@ -313,7 +327,11 @@ CatalogService::TableContainerPerHost CatalogService::buildCatalog(const String 
             }
         }
 
-        /// FIXME; parsing `shard` in `create_table_query`
+        if (table->engine == "DistributedMergeTree")
+        {
+            table->shard = parseShard(table->engine_full);
+        }
+
         DatabaseTableShard key = std::make_pair(table->database, std::make_pair(table->name, table->shard));
         snapshot.emplace(std::move(key), std::move(table));
 
