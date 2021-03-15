@@ -10,7 +10,6 @@
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <IO/HTTPCommon.h>
 #include <Interpreters/Context.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <common/logger_useful.h>
 
 #include <Poco/Net/HTTPRequest.h>
