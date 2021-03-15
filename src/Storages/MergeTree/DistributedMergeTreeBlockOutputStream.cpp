@@ -1,8 +1,8 @@
 #include "DistributedMergeTreeBlockOutputStream.h"
 
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/PartLog.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <Storages/StorageDistributedMergeTree.h>
 
 
@@ -65,11 +65,16 @@ BlocksWithShard DistributedMergeTreeBlockOutputStream::shardBlock(const Block & 
     {
         if (storage.sharding_key_expr)
         {
+            /// FIXME, if sharding key is `rand`, then we don't need shard block
+            /// since we can randomly pick one shard to ingest this block. This is
+            /// especially true when there are N shards and the block has only M rows
+            /// where N > M in which case each shard will be assigned at most 1 row
+            /// which is not good.
             return doShardBlock(block);
         }
         else
         {
-            /// randomly pick one shard to ingest this block
+            /// Randomly pick one shard to ingest this block
             shard = storage.getRandomShardIndex();
         }
     }
@@ -86,6 +91,9 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
 
     /// 1) Split block by sharding key
     BlocksWithShard blocks{shardBlock(block)};
+
+    /// FIXME, if one block is too large in size (bigger than max size of a Kafka record can have),
+    /// further split the bock
 
     const auto & ingest_mode = query_context.getIngestMode();
 

@@ -50,7 +50,7 @@
 #include <Interpreters/InterserverCredentials.h>
 #include <Interpreters/ExpressionJIT.h>
 #include <Access/AccessControlManager.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Storages/StorageReplicatedMergeTree.h>
 #include <Storages/System/attachSystemTables.h>
 #include <AggregateFunctions/registerAggregateFunctions.h>
@@ -73,10 +73,10 @@
 #include <Server/PostgreSQLHandlerFactory.h>
 #include <Server/ProtocolServerAdapter.h>
 #include <Server/HTTP/HTTPServer.h>
-#include <Server/DistributedMetadata/TaskStatusService.h>
-#include <Server/DistributedMetadata/CatalogService.h>
-#include <Server/DistributedMetadata/DDLService.h>
-#include <Server/DistributedMetadata/PlacementService.h>
+#include <DistributedMetadata/TaskStatusService.h>
+#include <DistributedMetadata/CatalogService.h>
+#include <DistributedMetadata/DDLService.h>
+#include <DistributedMetadata/PlacementService.h>
 
 
 #if !defined(ARCADIA_BUILD)
