@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IngestRestRouterHandler.h"
+#include "IngestStatusHandler.h"
 #include "RestRouterHandler.h"
 #include "TableRestRouterHandler.h"
 
@@ -30,12 +31,12 @@ public:
     {
         auto & factory = DB::RestRouterFactory::instance();
 
-        factory.registerRouterHandler("/dae/v1/ingest/(?:database\\w+)/tables/(?:table:\\w+)", "POST", [](DB::Context & query_context) {
+        factory.registerRouterHandler("/dae/v1/ingest/(?P<database>\\w+)/tables/(?P<table>\\w+)", "POST", [](DB::Context & query_context) {
             return std::make_shared<DB::IngestRestRouterHandler>(query_context);
         });
 
-        factory.registerRouterHandler("/dae/v1/ingest/statuses/(?:poll_id.+)", "GET", [](DB::Context & query_context) {
-            return std::make_shared<DB::IngestRestRouterHandler>(query_context);
+        factory.registerRouterHandler("/dae/v1/ingest/statuses/(?P<poll_id>.+)", "GET", [](DB::Context & query_context) {
+            return std::make_shared<DB::IngestStatusHandler>(query_context);
         });
 
         factory.registerRouterHandler("/dae/v1/ddl/(?P<database>\\w+)/tables", "GET/POST", [](DB::Context & query_context) {

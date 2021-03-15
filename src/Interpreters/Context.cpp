@@ -74,6 +74,7 @@
 #include <Storages/MergeTree/MergeTreeDataPartUUID.h>
 
 #include <boost/algorithm/string/join.hpp>
+#include <boost/algorithm/string/regex.hpp>
 #include <boost/algorithm/string/split.hpp>
 
 
@@ -2639,10 +2640,11 @@ void Context::setupQueryStatusPollId()
         return;
     }
 
-    /// Poll ID is composed by : (query_id, user, host, timestamp)
+    /// Poll ID is composed by : (query_id, database.table (fullName), user, host, timestamp)
     String sep = "!`$";
     std::vector<String> components;
     components.push_back(getCurrentQueryId());
+    components.push_back(getInsertionTable().getFullNameNotQuoted());
     components.push_back(getUserName());
     components.push_back(getNodeIdentity());
 
@@ -2660,7 +2662,7 @@ void Context::setupQueryStatusPollId()
     query_status_poll_id = ostr.str();
 }
 
-String Context::parseQueryStatusPollId(const String & poll_id) const
+std::vector<String> Context::parseQueryStatusPollId(const String & poll_id) const
 {
     if (poll_id.size() > 512)
     {
@@ -2670,27 +2672,27 @@ String Context::parseQueryStatusPollId(const String & poll_id) const
     std::istringstream istr(poll_id); /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     Poco::Base64Decoder decoder(istr);
     char buf[512] = {'\0'};
-    istr.read(buf, sizeof(buf));
+    decoder.read(buf, sizeof(buf));
 
-    String decoded{buf, static_cast<size_t>(istr.gcount())};
+    String decoded{buf, static_cast<size_t>(decoder.gcount())};
 
-    String sep = "!`$";
+    String sep = "!`\\$";
     std::vector<String> components;
-    boost::algorithm::split(components, decoded, boost::is_any_of(sep));
+    boost::algorithm::split_regex(components, decoded, boost::regex(sep));
 
     /// FIXME, more check for future extension
-    if (components.size() != 4)
+    if (components.size() != 5)
     {
         throw Exception("Invalid poll ID", ErrorCodes::BAD_ARGUMENTS);
     }
 
-    if (getUserName() != components[1])
-    {
-        throw Exception("User doesn't own this poll ID", ErrorCodes::ACCESS_DENIED);
-    }
+//    if (getUserName() != components[1])
+//    {
+//        throw Exception("User doesn't own this poll ID", ErrorCodes::ACCESS_DENIED);
+//    }
 
     /// FIXME, check timestamp etc
-    return components[2];
+    return components;
 }
 /// Daisy ends.
 

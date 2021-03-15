@@ -22,7 +22,9 @@ JSONCompactEachRowRowInputFormat::JSONCompactEachRowRowInputFormat(ReadBuffer & 
         const FormatSettings & format_settings_,
         bool with_names_,
         bool yield_strings_)
+        /// Daisy: starts
         : IRowInputFormat(header_, in_, std::move(params_)), format_settings(format_settings_), with_names(with_names_), yield_strings(yield_strings_), with_bracket(false)
+        /// Daisy: ends
 {
     const auto & sample = getPort().getHeader();
     size_t num_columns = sample.columns();
@@ -156,6 +158,7 @@ bool JSONCompactEachRowRowInputFormat::readRow(DB::MutableColumns &columns, DB::
 
     read_columns.assign(num_columns, false);
 
+    ///Daisy: starts
     if(*in.position() == '[')
     {
         ++in.position();
@@ -179,8 +182,8 @@ bool JSONCompactEachRowRowInputFormat::readRow(DB::MutableColumns &columns, DB::
 
     if (in.eof())
         return false;
+    ///Daisy: ends
 
-//    assertChar('[', in);
     for (size_t file_column = 0; file_column < column_indexes_for_input_fields.size(); ++file_column)
     {
         const auto & table_column = column_indexes_for_input_fields[file_column];

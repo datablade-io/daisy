@@ -1,0 +1,26 @@
+#pragma once
+
+#include <Server/RestRouterHandlers/RestRouterHandler.h>
+
+namespace DB
+{
+
+class IngestStatusHandler final : public RestRouterHandler
+{
+public:
+    explicit IngestStatusHandler(Context & query_context_) : RestRouterHandler(query_context_, "Table") {}
+    ~IngestStatusHandler() override = default;
+
+    String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
+
+private:
+    bool streaming() override { return false; }
+    void prepare();
+
+    /// send http request
+    String sendGetRequest(const Poco::URI & uri) const;
+
+    static String makeResponse(Int32 progress);
+};
+
+}
