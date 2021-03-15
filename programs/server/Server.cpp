@@ -75,7 +75,9 @@
 #include <Server/DistributedMetadata/CatalogService.h>
 #include <Server/DistributedMetadata/DDLService.h>
 #include <Server/DistributedMetadata/PlacementService.h>
-
+#include <Server/RestRouterHandlers/RestRouterFactory.h>
+#include <Server/RestRouterHandlers/Ingest/IngestRestRouterHandler.h>
+#include <Server/RestRouterHandlers/DDL/TableRestRouterHandler.h>
 
 #if !defined(ARCADIA_BUILD)
 #   include "config_core.h"
@@ -225,6 +227,19 @@ void deinitDistributedMetadataServices(DB::Context & global_context)
 
     auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
     pool.shutdown();
+}
+
+void registerRestRouterHandlers()
+{
+    auto & factory = DB::RestRouterFactory::instance();
+
+    factory.registerRouterHandler("/dae/v1/ddl/tables", [](DB::Context &query_context) {
+        return std::make_shared<DB::TableRestRouterHandler>(query_context);
+    });
+
+    factory.registerRouterHandler("/dae/v1/ingest", [](DB::Context &query_context) {
+        return std::make_shared<DB::IngestRestRouterHandler>(query_context);
+    });
 }
 
 }
@@ -1262,6 +1277,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
                         ErrorCodes::SUPPORT_IS_DISABLED};
 #endif
             });
+
+            /// Daisy : start.
+            registerRestRouterHandlers();
+            /// Daisy : end.
 
             port_name = "mysql_port";
             createServer(listen_host, port_name, listen_try, [&](UInt16 port)
