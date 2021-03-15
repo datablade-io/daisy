@@ -1,20 +1,19 @@
-#include <DataStreams/MaterializingBlockOutputStream.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
-
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnsNumber.h>
 #include <Core/ColumnWithTypeAndName.h>
+#include <DataStreams/MaterializingBlockOutputStream.h>
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
-
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 #include <Common/TerminalSize.h>
 #include <Common/ThreadPool.h>
 
-#include <fstream>
 #include <boost/program_options.hpp>
+
+#include <fstream>
 
 using namespace std;
 using namespace DB;

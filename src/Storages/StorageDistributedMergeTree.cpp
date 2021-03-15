@@ -1,12 +1,12 @@
 #include "StorageDistributedMergeTree.h"
 
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Functions/IFunction.h>
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/TreeRewriter.h>
 #include <Interpreters/createBlockSelector.h>
 #include <Processors/Pipe.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Storages/MergeTree/DistributedMergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
 #include <Common/randomSeed.h>
@@ -410,6 +410,7 @@ void StorageDistributedMergeTree::writeCallback(const IDistributedWriteAheadLog:
 }
 
 /// Merge `rhs` block to `lhs`
+/// FIXME : revisit SquashingTransform::append
 void StorageDistributedMergeTree::mergeBlocks(Block & lhs, Block & rhs)
 {
     auto lhs_rows = lhs.rows();

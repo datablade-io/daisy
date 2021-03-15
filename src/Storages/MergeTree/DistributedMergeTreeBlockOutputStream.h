@@ -1,7 +1,7 @@
 #pragma once
 
 #include <DataStreams/IBlockOutputStream.h>
-#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 #include <Storages/StorageInMemoryMetadata.h>
 
 

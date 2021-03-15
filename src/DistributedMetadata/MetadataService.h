@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 #include <Common/ThreadPool.h>
 
 #include <boost/noncopyable.hpp>

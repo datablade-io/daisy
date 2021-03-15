@@ -5,10 +5,11 @@
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
-#include <Storages/DistributedWriteAheadLog/ByteVector.h>
-#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+#include <DistributedWriteAheadLog/ByteVector.h>
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 
 #include <gtest/gtest.h>
+
 
 using namespace DB;
 using namespace std;
