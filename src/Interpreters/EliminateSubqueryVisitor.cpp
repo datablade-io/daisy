@@ -32,7 +32,7 @@ void EliminateSubqueryVisitor::visit(ASTPtr & ast)
 
 void EliminateSubqueryVisitor::visit(ASTSelectQuery & select_query)
 {
-    // skip "join" case
+    /// ignore "join" case
     if (select_query.tables() == nullptr || select_query.tables()->children.size() != 1)
     {
         return;
@@ -70,7 +70,7 @@ void EliminateSubqueryVisitor::visit(ASTTableExpression & tableExpression, ASTSe
         }
         if (auto * sub_query = select_with_union_query->list_of_selects->children.at(0)->as<ASTSelectQuery>())
         {
-            // handle sub query in table expression recursively
+            /// handle sub query in table expression recursively
             visit(*sub_query);
 
             if (sub_query->groupBy() || sub_query->having() || sub_query->orderBy() || sub_query->limitBy() || sub_query->limitByLength()
@@ -78,7 +78,7 @@ void EliminateSubqueryVisitor::visit(ASTTableExpression & tableExpression, ASTSe
                 || sub_query->with())
                 return;
 
-            // try to eliminate subquery
+            /// try to eliminate subquery
             if (!mergeColumns(parent_select, *sub_query))
             {
                 return;
@@ -133,7 +133,7 @@ void EliminateSubqueryVisitor::rewriteColumns(ASTPtr & astPtr, std::unordered_ma
 
 bool EliminateSubqueryVisitor::mergeColumns(ASTSelectQuery & parent_query, ASTSelectQuery & child_query)
 {
-    // select sum(b) from (select id as b from table)
+    /// select sum(b) from (select id as b from table)
     std::unordered_map<std::string, ASTPtr> subquery_selects;
     for (auto & column : child_query.select()->children)
     {
@@ -150,7 +150,7 @@ bool EliminateSubqueryVisitor::mergeColumns(ASTSelectQuery & parent_query, ASTSe
             return false;
         }
     }
-    // try to merge select columns
+    /// try to merge select columns
     for (auto & parent_select_item : parent_query.select()->children)
     {
         rewriteColumns(parent_select_item, subquery_selects);
