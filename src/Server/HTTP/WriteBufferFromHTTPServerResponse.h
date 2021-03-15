@@ -17,8 +17,7 @@
 namespace DB
 {
 
-enum class SendProgressMode
-{
+enum class SendProgressMode {
     progress_none,
     progress_via_header,
     progress_via_body

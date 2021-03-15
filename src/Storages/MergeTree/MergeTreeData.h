@@ -732,8 +732,6 @@ public:
     std::optional<JobAndPool> getDataMovingJob();
     bool areBackgroundMovesNeeded() const;
 
-    bool isVirtual() const { return relative_data_path.empty(); }
-
 protected:
 
     friend class IMergeTreeDataPart;

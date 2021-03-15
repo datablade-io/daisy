@@ -510,8 +510,6 @@ class IColumn;
     M(Bool, output_format_write_statistics, true, "Write statistics about read rows, bytes, time elapsed in suitable output formats.", 0) \
     M(Bool, output_format_pretty_row_numbers, false, "Add row numbers before each row for pretty output format", 0) \
     M(Bool, insert_distributed_one_random_shard, false, "If setting is enabled, inserting into distributed table will choose a random shard to write when there is no sharding key", 0) \
-    M(Bool, disable_distributed, false, "If setting is enabled and distributed mode will be disabled for debug and test only", 0) \
-    M(UInt64, part_commit_pool_size, 8, "Total shared thread pool size for building and committing parts for DistributedMergeTree table engine", 0) \
 
 
 // End of FORMAT_FACTORY_SETTINGS

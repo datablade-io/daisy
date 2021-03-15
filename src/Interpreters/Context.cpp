@@ -2,8 +2,6 @@
 #include <set>
 #include <optional>
 #include <memory>
-#include <Poco/Base64Encoder.h>
-#include <Poco/Base64Decoder.h>
 #include <Poco/Mutex.h>
 #include <Poco/UUID.h>
 #include <Poco/Net/IPAddress.h>
@@ -62,15 +60,11 @@
 #include <Common/ZooKeeper/ZooKeeper.h>
 #include <Common/ShellCommand.h>
 #include <Common/TraceCollector.h>
-#include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 #include <Common/RemoteHostFilter.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Storages/MergeTree/BackgroundJobsExecutor.h>
 #include <Storages/MergeTree/MergeTreeDataPartUUID.h>
-
-#include <boost/algorithm/string/join.hpp>
-#include <boost/algorithm/string/split.hpp>
 
 
 namespace ProfileEvents
@@ -108,7 +102,6 @@ namespace ErrorCodes
     extern const int SESSION_IS_LOCKED;
     extern const int LOGICAL_ERROR;
     extern const int NOT_IMPLEMENTED;
-    extern const int ACCESS_DENIED;
 }
 
 
@@ -350,7 +343,6 @@ struct ContextShared
     ConfigurationPtr users_config;                          /// Config with the users, profiles and quotas sections.
     InterserverIOHandler interserver_io_handler;            /// Handler for interserver communication.
 
-    mutable std::optional<ThreadPool> part_commit_pool; /// Daisy: A thread pool that can build part and commit in background (used for DistributedMergeTree table engine)
     mutable std::optional<BackgroundSchedulePool> buffer_flush_schedule_pool; /// A thread pool that can do background flush for Buffer tables.
     mutable std::optional<BackgroundSchedulePool> schedule_pool;    /// A thread pool that can run different jobs in background (used in replicated tables)
     mutable std::optional<BackgroundSchedulePool> distributed_schedule_pool; /// A thread pool that can run different jobs in background (used for distributed sends)
@@ -366,7 +358,6 @@ struct ContextShared
 
     std::optional<MergeTreeSettings> merge_tree_settings;   /// Settings of MergeTree* engines.
     std::optional<MergeTreeSettings> replicated_merge_tree_settings;   /// Settings of ReplicatedMergeTree* engines.
-    std::optional<MergeTreeSettings> distributed_merge_tree_settings;   /// Settings of DistributedMergeTree* engines.
     std::atomic_size_t max_table_size_to_drop = 50000000000lu; /// Protects MergeTree tables from accidental DROP (50GB by default)
     std::atomic_size_t max_partition_size_to_drop = 50000000000lu; /// Protects MergeTree partitions from accidental DROP (50GB by default)
     String format_schema_path;                              /// Path to a directory that contains schema files used by input formats.
@@ -455,7 +446,6 @@ struct ContextShared
         schedule_pool.reset();
         distributed_schedule_pool.reset();
         message_broker_schedule_pool.reset();
-        part_commit_pool.reset(); /// Daisy
         ddl_worker.reset();
 
         /// Stop trace collector if any
@@ -2102,22 +2092,6 @@ const MergeTreeSettings & Context::getReplicatedMergeTreeSettings() const
     return *shared->replicated_merge_tree_settings;
 }
 
-const MergeTreeSettings & Context::getDistributedMergeTreeSettings() const
-{
-    auto lock = getLock();
-
-    if (!shared->distributed_merge_tree_settings)
-    {
-        const auto & config = getConfigRef();
-        MergeTreeSettings mt_settings;
-        mt_settings.loadFromConfig("merge_tree", config);
-        mt_settings.loadFromConfig("distributed_merge_tree", config);
-        shared->distributed_merge_tree_settings.emplace(mt_settings);
-    }
-
-    return *shared->distributed_merge_tree_settings;
-}
-
 const StorageS3Settings & Context::getStorageS3Settings() const
 {
 #if !defined(ARCADIA_BUILD)
@@ -2609,101 +2583,5 @@ PartUUIDsPtr Context::getIgnoredPartUUIDs()
 
     return ignored_part_uuids;
 }
-
-/// Daisy starts.
-bool Context::isDistributed() const
-{
-    if (getSettingsRef().disable_distributed)
-    {
-        /// distributed mode has been disabled
-        return false;
-    }
-
-    /// Check if `system_settings.system_dwals` has been configured
-    Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
-    getConfigRef().keys("system_settings.system_dwals", sys_dwal_keys);
-    return !sys_dwal_keys.empty();
-}
-
-ThreadPool & Context::getPartCommitPool() const
-{
-    auto lock = getLock();
-    if (!shared->part_commit_pool)
-        /// FIXME, queue size may matter
-        shared->part_commit_pool.emplace(settings.part_commit_pool_size);
-    return *shared->part_commit_pool;
-}
-
-void Context::setupNodeIdentity()
-{
-    if (!node_identity.empty())
-    {
-        return;
-    }
-
-    node_identity = getFQDNOrHostName();
-}
-
-void Context::setupQueryStatusPollId()
-{
-    if (!query_status_poll_id.empty())
-    {
-        return;
-    }
-
-    /// Poll ID is composed by : (query_id, user, host, timestamp)
-    String sep = "!`$";
-    std::vector<String> components;
-    components.push_back(getCurrentQueryId());
-    components.push_back(getUserName());
-    components.push_back(getNodeIdentity());
-
-    auto now = std::chrono::system_clock::now().time_since_epoch();
-    auto milli_now = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-    components.push_back(std::to_string(milli_now));
-
-    /// FIXME, encrypt it
-    std::ostringstream ostr; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    Poco::Base64Encoder encoder(ostr);
-    encoder.rdbuf()->setLineLength(0);
-    encoder << boost::algorithm::join(components, sep);
-    encoder.close();
-
-    query_status_poll_id = ostr.str();
-}
-
-String Context::parseQueryStatusPollId(const String & poll_id) const
-{
-    if (poll_id.size() > 512)
-    {
-        throw Exception("Invalid poll ID", ErrorCodes::BAD_ARGUMENTS);
-    }
-
-    std::istringstream istr(poll_id); /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    Poco::Base64Decoder decoder(istr);
-    char buf[512] = {'\0'};
-    istr.read(buf, sizeof(buf));
-
-    String decoded{buf, static_cast<size_t>(istr.gcount())};
-
-    String sep = "!`$";
-    std::vector<String> components;
-    boost::algorithm::split(components, decoded, boost::is_any_of(sep));
-
-    /// FIXME, more check for future extension
-    if (components.size() != 4)
-    {
-        throw Exception("Invalid poll ID", ErrorCodes::BAD_ARGUMENTS);
-    }
-
-    if (getUserName() != components[1])
-    {
-        throw Exception("User doesn't own this poll ID", ErrorCodes::ACCESS_DENIED);
-    }
-
-    /// FIXME, check timestamp etc
-    return components[2];
-}
-/// Daisy ends.
 
 }

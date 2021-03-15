@@ -11,13 +11,6 @@
 
 #include <Core/Defines.h>
 #include <Core/Settings.h>
-#include <Core/ColumnWithTypeAndName.h>
-
-#include <Columns/ColumnString.h>
-#include <Columns/ColumnVector.h>
-#include <Columns/ColumnsNumber.h>
-#include <DataTypes/DataTypeString.h>
-#include <DataTypes/DataTypesNumber.h>
 
 #include <IO/WriteBufferFromFile.h>
 #include <IO/WriteHelpers.h>
@@ -32,15 +25,9 @@
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/formatAST.h>
 #include <Parsers/parseQuery.h>
-#include <Parsers/queryToString.h>
 
 #include <Storages/StorageFactory.h>
 #include <Storages/StorageInMemoryMetadata.h>
-#include <Storages/StorageDistributedMergeTree.h>
-
-#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
-#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 
 #include <Interpreters/Context.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>
@@ -99,8 +86,6 @@ namespace ErrorCodes
     extern const int PATH_ACCESS_DENIED;
     extern const int NOT_IMPLEMENTED;
     extern const int UNKNOWN_TABLE;
-    extern const int CONFIG_ERROR;
-    extern const int OK;
 }
 
 namespace fs = std::filesystem;
@@ -803,131 +788,6 @@ void InterpreterCreateQuery::assertOrSetUUID(ASTCreateQuery & create, const Data
     }
 }
 
-BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_database, ASTCreateQuery & create, bool & handled)
-{
-    handled = false;
-    if (!context.isDistributed())
-    {
-        return {};
-    }
-
-    if (create.storage == nullptr || create.storage->engine->name != "DistributedMergeTree")
-    {
-        /// We only support `DistributedMergeTree` table engine for now
-        return {};
-    }
-
-    assert(!context.getCurrentQueryId().empty());
-
-    auto * log = &Poco::Logger::get("InterpreterCreateQuery");
-
-    TableProperties properties = setProperties(create);
-
-    if (create.database.empty())
-    {
-        create.database = current_database;
-    }
-
-    /// More verification happened in storage engine creation
-    auto res = StorageFactory::instance().get(
-        create, "" /* virtual */, context, context.getGlobalContext(), properties.columns, properties.constraints, false);
-
-    auto storage = typeid_cast<StorageDistributedMergeTree*>(res.get());
-    if (storage->currentShard() >= 0)
-    {
-        LOG_INFO(log, "Local DistributedMergeTree table creation with shard assigned");
-        return {};
-    }
-
-    auto query = queryToString(create);
-    auto wal = DistributedWriteAheadLogPool::instance(context.getGlobalContext()).getDefault();
-    if (!wal)
-    {
-        LOG_ERROR(
-            log,
-            "Failed to execute query={}, query_id={}. Distributed environment is not setup. Unable to create table with "
-            "DistributedMergeTree engine",
-            query,
-            context.getCurrentQueryId());
-        throw Exception(
-            "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
-    }
-
-    Block block;
-    /// Schema: (ddl, database, table, shards, replication_factor, timestamp, query_id, user)
-
-    std::vector<std::pair<String, String>> string_cols = {
-        std::make_pair("ddl", query),
-        std::make_pair("database", current_database),
-        std::make_pair("table", create.table),
-        std::make_pair("query_id", context.getCurrentQueryId()),
-        std::make_pair("user", context.getUserName()),
-    };
-
-    auto string_type = std::make_shared<DataTypeString>();
-    for (const auto & p : string_cols)
-    {
-        auto col = string_type->createColumn();
-        col->insertData(p.second.data(), p.second.size());
-        ColumnWithTypeAndName col_with_type(std::move(col), string_type, p.first);
-        block.insert(col_with_type);
-    }
-
-    Int32 shards = storage->getShards();
-    Int32 replication_factor = storage->getReplicationFactor();
-
-    std::vector<std::pair<String, Int32>> int32_cols = {
-        std::make_pair("shards", shards),
-        std::make_pair("replication_factor", replication_factor),
-    };
-
-    auto int32_type = std::make_shared<DataTypeInt32>();
-    for (const auto & p : int32_cols)
-    {
-        auto col = int32_type->createColumn();
-        auto int32_col = typeid_cast<ColumnInt32 *>(col.get());
-        int32_col->insertValue(p.second);
-        ColumnWithTypeAndName col_with_type(std::move(col), int32_type, p.first);
-        block.insert(col_with_type);
-    }
-
-    auto now = std::chrono::system_clock::now().time_since_epoch();
-    std::vector<std::pair<String, UInt64>> uint64_cols = {
-        /// Milliseconds since epoch
-        std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
-    };
-
-    auto uint64_type = std::make_shared<DataTypeUInt64>();
-    for (const auto & p : uint64_cols)
-    {
-        auto col = uint64_type->createColumn();
-        auto uint64_col = typeid_cast<ColumnUInt64 *>(col.get());
-        uint64_col->insertValue(p.second);
-        ColumnWithTypeAndName col_with_type(std::move(col), uint64_type, p.first);
-        block.insert(col_with_type);
-    }
-
-    LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, context.getCurrentQueryId());
-
-    const auto & config = context.getGlobalContext().getConfigRef();
-    auto topic = config.getString("system_settings.system_ddl_dwal.name");
-    std::any ctx{DistributedWriteAheadLogKafkaContext{topic}};
-
-    IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::CREATE_TABLE, std::move(block)};
-
-    auto result = wal->append(record, ctx);
-    if (result.err != ErrorCodes::OK)
-    {
-        LOG_ERROR(log, "Failed to create DistributedMergeTree query={} query_id={} error={}", query, context.getCurrentQueryId(), result.err);
-        throw Exception("Failed to create DistributedMergeTree", result.err);
-    }
-
-    LOG_INFO(log, "Request of creating DistributedMergeTree query={} query_id={} has been accepted", query, context.getCurrentQueryId());
-
-    /// FIXME, project tasks status
-    handled = true;
-    return {};
-}
 
 BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
 {
@@ -938,15 +798,6 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
 
     String current_database = context.getCurrentDatabase();
     auto database_name = create.database.empty() ? current_database : create.database;
-
-    /// Daisy : start
-    bool handled = false;
-    auto res = createTableDistributed(database_name, create, handled);
-    if (handled)
-    {
-        return res;
-    }
-    /// Daisy : end
 
     // If this is a stub ATTACH query, read the query definition from the database
     if (create.attach && !create.storage && !create.columns_list)
