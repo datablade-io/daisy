@@ -37,9 +37,10 @@
 #include <Storages/StorageFactory.h>
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Storages/StorageDistributedMergeTree.h>
-#include <Storages/DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
+
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 
 #include <Interpreters/Context.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>

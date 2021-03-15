@@ -1,8 +1,8 @@
 #include "MetadataService.h"
 
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Interpreters/Context.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Common/setThreadName.h>
 #include <common/logger_useful.h>
 
