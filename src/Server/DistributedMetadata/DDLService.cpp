@@ -1,571 +1,409 @@
-#include "DDLService.h"
-
 #include "CatalogService.h"
-#include "PlacementService.h"
-#include "TaskStatusService.h"
 
 #include <Core/Block.h>
-#include <Core/ColumnWithTypeAndName.h>
-#include <DataTypes/DataTypeString.h>
-#include <IO/HTTPCommon.h>
+#include <DataStreams/AsynchronousBlockInputStream.h>
+#include <DataStreams/BlockIO.h>
+#include <IO/WriteBufferFromString.h>
 #include <Interpreters/Context.h>
-#include <Storages/DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <Interpreters/executeQuery.h>
+#include <Processors/Executors/PullingAsyncPipelineExecutor.h>
+#include <Common/Exception.h>
 #include <common/logger_useful.h>
 
-#include <Poco/Net/HTTPRequest.h>
 #include <Poco/Util/AbstractConfiguration.h>
 
-#include <boost/algorithm/string/join.hpp>
-#include <boost/algorithm/string/split.hpp>
+#include <regex>
 
 
 namespace DB
 {
+
 namespace ErrorCodes
 {
     extern const int OK;
-    extern const int UNKNOWN_EXCEPTION;
-    extern const int UNRETRIABLE_ERROR;
 }
 
 namespace
 {
-    /// globals
-    const String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
-    const String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
-    const String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
-    const String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";
-    const String DDL_DEFAULT_TOPIC = "__system_ddls";
+    /// Globals
+    const String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
+    const String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
+    const String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
+    const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
+    const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
+
+    Int32 parseShard(const String & engine_full)
+    {
+        /// shard = <shard_number>
+        static std::regex shard_regex("shard\\s*=\\s*(\\d+)");
+
+        std::smatch shard_match;
+
+        assert(std::regex_search(engine_full, shard_match, shard_regex));
+
+        return std::stoi(shard_match.str(1));
+    }
 }
 
-DDLService & DDLService::instance(Context & global_context_)
+CatalogService & CatalogService::instance(Context & context)
 {
-    static DDLService ddl_service{global_context_};
-    return ddl_service;
+    static CatalogService catalog{context};
+    return catalog;
 }
 
-DDLService::DDLService(Context & global_context_)
-    : MetadataService(global_context_, "DDLService")
-    , http_port(":" + global_context_.getConfigRef().getString("http_port"))
-    , catalog(CatalogService::instance(global_context_))
-    , placement(PlacementService::instance(global_context_))
-    , task(TaskStatusService::instance(global_context_))
+
+CatalogService::CatalogService(Context & global_context_) : MetadataService(global_context_, "CatalogService")
 {
 }
 
-MetadataService::ConfigSettings DDLService::configSettings() const
+MetadataService::ConfigSettings CatalogService::configSettings() const
 {
     return {
-        .name_key = DDL_NAME_KEY,
-        .default_name = DDL_DEFAULT_TOPIC,
-        .data_retention_key = DDL_DATA_RETENTION_KEY,
-        .default_data_retention = 168,
-        .replication_factor_key = DDL_REPLICATION_FACTOR_KEY,
+        .name_key = CATALOG_NAME_KEY,
+        .default_name = CATALOG_DEFAULT_TOPIC,
+        .data_retention_key = CATALOG_DATA_RETENTION_KEY,
+        .default_data_retention = -1,
+        .replication_factor_key = CATALOG_REPLICATION_FACTOR_KEY,
         .request_required_acks = -1,
         .request_timeout_ms = 10000,
         .auto_offset_reset = "earliest",
     };
 }
 
-inline void DDLService::updateDDLStatus(
-    const String & query_id,
-    const String & user,
-    const String & status,
-    const String & query,
-    const String & progress,
-    const String & reason) const
+void CatalogService::broadcast()
 {
-    auto task_status = std::make_shared<TaskStatusService::TaskStatus>();
-    task_status->id = query_id;
-    task_status->user = user;
-    task_status->status = status;
-
-    task_status->context = query;
-    task_status->progress = progress;
-    task_status->reason = reason;
-
-    task.append(task_status);
-}
-
-void DDLService::progressDDL(const String & query_id, const String & user, const String & query, const String & progress) const
-{
-    updateDDLStatus(query_id, user, TaskStatusService::TaskStatus::INPROGRESS, query, progress, "");
-}
-
-void DDLService::succeedDDL(const String & query_id, const String & user, const String & query) const
-{
-    updateDDLStatus(query_id, user, TaskStatusService::TaskStatus::SUCCEEDED, query, "", "");
-}
-
-void DDLService::failDDL(const String & query_id, const String & user, const String & query, const String reason) const
-{
-    updateDDLStatus(query_id, user, TaskStatusService::TaskStatus::FAILED, query, "", reason);
-}
-
-bool DDLService::validateSchema(const Block & block, const std::vector<String> & col_names) const
-{
-    for (const auto & col_name : col_names)
-    {
-        if (!block.has(col_name))
-        {
-            LOG_ERROR(log, "`{}` column is missing", col_name);
-
-            String query_id = block.getByName("query_id").column->getDataAt(0).toString();
-            String user = "";
-            if (block.has("user"))
-            {
-                user = block.getByName("user").column->getDataAt(0).toString();
-            }
-            failDDL(query_id, user, "", "invalid DDL");
-            return false;
-        }
-    }
-    return true;
-}
-
-inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts) const
-{
-    std::vector<Poco::URI> uris;
-    uris.reserve(hosts.size());
-
-    for (const auto & host : hosts)
-    {
-        /// FIXME : HTTP for now
-        uris.emplace_back("http://" + host + http_port);
-    }
-
-    return uris;
-}
-
-Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
-{
-    LOG_INFO(log, "Execute table statement={} on uri={}", query, uri.toString());
-
-    /// One second for connect/send/receive
-    ConnectionTimeouts timeouts({1, 0}, {1, 0}, {1, 0});
-
-    PooledHTTPSessionPtr session;
-    try
-    {
-        session = makePooledHTTPSession(uri, timeouts, 1);
-        Poco::Net::HTTPRequest request{Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
-        request.setHost(uri.getHost());
-        request.setChunkedTransferEncoding(true);
-
-        auto ostr = &session->sendRequest(request);
-        ostr->write(query.c_str(), query.size());
-        ostr->flush();
-
-        if (!ostr->good())
-        {
-            LOG_ERROR(log, "Failed to execute table statement={} on uri={}", query, uri.toString());
-            return ErrorCodes::UNKNOWN_EXCEPTION;
-        }
-
-        Poco::Net::HTTPResponse response;
-        /// FIXME: handle table exists, table not exists etc error explicitly
-        auto & istr = session->receiveResponse(response);
-        auto status = response.getStatus();
-        if (status == Poco::Net::HTTPResponse::HTTP_OK || status == Poco::Net::HTTPResponse::HTTP_CREATED || status == Poco::Net::HTTPResponse::HTTP_ACCEPTED)
-        {
-            LOG_INFO(log, "Executed table statement={} on uri={} successfully", query, uri.toString());
-            return ErrorCodes::OK;
-        }
-        else
-        {
-            std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-            error_message << istr.rdbuf();
-            /// FIXME, revise HTTP status code for the legacy HTTP API
-            const auto & msg = error_message.str();
-            if (msg.find("Code: 57") != std::string_view::npos)
-            {
-                /// Table already exists. FIXME: enhance table creation idempotent by adding query id
-                return ErrorCodes::UNRETRIABLE_ERROR;
-            }
-
-            /// FIXME, other un-retriable error codes
-            return ErrorCodes::UNKNOWN_EXCEPTION;
-        }
-    }
-    catch (const Poco::Exception & e)
-    {
-        if (!session.isNull())
-        {
-            session->attachSessionData(e.message());
-        }
-
-        LOG_ERROR(
-            log,
-            "Failed to execute table statement={} on uri={} error={} exception={}",
-            query,
-            uri.toString(),
-            e.message(),
-            getCurrentExceptionMessage(true, true));
-
-        /// FIXME, more error code handling
-        auto code = e.code();
-        if (code == 1000 || code == 422)
-        {
-            return ErrorCodes::UNRETRIABLE_ERROR;
-        }
-    }
-    catch (...)
-    {
-        LOG_ERROR(
-            log,
-            "Failed to execute table statement={} on uri={} exception={}",
-            query,
-            uri.toString(),
-            getCurrentExceptionMessage(true, true));
-    }
-    return ErrorCodes::UNKNOWN_EXCEPTION;
-}
-
-Int32 DDLService::postRequest(const Poco::JSON::Object & payload, const Poco::URI & uri) const
-{
-    /// One second for connect/send/receive
-    ConnectionTimeouts timeouts({1, 0}, {1, 0}, {1, 0});
-
-    PooledHTTPSessionPtr session;
-    try
-    {
-        session = makePooledHTTPSession(uri, timeouts, 1);
-        Poco::Net::HTTPRequest request{Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
-        request.setHost(uri.getHost());
-        request.setChunkedTransferEncoding(true);
-
-        std::stringstream data_str_stream;
-        payload.stringify(data_str_stream);
-        request.add("data", data_str_stream.str());
-
-        auto ostr = &session->sendRequest(request);
-
-        if (!ostr->good())
-        {
-            LOG_ERROR(log, "Failed to execute table statement={} on uri={}", data_str_stream.str(), uri.toString());
-            return ErrorCodes::UNKNOWN_EXCEPTION;
-        }
-
-        Poco::Net::HTTPResponse response;
-        /// FIXME: handle table exists, table not exists etc error explicitly
-        auto & istr = session->receiveResponse(response);
-        auto status = response.getStatus();
-        if (status == Poco::Net::HTTPResponse::HTTP_OK || status == Poco::Net::HTTPResponse::HTTP_CREATED || status == Poco::Net::HTTPResponse::HTTP_ACCEPTED)
-        {
-            LOG_INFO(log, "Executed table statement={} on uri={} successfully", data_str_stream.str(), uri.toString());
-            return ErrorCodes::OK;
-        }
-        else
-        {
-            std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-            error_message << istr.rdbuf();
-            /// FIXME, revise HTTP status code for the legacy HTTP API
-            const auto & msg = error_message.str();
-            if (msg.find("Code: 57") != std::string_view::npos)
-            {
-                /// Table already exists. FIXME: enhance table creation idempotent by adding query id
-                return ErrorCodes::UNRETRIABLE_ERROR;
-            }
-
-            /// FIXME, other un-retriable error codes
-            return ErrorCodes::UNKNOWN_EXCEPTION;
-        }
-    }
-    catch (const Poco::Exception & e)
-    {
-        if (!session.isNull())
-        {
-            session->attachSessionData(e.message());
-        }
-
-        LOG_ERROR(
-            log,
-            "Failed to execute table on uri={} error={} exception={}",
-            uri.toString(),
-            e.message(),
-            getCurrentExceptionMessage(true, true));
-
-        /// FIXME, more error code handling
-        auto code = e.code();
-        if (code == 1000 || code == 422)
-        {
-            return ErrorCodes::UNRETRIABLE_ERROR;
-        }
-    }
-    catch (...)
-    {
-        LOG_ERROR(
-            log,
-            "Failed to execute table on uri={} exception={}",
-            uri.toString(),
-            getCurrentExceptionMessage(true, true));
-    }
-    return ErrorCodes::UNKNOWN_EXCEPTION;
-}
-
-/// Try indefininitely
-Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
-{
-    /// FIXME, retry several times and report error
-    Int32 err = ErrorCodes::OK;
-
-    while (!stopped.test())
-    {
-        try
-        {
-            err = postRequest(query, uri);
-            if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
-            {
-                return err;
-            }
-        }
-        catch (...)
-        {
-            LOG_ERROR(
-                log, "Failed to send request={} to uri={} exception={}", query, uri.toString(), getCurrentExceptionMessage(true, true));
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    }
-
-    return err;
-}
-
-Int32 DDLService::doTable(const Poco::JSON::Object payload, const Poco::URI & uri) const
-{
-    /// FIXME, retry several times and report error
-    Int32 err = ErrorCodes::OK;
-
-    while (!stopped.test())
-    {
-        try
-        {
-            err = postRequest(payload, uri);
-            if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
-            {
-                return err;
-            }
-        }
-        catch (...)
-        {
-            LOG_ERROR(
-                log, "Failed to send request to uri={} exception={}", uri.toString(), getCurrentExceptionMessage(true, true));
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    }
-
-    return err;
-}
-
-void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
-{
-    Block & block = record->block;
-    assert(block.has("query_id"));
-
-    if (!validateSchema(block, {"ddl", "database", "table", "shards", "replication_factor", "timestamp", "query_id", "user"}))
+    if (!global_context.isDistributed())
     {
         return;
     }
 
-    String query = block.getByName("ddl").column->getDataAt(0).toString();
-    String database = block.getByName("database").column->getDataAt(0).toString();
-    String table = block.getByName("table").column->getDataAt(0).toString();
-    Int32 shards = block.getByName("shards").column->getInt(0);
-    Int32 replication_factor = block.getByName("replication_factor").column->getInt(0);
-    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
-    String user = block.getByName("user").column->getDataAt(0).toString();
-
-    String data = block.getByName("payload").column->getDataAt(0).toString();
-    Poco::JSON::Parser parser;
-    Poco::JSON::Object::Ptr payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
-
-    /// FIXME : check with catalog to see if this DDL is fufilled
-    /// Build a data structure to cached last 10000 DDLs, check aginst this data structure
-
-    /// Create a DWAL for this table. FIXME: retention_ms
-    std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table, shards, replication_factor}};
-    doCreateDWal(ctx);
-
-    if (block.has("hosts"))
+    try
     {
-        /// If `hosts` exists in the block, we already placed the replicas
-        /// then we move to the execution stage
+        doBroadcast();
+    }
+    catch (...)
+    {
+        LOG_ERROR(log, "Failed to execute table query, error={}", getCurrentExceptionMessage(true, true));
+    }
+}
 
-        String hosts_val = block.getByName("hosts").column->getDataAt(0).toString();
-        std::vector<String> hosts;
-        boost::algorithm::split(hosts, hosts_val, boost::is_any_of(","));
-        assert(hosts.size() > 0);
+void CatalogService::doBroadcast()
+{
+    assert(dwal);
 
-        std::vector<Poco::URI> target_hosts{toURIs(hosts)};
+    String query = "SELECT * FROM system.tables WHERE (database != 'system') OR (database = 'system' AND name='tables')";
 
-        /// Create table on each target host accordign to placement
-        for (Int32 i = 0; i < replication_factor; ++i)
+    /// CurrentThread::attachQueryContext(context);
+    Context context = global_context;
+    context.makeQueryContext();
+    BlockIO io{executeQuery(query, context, true /* internal */)};
+
+    if (io.pipeline.initialized())
+    {
+        processQueryWithProcessors(io.pipeline);
+    }
+    else if (io.in)
+    {
+        processQuery(io.in);
+    }
+    else
+    {
+        assert(false);
+        LOG_ERROR(log, "Failed to execute table query");
+    }
+}
+
+void CatalogService::processQueryWithProcessors(QueryPipeline & pipeline)
+{
+    PullingAsyncPipelineExecutor executor(pipeline);
+    Block block;
+
+    while (executor.pull(block, 100))
+    {
+        if (block)
         {
-            for (Int32 j = 0; j < shards; ++j)
+            append(std::move(block));
+            assert(!block);
+        }
+    }
+}
+
+void CatalogService::processQuery(BlockInputStreamPtr & in)
+{
+    AsynchronousBlockInputStream async_in(in);
+    async_in.readPrefix();
+
+    while (true)
+    {
+        if (async_in.poll(100))
+        {
+            Block block{async_in.read()};
+            if (!block)
             {
-                /// FIXME, check table engine, grammar check
-                String create_query = query + ", shard=" + std::to_string(j);
-                payload->set("shard", std::to_string(j));
-//                auto err = doTable(create_query, target_hosts[i * replication_factor + j]);
-                auto err = doTable(*payload, target_hosts[i * replication_factor + j]);
-                if (err == ErrorCodes::UNRETRIABLE_ERROR)
+                break;
+            }
+
+            append(std::move(block));
+            assert(!block);
+        }
+    }
+
+    async_in.readSuffix();
+}
+
+void CatalogService::append(Block && block)
+{
+    IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
+    record.partition_key = 0;
+    record.idempotent_key = global_context.getNodeIdentity();
+
+    /// FIXME : reschedule
+    int retries = 3;
+    while (retries--)
+    {
+        const auto & result = dwal->append(record, dwal_append_ctx);
+        if (result.err == ErrorCodes::OK)
+        {
+            LOG_INFO(log, "Appended {} table definitions in one block", record.block.rows());
+            return;
+        }
+
+        LOG_ERROR(log, "Failed to append table definition block, error={}", result.err);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    }
+}
+
+std::vector<String> CatalogService::hosts() const
+{
+    std::vector<String> results;
+
+    std::shared_lock guard(rwlock);
+    results.reserve(indexedByHost.size());
+
+    for (const auto & p : indexedByHost)
+    {
+        results.push_back(p.first);
+    }
+    return results;
+}
+
+std::vector<String> CatalogService::databases() const
+{
+    std::unordered_set<String> dbs;
+
+    {
+        std::shared_lock guard(rwlock);
+        for (const auto & p : indexedByName)
+        {
+            dbs.insert(p.first.first);
+        }
+    }
+
+    return std::vector<String>{dbs.begin(), dbs.end()};
+}
+
+std::vector<CatalogService::TablePtr> CatalogService::tables() const
+{
+    std::vector<TablePtr> results;
+
+    std::shared_lock guard(rwlock);
+
+    for (const auto & p : indexedByName)
+    {
+        for (const auto & pp : p.second)
+        {
+            results.push_back(pp.second);
+        }
+    }
+    return results;
+}
+
+std::vector<CatalogService::TablePtr> CatalogService::findTableByHost(const String & host) const
+{
+    std::vector<TablePtr> results;
+
+    std::shared_lock guard(rwlock);
+
+    auto iter = indexedByHost.find(host);
+    if (iter != indexedByHost.end())
+    {
+        for (const auto & p : iter->second)
+        {
+            results.push_back(p.second);
+        }
+    }
+    return results;
+}
+
+std::vector<CatalogService::TablePtr> CatalogService::findTableByName(const String & database, const String & table) const
+{
+    std::vector<TablePtr> results;
+
+    std::shared_lock guard(rwlock);
+
+    auto iter = indexedByName.find(std::make_pair(database, table));
+    if (iter != indexedByName.end())
+    {
+        for (const auto & p : iter->second)
+        {
+            results.push_back(p.second);
+        }
+    }
+    return results;
+}
+
+std::vector<CatalogService::TablePtr> CatalogService::findTableByDB(const String & database) const
+{
+    std::vector<TablePtr> results;
+
+    std::shared_lock guard(rwlock);
+
+    for (const auto & p : indexedByName)
+    {
+        if (p.first.first == database)
+        {
+            for (const auto & pp : p.second)
+            {
+                results.push_back(pp.second);
+            }
+        }
+    }
+
+    return results;
+}
+
+bool CatalogService::tableExists(const String & database, const String & table) const
+{
+    std::shared_lock guard(rwlock);
+
+    return indexedByName.find(std::make_pair(database, table)) != indexedByName.end();
+}
+
+CatalogService::TableContainerPerHost CatalogService::buildCatalog(const String & host, const Block & block)
+{
+    TableContainerPerHost snapshot;
+
+    for (size_t row = 0; row < block.rows(); ++row)
+    {
+        TablePtr table = std::make_shared<Table>(host);
+        std::unordered_map<String, void *> kvp = {
+            {"database", &table->database},
+            {"name", &table->name},
+            {"engine", &table->engine},
+            {"metadata_path", &table->metadata_path},
+            {"data_paths", &table->data_paths},
+            {"dependencies_database", &table->dependencies_database},
+            {"dependencies_table", &table->dependencies_table},
+            {"create_table_query", &table->create_table_query},
+            {"engine_full", &table->engine_full},
+            {"partition_key", &table->partition_key},
+            {"sorting_key", &table->sorting_key},
+            {"primary_key", &table->primary_key},
+            {"sampling_key", &table->sampling_key},
+            {"storage_policy", &table->storage_policy},
+            {"total_rows", &table->total_rows},
+            {"total_bytes", &table->total_bytes},
+        };
+
+        for (const auto & col : block)
+        {
+            auto it = kvp.find(col.name);
+            if (it != kvp.end())
+            {
+                if (col.name == "total_rows" || col.name == "total_bytes")
                 {
-                    failDDL(query_id, user, query, "Unable to fulfill the request due to unrecoverable failure");
-                    return;
+                    *static_cast<UInt64 *>(it->second) = col.column->get64(row);
+                }
+                else if (col.name == "data_paths" || col.name == "dependencies_database" || col.name == "dependencies_table")
+                {
+                    WriteBufferFromOwnString buffer;
+                    col.type->serializeAsText(*col.column->assumeMutable().get(), row, buffer, FormatSettings{});
+                    *static_cast<String *>(it->second) = buffer.str();
+                }
+                else
+                {
+                    *static_cast<String *>(it->second) = col.column->getDataAt(row).toString();
                 }
             }
         }
 
-        succeedDDL(query_id, user, query);
+        if (table->engine == "DistributedMergeTree")
+        {
+            table->shard = parseShard(table->engine_full);
+        }
+
+        DatabaseTableShard key = std::make_pair(table->database, std::make_pair(table->name, table->shard));
+        snapshot.emplace(std::move(key), std::move(table));
+
+        assert(!table);
     }
-    else
-    {
-        /// Ask placement service to do shard placement
-        std::vector<String> target_hosts{placement.place(shards, replication_factor, "")};
 
-        if (target_hosts.empty())
-        {
-            LOG_ERROR(
-                log,
-                "Failed to create table because there are not enough hosts to place its total={} shard replicas, query={} "
-                "query_id={} user={}",
-                shards * replication_factor,
-                query,
-                query_id,
-                user);
-            failDDL(query_id, user, query, "There are not enough hosts to place the table shard replicas");
-            return;
-        }
-
-        /// We got the placement, commit the placement decision
-        /// Add `hosts` column to block
-        auto string_type = std::make_shared<DataTypeString>();
-        auto host_col = string_type->createColumn();
-        String hosts{boost::algorithm::join(target_hosts, ",")};
-        host_col->insertData(hosts.data(), hosts.size());
-        ColumnWithTypeAndName host_col_with_type(std::move(host_col), string_type, "hosts");
-        block.insert(host_col_with_type);
-
-        /// FIXME, retries, error handling
-        auto result = dwal->append(*record.get(), dwal_append_ctx);
-        if (result.err != ErrorCodes::OK)
-        {
-            LOG_ERROR(log, "Failed to commit placement decision for query={}", query);
-            failDDL(query_id, user, query, "Internal server error");
-        }
-        else
-        {
-            LOG_INFO(log, "Successfully find placement for query={} placement={}", query, hosts);
-            progressDDL(query_id, user, query, "shard replicas placed");
-        }
-    }
+    return snapshot;
 }
 
-void DDLService::mutateTable(const Block & block) const
+/// Merge a snapshot of tables from one host
+void CatalogService::mergeCatalog(const String & host, TableContainerPerHost snapshot)
 {
-    assert(block.has("query_id"));
+    std::unique_lock guard(rwlock);
 
-    if (!validateSchema(block, {"ddl", "database", "table", "timestamp", "query_id", "user"}))
+    auto iter = indexedByHost.find(host);
+    if (iter == indexedByHost.end())
     {
+        /// New host. Add all tables from this host to `indexedByName`
+        for (const auto & p : snapshot)
+        {
+            indexedByName[std::make_pair(p.second->database, p.second->name)].emplace(
+                std::make_pair(p.second->host, p.second->shard), p.second);
+        }
+        indexedByHost.emplace(host, snapshot);
         return;
     }
 
-    String query = block.getByName("ddl").column->getDataAt(0).toString();
-    String database = block.getByName("database").column->getDataAt(0).toString();
-    String table = block.getByName("table").column->getDataAt(0).toString();
-    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
-    String user = block.getByName("user").column->getDataAt(0).toString();
-
-    std::vector<Poco::URI> target_hosts{toURIs(placement.placed(database, table))};
-
-    if (target_hosts.empty())
+    /// Found host. Merge existing tables from this host to `indexedByName`
+    /// and delete `deleted` table entries from `indexedByName`
+    for (const auto & p : iter->second)
     {
-        LOG_ERROR(log, "Table {} is not found, query={} query_id={} user={}", table, query, query_id, user);
-        failDDL(query_id, user, query, "Table not found");
-        return;
-    }
-
-    /// FIXME: make sure `target_hosts` is a complete list of hosts which
-    /// has this table definition (shards * replication_factor)
-
-    for (auto & uri : target_hosts)
-    {
-        doTable(query, uri);
-    }
-
-    succeedDDL(query_id, user, query);
-}
-
-void DDLService::commit(Int64 last_sn)
-{
-    /// FIXME, retries
-    try
-    {
-        auto err = dwal->commit(last_sn, dwal_consume_ctx);
-        if (likely(err == 0))
+        /// ((database, tablename, shard), table) pair
+        if (!snapshot.contains(p.first))
         {
-            LOG_INFO(log, "Successfully committed offset={}", last_sn);
+            auto iter_by_name = indexedByName.find(std::make_pair(p.second->database, p.second->name));
+            assert(iter_by_name != indexedByName.end());
+
+            /// Deleted table, remove from `indexByName`
+            auto removed = iter_by_name->second.erase(std::make_pair(p.second->host, p.second->shard));
+            assert(removed == 1);
+            (void)removed;
+        }
+    }
+
+    /// Add new tables or override existing tables in `indexedByName`
+    for (const auto & p : snapshot)
+    {
+        DatabaseTable key = std::make_pair(p.second->database, p.second->name);
+        auto iter_by_name = indexedByName.find(key);
+        if (iter_by_name == indexedByName.end())
+        {
+            /// New table
+            indexedByName[key].emplace(std::make_pair(p.second->host, p.second->shard), p.second);
         }
         else
         {
-            /// It is ok as next commit will override this commit if it makes through.
-            /// If it failed and then crashes, we will redo and we will find resource
-            /// already exists or resource not exists errors which shall be handled in
-            /// DDL processing functions. In this case, for idempotent DDL like create
-            /// table or delete table, it shall be OK. For alter table, it may depend ?
-            LOG_ERROR(log, "Failed to commit offset={} error={}", last_sn, err);
+            /// An existing table
+            indexedByName[key].insert_or_assign(std::make_pair(p.second->host, p.second->shard), p.second);
         }
     }
-    catch (...)
-    {
-        LOG_ERROR(
-            log,
-            "Failed to commit offset={} exception={}",
-            last_sn,
-            getCurrentExceptionMessage(true, true));
-    }
+
+    /// Replace all tables for this host in `indexedByHost`
+    indexedByHost[host].swap(snapshot);
 }
 
-void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
+void CatalogService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
-    for (auto & record : records)
+    for (const auto & record : records)
     {
-        if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_TABLE)
-        {
-            createTable(record);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
-        {
-            mutateTable(record->block);
+        assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
 
-            /// delete DWAL
-            String database = record->block.getByName("database").column->getDataAt(0).toString();
-            String table = record->block.getByName("table").column->getDataAt(0).toString();
-            std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table}};
-            doDeleteDWal(ctx);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
-        {
-            mutateTable(record->block);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_DATABASE)
-        {
-            assert(0);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_DATABASE)
-        {
-            assert(0);
-        }
-        else
-        {
-            assert(0);
-            LOG_ERROR(log, "Unknown operation={}", static_cast<Int32>(record->op_code));
-        }
+        mergeCatalog(record->idempotent_key, buildCatalog(record->idempotent_key, record->block));
     }
-
-    const_cast<DDLService *>(this)->commit(records.back()->sn);
-
-    /// FIXME, update DDL task status after committing offset / local offset checkpoint ...
 }
 }

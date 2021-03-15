@@ -2,7 +2,6 @@
 
 #include "MetadataService.h"
 
-#include <Poco/JSON/Parser.h>
 #include <Poco/URI.h>
 
 
@@ -31,9 +30,7 @@ private:
     std::vector<Poco::URI> toURIs(const std::vector<String> & hosts) const;
 
     Int32 postRequest(const String & query, const Poco::URI & uri) const;
-    Int32 postRequest(const Poco::JSON::Object & payload, const Poco::URI & uri) const;
     Int32 doTable(const String & query, const Poco::URI & uri) const;
-    Int32 doTable(const Poco::JSON::Object payload, const Poco::URI & uri) const;
     void createTable(IDistributedWriteAheadLog::RecordPtr record);
     void mutateTable(const Block & bock) const;
     void commit(Int64 last_sn);
