@@ -20,6 +20,7 @@
 #include <Parsers/ASTSelectQuery.h>
 #include <Parsers/ASTDropQuery.h>
 #include <Parsers/ASTCreateQuery.h>
+#include <Parsers/ASTFunction.h>
 #include <Parsers/ASTRenameQuery.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
@@ -58,6 +59,8 @@
 #include <Processors/Transforms/MaterializingTransform.h>
 #include <Processors/Formats/IOutputFormat.h>
 
+#include <DistributedMetadata/CatalogService.h>
+
 
 namespace ProfileEvents
 {
@@ -79,6 +82,33 @@ namespace ErrorCodes
     extern const int QUERY_WAS_CANCELLED;
 }
 
+namespace
+{
+/// Daisy : starts
+/// If there are any table definition changes locally on the node
+/// broadcast the table definitions to notify all CatalogService
+void broadcastCatalogIfNecessary(const ASTPtr & ast, Context & context)
+{
+    if (auto create = ast->as<ASTCreateQuery>())
+    {
+        if (context.createDistributedMergeTreeTableLocally())
+        {
+            CatalogService::instance(context).broadcast();
+        }
+        else if (create->storage->engine->name == "DistributedMergeTree")
+        {
+            /// The table creation is just an initiator
+            return;
+        }
+    }
+
+    if (ast->as<ASTDropQuery>() || ast->as<ASTAlterQuery>())
+    {
+        CatalogService::instance(context.getGlobalContext()).broadcast();
+    }
+}
+/// Daisy : ends
+}
 
 static void checkASTSizeLimits(const IAST & ast, const Settings & settings)
 {
@@ -818,6 +848,10 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
 
                     opentelemetry_span_log->add(span);
                 }
+
+                /// Daisy : starts
+                broadcastCatalogIfNecessary(ast, context);
+                /// Daisy : ends
             };
 
             auto exception_callback = [elem, &context, ast,
