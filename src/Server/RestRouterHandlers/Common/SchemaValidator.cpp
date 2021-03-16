@@ -17,6 +17,7 @@ void SchemaValidator::validateSchema(std::map<String, std::map<String, String>> 
         {
             throw Exception("Required param '" + required.first + "' is missing.", ErrorCodes::POCO_EXCEPTION);
         }
+
         if ((required.second == "int" && !payload->get(required.first).isInteger())
             || (required.second == "string" && !payload->get(required.first).isString())
             || (required.second == "bool" && !payload->get(required.first).isBoolean())

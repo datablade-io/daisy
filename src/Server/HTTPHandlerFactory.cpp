@@ -11,8 +11,8 @@
 #include "ReplicasStatusHandler.h"
 #include "InterserverIOHTTPHandler.h"
 #include "PrometheusRequestHandler.h"
-#include "WebUIRequestHandler.h"
 #include "RestHTTPRequestHandler.h"
+#include "WebUIRequestHandler.h"
 
 
 namespace DB
