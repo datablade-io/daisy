@@ -1,27 +1,16 @@
 #include "RestHTTPRequestHandler.h"
 
-#include "RestRouterHandlers/RestRouterHandler.h"
 #include "RestRouterHandlers/RestRouterFactory.h"
+#include "RestRouterHandlers/RestRouterHandler.h"
 
-#include <IO/WriteBufferFromFile.h>
 #include <IO/WriteHelpers.h>
 #include <Interpreters/Context.h>
-#include <Interpreters/QueryParameterVisitor.h>
-#include <Interpreters/executeQuery.h>
-#include <Server/HTTP/WriteBufferFromHTTPServerResponse.h>
 #include <Server/IServer.h>
-#include <Common/StringUtils/StringUtils.h>
 #include <Common/setThreadName.h>
-#include <Common/typeid_cast.h>
-#include <common/getFQDNOrHostName.h>
-#include <ext/scope_guard.h>
 
-#include <iomanip>
-#include <Poco/Net/HTTPStream.h>
 
 namespace DB
 {
-
 static Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int exception_code)
 {
     using namespace Poco::Net;
@@ -82,11 +71,6 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     /// For correct memory accounting.
     Context context = server.context();
 
-    /// Handles
-    /// 1) Common HTTP header parsing, user / password etc validation, client_info, setup query_id, query context etc
-    /// 2) Common logging
-    /// 3) Setup common reponse headers etc
-
     /// Path validation and extraction logic
     Poco::URI uri(request.getURI());
     Poco::Path path(uri.getPath());
@@ -116,11 +100,16 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
         route = "/" + path[PROJECT_DEPTH_INDEX] + "/" + path[VERSION_DEPTH_INDEX] + "/" + path[CATEGORY_DEPTH_INDEX] + "/" + route;
         auto router_handler = RestRouterFactory::instance().get(route, context);
 
-        Int32 http_status = http_status = Poco::Net::HTTPResponse::HTTPResponse::HTTP_OK;
-        auto response_payload{router_handler->execute(request, http_status)};
+        if(router_handler == nullptr)
+        {
+            throw Exception("Cannot find the handler corresponding to the route : " + route, ErrorCodes::UNACCEPTABLE_URL);
+        }
+
+        Int32 http_status = HTTPResponse::HTTP_OK;
+        auto response_payload{router_handler->execute(request, response, http_status)};
 
         /// Send back result
-        response.setStatusAndReason(exceptionCodeToHTTPStatus(http_status));
+        response.setStatusAndReason(HTTPResponse::HTTPStatus(http_status));
         *response.send() << response_payload << std::endl;
 
         LOG_DEBUG(log, "Done processing query");
@@ -132,10 +121,16 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
         /** If exception is received from remote server, then stack trace is embedded in message.
           * If exception is thrown on local server, then stack trace is in separate field.
           */
-
-        std::string exception_message = getCurrentExceptionMessage(with_stacktrace, true);
         int exception_code = getCurrentExceptionCode();
+        std::stringstream  error_str_stream;
+        Poco::JSON::Object error_resp;
+        ClientInfo & client_info = context.getClientInfo();
 
+        error_resp.set("error_messgae", getCurrentExceptionMessage(with_stacktrace, true));
+        error_resp.set("request_id", client_info.current_query_id);
+        error_resp.stringify( error_str_stream, 4);
+
+        std::string exception_message = error_str_stream.str();
         trySendExceptionToClient(exception_message, exception_code, request, response);
     }
 }
@@ -144,7 +139,8 @@ RestHTTPRequestHandler::RestHTTPRequestHandler(IServer & server_, const std::str
 {
 }
 
-void RestHTTPRequestHandler::trySendExceptionToClient(const std::string & s, int exception_code, HTTPServerRequest & request, HTTPServerResponse & response)
+void RestHTTPRequestHandler::trySendExceptionToClient(
+    const std::string & s, int exception_code, HTTPServerRequest & request, HTTPServerResponse & response)
 {
     try
     {
@@ -177,7 +173,7 @@ void RestHTTPRequestHandler::trySendExceptionToClient(const std::string & s, int
             /// If nothing was sent yet and we don't even know if we must compress the response.
             *response.send() << s << std::endl;
         }
-        else    
+        else
         {
             assert(false);
             __builtin_unreachable();

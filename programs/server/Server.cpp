@@ -76,9 +76,6 @@
 #include <DistributedMetadata/DDLService.h>
 #include <DistributedMetadata/PlacementService.h>
 #include <Server/RestRouterHandlers/RestRouterFactory.h>
-#include <Server/RestRouterHandlers/Ingest/IngestRestRouterHandler.h>
-#include <Server/RestRouterHandlers/DDL/TableRestRouterHandler.h>
-
 
 #if !defined(ARCADIA_BUILD)
 #   include "config_core.h"
@@ -210,19 +207,6 @@ void initDistributedMetadataServices(DB::Context & global_context)
 
     auto & ddl_service = DB::DDLService::instance(global_context);
     ddl_service.startup();
-}
-
-void registerRestRouterHandlers()
-{   
-    auto & factory = DB::RestRouterFactory::instance();
-
-    factory.registerRouterHandler("/dae/v1/ddl/tables", [](DB::Context &query_context) {
-        return std::make_shared<DB::TableRestRouterHandler>(query_context);
-    });
-
-    factory.registerRouterHandler("/dae/v1/ingest", [](DB::Context &query_context) {
-        return std::make_shared<DB::IngestRestRouterHandler>(query_context);
-    });
 }
 
 void deinitDistributedMetadataServices(DB::Context & global_context)
@@ -1138,7 +1122,7 @@ int Server::main(const std::vector<std::string> & /*args*/)
         attachSystemTablesAsync(*DatabaseCatalog::instance().getSystemDatabase(), async_metrics);
 
         /// Daisy : start. Register Rest api route handlers
-        registerRestRouterHandlers();
+        RestRouterFactory::registerRestRouterHandlers();
         /// Daisy : end.
         
         for (const auto & listen_host : listen_hosts)

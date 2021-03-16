@@ -1,11 +1,12 @@
 #include "TableRestRouterHandler.h"
 
 #include <Server/RestRouterHandlers/Common/SchemaValidator.h>
+#include <Interpreters/executeQuery.h>
 
 #include <vector>
 #include <Core/Block.h>
 #include <Poco/Path.h>
-#include <Interpreters/executeQuery.h>
+
 
 namespace DB
 {
@@ -43,7 +44,6 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::column_schem
     }
 };
 
-
 std::map<String, std::map<String, String> > TableRestRouterHandler::update_schema = {
     {"required",{
                 }
@@ -57,66 +57,64 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::update_schem
     }
 };
 
-
 void TableRestRouterHandler::parseURL(const Poco::Path & path)
 {
-	database_name = path[DATABASE_DEPTH_INDEX - 1];
-	table_name = path[TABLE_DEPTH_INDEX - 1];
+    database_name = path[DATABASE_DEPTH_INDEX - 1];
+    table_name = path[TABLE_DEPTH_INDEX - 1];
 }
 
 String TableRestRouterHandler::execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
-    http_status = 200;
-
     String query = "";
     if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::GET)
     {
-        validateGet(payload);
         query = getSeleteQuery(payload);
     }
     else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::POST)
     {
-        validatePost(payload);
         query = getCreateQuery(payload);
     }
     else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::PATCH)
     {
-        validatePatch(payload);
         query = getUpdateQuery(payload);
     }
     else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::DELETE)
     {
         query = getDeleteQuery();
     }
+    else
+    {
+        http_status = 404;
+    }
 
     query_context.makeQueryContext();
     BlockIO io{executeQuery(query, query_context, false /* internal */)};
 
     if (io.pipeline.initialized())
-     {
-         return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
-     }
-     else if (io.in)
-     {
-         Block block = io.getInputStream()->read();
-         return block.getColumns().at(0)->getDataAt(0).data;
-     }
-     else
-     {
-         Poco::JSON::Object resp;
-         resp.set("query_id", query_context.getClientInfo().initial_query_id);
-         std::stringstream resp_str_stream;
-         resp.stringify(resp_str_stream, 4);
-         std::string resp_str = resp_str_stream.str();
-         return resp_str;
-     }
+    {
+        return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
+    }
+    else if (io.in)
+    {
+        Block block = io.getInputStream()->read();
+        return block.getColumns().at(0)->getDataAt(0).data;
+    }
+    else
+    {
+        Poco::JSON::Object resp;
+        resp.set("query_id", query_context.getClientInfo().initial_query_id);
+        std::stringstream resp_str_stream;
+        resp.stringify(resp_str_stream, 4);
+        String resp_str = resp_str_stream.str();
+        return resp_str;
+    }
 }
 
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload) const
 {
     SchemaValidator::validateSchema(create_schema, payload);
     Poco::JSON::Array::Ptr columns = payload->getArray("columns");
-    for (auto & col: *columns)
+    for (auto & col : *columns)
     {
         SchemaValidator::validateSchema(column_schema, col.extract<Poco::JSON::Object::Ptr>());
     }
@@ -138,7 +136,7 @@ bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & paylo
 String TableRestRouterHandler::getSeleteQuery(const Poco::JSON::Object::Ptr & payload) const
 {
     payload.isNull();
-    String query = "show create table test.tb8";
+    String query = "show databases";
     return query;
 }
 
@@ -158,7 +156,7 @@ String TableRestRouterHandler::getColumnsDefination(const Poco::JSON::Array::Ptr
     using std::end;
     std::vector<String> column_definatins;
 
-    for(auto & col: *columns)
+    for (auto & col : *columns)
     {
         column_definatins.push_back(getColumnDefination(col.extract<Poco::JSON::Object::Ptr>()));
     }
@@ -167,11 +165,10 @@ String TableRestRouterHandler::getColumnsDefination(const Poco::JSON::Array::Ptr
     return oss.str() + " `_time` DateTime64(3) ALIAS " + time_column;
 }
 
-String TableRestRouterHandler::getColumnDefination(const Poco::JSON::Object::Ptr &  column) const
+String TableRestRouterHandler::getColumnDefination(const Poco::JSON::Object::Ptr & column) const
 {
-
     String column_def = column->get("name").toString();
-    
+
     if (column->has("nullable") && column->get("nullable"))
     {
         column_def += " Nullable(" + column->get("type").toString() + ")";
@@ -180,34 +177,39 @@ String TableRestRouterHandler::getColumnDefination(const Poco::JSON::Object::Ptr
     {
         column_def += " " + column->get("type").toString();
     }
+
     if (column->has("default"))
     {
         column_def += " DEFAULT " + column->get("default").toString();
     }
+
     if (column->has("compression_codec"))
     {
         column_def += " CODEC(" + column->get("compression_codec").toString() + ")";
     }
+
     if (column->has("ttl_expression"))
     {
         column_def += " TTL " + column->get("ttl_expression").toString();
     }
+
     if (column->has("skipping_index_expression"))
     {
         column_def += ", " + column->get("skipping_index_expression").toString();
     }
+
     return column_def;
 }
 
 String TableRestRouterHandler::getUpdateQuery(const Poco::JSON::Object::Ptr & payload) const
-{   
-
+{
     String query = "ALTER TABLE " + database_name + "." + table_name;
-    if(payload->has("order_by_expression") && payload->has("ttl_expression"))
-        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString() + ", MODIFY  TTL " + payload->get("ttl_expression").toString();
-    else if(payload->has("ttl_expression"))
-        query = query +  " MODIFY  TTL " + payload->get("ttl_expression").toString();
-    else if(payload->has("order_by_expression"))
+    if (payload->has("order_by_expression") && payload->has("ttl_expression"))
+        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString() + ", MODIFY  TTL "
+            + payload->get("ttl_expression").toString();
+    else if (payload->has("ttl_expression"))
+        query = query + " MODIFY  TTL " + payload->get("ttl_expression").toString();
+    else if (payload->has("order_by_expression"))
         query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString();
     else
         return "";
@@ -221,6 +223,3 @@ String TableRestRouterHandler::getDeleteQuery() const
 }
 
 }
-
-
-

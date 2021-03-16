@@ -178,11 +178,11 @@ void addDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IServer 
 {
     addCommonDefaultHandlersFactory(factory, server);
 
-    /// Daisy: start. Add dae httpRequest process handler
-    auto dae_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<RestHTTPRequestHandler>>(server, "dae");
-    dae_handler->attachNonStrictPath("/dae");
-    dae_handler->allowPostAndGetAndPATCHAndDELETEParamsRequest();
-    factory.addHandler(dae_handler);
+    /// Daisy: start. Add rest request process handler
+    auto rest_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<RestHTTPRequestHandler>>(server, "dae");
+    rest_handler->attachNonStrictPath("/dae");
+    rest_handler->allowPostAndGetAndPATCHAndDELETEParamsRequest();
+    factory.addHandler(rest_handler);
     /// Daisy: end.
 
     auto query_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<DynamicQueryHandler>>(server, "query");

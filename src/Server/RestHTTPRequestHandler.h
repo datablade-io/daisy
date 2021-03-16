@@ -12,7 +12,6 @@ class Logger;
 
 namespace DB
 {
-
 class RestHTTPRequestHandler final : public HTTPRequestHandler
 {
 public:
@@ -25,7 +24,6 @@ private:
     Poco::Logger * log;
 
     void trySendExceptionToClient(const std::string & s, int exception_code, HTTPServerRequest & request, HTTPServerResponse & response);
-
 };
 
 }
