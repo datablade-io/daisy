@@ -130,7 +130,7 @@ public:
 
 private:
     Filter filter;
-    std::function<std::unique_ptr<HTTPRequestHandler>()> creator;
+    std::function<std::unique_ptr<HTTPRequestHandler> ()> creator;
 };
 
 HTTPRequestHandlerFactoryPtr createStaticHandlerFactory(IServer & server, const std::string & config_prefix);
