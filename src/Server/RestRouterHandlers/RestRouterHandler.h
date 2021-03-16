@@ -2,19 +2,19 @@
 
 #include <Server/HTTP/HTMLForm.h>
 #include <Server/HTTP/HTTPRequestHandler.h>
-
-#include <common/types.h>
 #include <common/logger_useful.h>
+#include <common/types.h>
 #include <Interpreters/Context.h>
-#include <boost/noncopyable.hpp>
 
-#include <Poco/JSON/Parser.h>
-#include <Poco/Path.h>
-#include <Poco/Logger.h>
+#include <boost/noncopyable.hpp>
 #include <Poco/File.h>
+#include <Poco/JSON/Parser.h>
+#include <Poco/Logger.h>
 #include <Poco/Net/HTTPBasicCredentials.h>
 #include <Poco/Net/HTTPStream.h>
 #include <Poco/Net/NetException.h>
+#include <Poco/Path.h>
+
 
 #define PROJECT_DEPTH_INDEX 0
 #define VERSION_DEPTH_INDEX 1
@@ -26,10 +26,8 @@
 
 namespace DB
 {
-
 namespace ErrorCodes
 {
-
     extern const int LOGICAL_ERROR;
     extern const int CANNOT_PARSE_TEXT;
     extern const int CANNOT_PARSE_ESCAPE_SEQUENCE;
@@ -85,21 +83,24 @@ namespace ErrorCodes
 class RestRouterHandler : private boost::noncopyable
 {
 public:
-    RestRouterHandler(Context & query_context_, const String & router_name) : query_context(query_context_), log(&Poco::Logger::get(router_name)){}
+    RestRouterHandler(Context & query_context_, const String & router_name)
+        : query_context(query_context_), log(&Poco::Logger::get(router_name))
+    {
+    }
     virtual ~RestRouterHandler() = default;
 
     /// Execute request and return response in `String`. If it failed
     /// a correct `http_status` code will be set by trying best.
     /// This function may throw, and caller will need catch the exception
     /// and sends back HTTP `500` to clients
-    String execute(HTTPServerRequest & request, Int32 & http_status)
+    String execute(HTTPServerRequest & request, HTTPServerResponse & response, Int32 & http_status)
     {
         HTMLForm params(request);
         /// The user and password can be passed by headers (similar to X-Auth-*),
         /// which is used by load balancers to pass authentication information.
-        std::string user = request.get("X-ClickHouse-User", "");
-        std::string password = request.get("X-ClickHouse-Key", "");
-        std::string quota_key = request.get("X-ClickHouse-Quota", "");
+        String user = request.get("X-ClickHouse-User", "");
+        String password = request.get("X-ClickHouse-Key", "");
+        String quota_key = request.get("X-ClickHouse-Quota", "");
 
         if (user.empty() && password.empty() && quota_key.empty())
         {
@@ -174,15 +175,18 @@ public:
 
         if (streaming())
         {
-            return execute(request.getStream(), params, http_status);
+            return execute(request.getStream(), response, http_status);
         }
         else
         {
             /// Handle over the request.istream to `json` parser directly
-            std::string data;
-            auto size = request.getContentLength();
-            data.resize(size);
-            request.getStream().readStrict(data.data(), size);
+            String data = "{}";
+            if (request.getMethod() != HTTPServerRequest::HTTP_GET)
+            {
+                auto size = request.getContentLength();
+                data.resize(size);
+                request.getStream().readStrict(data.data(), size);
+            }
 
             Poco::JSON::Parser parser;
             auto payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
@@ -200,16 +204,15 @@ public:
     }
 
 private:
-
     virtual bool streaming() { return false; }
     virtual void parseURL(const Poco::Path & path) = 0;
 
     /// Streaming `execute`, so far Ingest API probably needs override this function
-    virtual String execute(ReadBuffer & input, const HTMLForm & params, Int32 & http_status)
+    virtual String execute(ReadBuffer & input, HTTPServerResponse & response, Int32 & http_status)
     {
         input.eof();
-        params.getEncoding();
-        http_status = 200;
+        response.getVersion();
+        http_status = 404;
         LOG_DEBUG(log, "Streaming execute not implemented");
         return "";
     }
@@ -218,13 +221,12 @@ private:
     virtual String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
     {
         payload.isNull();
-        http_status = 200;
+        http_status = 404;
         LOG_DEBUG(log, "DDL execute not implemented");
         return "";
     }
 
 private:
-
     bool validate(const String & http_method, const Poco::JSON::Object::Ptr & payload) const
     {
         if (http_method == Poco::Net::HTTPRequest::HTTP_GET)
@@ -261,5 +263,3 @@ protected:
 using RestRouterHandlerPtr = std::shared_ptr<RestRouterHandler>;
 
 }
-
-
