@@ -10,20 +10,16 @@ public:
     explicit IngestRestRouterHandler(Context & query_context_) : RestRouterHandler(query_context_, "Table") { }
     ~IngestRestRouterHandler() override { }
 
-    String execute(ReadBuffer & input, HTTPServerResponse & response, Int32 & http_status) override
+    String execute(ReadBuffer & /* input */, HTTPServerResponse & /* response */, Int32 & /* http_status */) override
     {
-        input.eof();
-        http_status = 100;
-        response.getVersion();
-        return "IngestRestRouterHandler not implemented";
+        return "IngestRestRouterHandler executer not implemented";
     }
 
 private:
     void parseURL(const Poco::Path & path) override;
 
-    bool validatePost(const Poco::JSON::Object::Ptr & payload) const override
+    bool validatePost(const Poco::JSON::Object::Ptr & /* payload */) const override
     {
-        payload.isNull();
         return false;
     }
 
