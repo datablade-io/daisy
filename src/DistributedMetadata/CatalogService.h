@@ -24,7 +24,7 @@ public:
 
         String database;
         String name;
-        String uuid;
+        UUID uuid = UUIDHelpers::Nil;
         String engine;
         String metadata_path;
         String data_paths;
@@ -54,9 +54,14 @@ public:
     explicit CatalogService(Context & context_);
     virtual ~CatalogService() override = default;
 
-    /// `broadcast` broadcasts the metadata catalog on this node
-    /// to CatalogService role nodes
+    /// `broadcast` broadcasts the table catalog metadata on this node
+    /// to all nodes with CatalogService role in the cluster via DWAL
     void broadcast();
+
+    StoragePtr createVirtualTableStorage(const String & query, const String & database, const String & table);
+
+    std::pair<TablePtr, StoragePtr> findTableStorageById(const UUID & uuid) const;
+    std::pair<TablePtr, StoragePtr> findTableStorageByName(const String & database, const String & table) const;
 
     std::vector<TablePtr> findTableByName(const String & database, const String & table) const;
     std::vector<TablePtr> findTableByHost(const String & host) const;
@@ -71,6 +76,8 @@ public:
     std::vector<String> hosts() const;
 
 private:
+    bool setTableStorageByName(const String & database, const String & table, const StoragePtr & storage);
+
     void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
     String role() const override { return "catalog"; }
     String cleanupPolicy() const override { return "compact"; }
@@ -105,5 +112,9 @@ private:
 
     /// host -> ((database, table, shard) -> TablePtr))
     std::unordered_map<String, TableContainerPerHost> indexedByHost;
+
+    mutable std::shared_mutex storage_rwlock;
+    std::unordered_map<UUID, TablePtr> indexedById;
+    std::unordered_map<DatabaseTable, StoragePtr, boost::hash<DatabaseTable>> storages;
 };
 }

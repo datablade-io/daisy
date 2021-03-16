@@ -12,6 +12,7 @@
 #include <Interpreters/ExternalDictionariesLoader.h>
 #include <filesystem>
 #include <Interpreters/DDLTask.h>
+#include <DistributedMetadata/CatalogService.h>
 
 namespace DB
 {
@@ -592,6 +593,34 @@ void DatabaseAtomic::waitDetachedTableNotInUse(const UUID & uuid)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
+
+/// Daisy : starts
+StoragePtr DatabaseAtomic::tryGetTable(const String & table_name, const Context & context) const
+{
+    auto storage = DatabaseOrdinary::tryGetTable(table_name, context);
+    if (storage)
+    {
+        return storage;
+    }
+
+    /// Try `CatalogService`
+    auto & catalog_service = CatalogService::instance(*const_cast<Context *>(&global_context));
+    auto [table, table_storage] = catalog_service.findTableStorageByName(getDatabaseName(), table_name);
+
+    if (table_storage != nullptr)
+    {
+        return table_storage;
+    }
+
+    /// Table doesn't exist in CatalogService neither
+    if (table == nullptr)
+    {
+        return nullptr;
+    }
+
+    return catalog_service.createVirtualTableStorage(table->create_table_query, table->database, table_name);
+}
+/// Daisy : ends
 
 }
 
