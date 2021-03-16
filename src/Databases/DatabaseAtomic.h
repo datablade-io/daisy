@@ -60,6 +60,10 @@ public:
     void waitDetachedTableNotInUse(const UUID & uuid) override;
     void setDetachedTableNotInUseForce(const UUID & uuid);
 
+    /// Daisy : starts
+    StoragePtr tryGetTable(const String & table_name, const Context &) const override;
+    /// Daisy : ends
+
 protected:
     void commitAlterTable(const StorageID & table_id, const String & table_metadata_tmp_path, const String & table_metadata_path, const String & statement, ContextPtr query_context) override;
     void commitCreateTable(const ASTCreateQuery & query, const StoragePtr & table,
