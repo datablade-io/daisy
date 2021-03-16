@@ -829,10 +829,12 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
     }
 
     /// More verification happened in storage engine creation
+    /// `relative_data_path = ""` means the table is virtual which doesn't
+    /// bind to any file system data / metadata
     auto res = StorageFactory::instance().get(
         create, "" /* virtual */, context, context.getGlobalContext(), properties.columns, properties.constraints, false);
 
-    auto storage = typeid_cast<StorageDistributedMergeTree*>(res.get());
+    auto storage = static_cast<StorageDistributedMergeTree *>(res.get());
     if (storage->currentShard() >= 0)
     {
         LOG_INFO(log, "Local DistributedMergeTree table creation with shard assigned");
