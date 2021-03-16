@@ -25,24 +25,24 @@ namespace ErrorCodes
 
 namespace
 {
-    /// Globals
-    const String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
-    const String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
-    const String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
-    const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
-    const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
+/// Globals
+const String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
+const String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
+const String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
+const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
+const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
 
-    Int32 parseShard(const String & engine_full)
-    {
-        /// shard = <shard_number>
-        static std::regex shard_regex("shard\\s*=\\s*(\\d+)");
+Int32 parseShard(const String & engine_full)
+{
+    /// shard = <shard_number>
+    static std::regex shard_regex("shard\\s*=\\s*(\\d+)");
 
-        std::smatch shard_match;
+    std::smatch shard_match;
 
-        assert(std::regex_search(engine_full, shard_match, shard_regex));
+    assert(std::regex_search(engine_full, shard_match, shard_regex));
 
-        return std::stoi(shard_match.str(1));
-    }
+    return std::stoi(shard_match.str(1));
+}
 }
 
 CatalogService & CatalogService::instance(Context & context)
@@ -91,6 +91,8 @@ void CatalogService::doBroadcast()
 {
     assert(dwal);
 
+    /// Default max_block_size is 65505 (rows) which shall be bigger enough for a block to contain
+    /// all tables on a single node
     String query = "SELECT * FROM system.tables WHERE (database != 'system') OR (database = 'system' AND name='tables')";
 
     /// CurrentThread::attachQueryContext(context);
