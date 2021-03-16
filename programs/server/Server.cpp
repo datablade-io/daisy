@@ -71,6 +71,7 @@
 #include <Server/PostgreSQLHandlerFactory.h>
 #include <Server/ProtocolServerAdapter.h>
 #include <Server/HTTP/HTTPServer.h>
+<<<<<<< HEAD
 #include <DistributedMetadata/TaskStatusService.h>
 #include <DistributedMetadata/CatalogService.h>
 #include <DistributedMetadata/DDLService.h>
