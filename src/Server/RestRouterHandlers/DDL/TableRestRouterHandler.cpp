@@ -63,53 +63,6 @@ void TableRestRouterHandler::parseURL(const Poco::Path & path)
     table_name = path[TABLE_DEPTH_INDEX - 1];
 }
 
-String TableRestRouterHandler::execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
-{
-    String query = "";
-    if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::GET)
-    {
-        query = getSeleteQuery(payload);
-    }
-    else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::POST)
-    {
-        query = getCreateQuery(payload);
-    }
-    else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::PATCH)
-    {
-        query = getUpdateQuery(payload);
-    }
-    else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::DELETE)
-    {
-        query = getDeleteQuery();
-    }
-    else
-    {
-        http_status = 404;
-    }
-
-    query_context.makeQueryContext();
-    BlockIO io{executeQuery(query, query_context, false /* internal */)};
-
-    if (io.pipeline.initialized())
-    {
-        return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
-    }
-    else if (io.in)
-    {
-        Block block = io.getInputStream()->read();
-        return block.getColumns().at(0)->getDataAt(0).data;
-    }
-    else
-    {
-        Poco::JSON::Object resp;
-        resp.set("query_id", query_context.getClientInfo().initial_query_id);
-        std::stringstream resp_str_stream;
-        resp.stringify(resp_str_stream, 4);
-        String resp_str = resp_str_stream.str();
-        return resp_str;
-    }
-}
-
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload) const
 {
     SchemaValidator::validateSchema(create_schema, payload);
@@ -133,20 +86,64 @@ bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & paylo
     return true;
 }
 
-String TableRestRouterHandler::getSeleteQuery(const Poco::JSON::Object::Ptr & payload) const
+String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
 {
-    payload.isNull();
     String query = "show databases";
-    return query;
+    return processQuery(query, http_status);
 }
 
-String TableRestRouterHandler::getCreateQuery(const Poco::JSON::Object::Ptr & payload) const
+String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
     String query = "CREATE TABLE " + database_name + "." + payload->get("name").toString() + "("
         + getColumnsDefination(payload->getArray("columns"), payload->get("_time_column").toString())
         + ") ENGINE = MergeTree() PARTITION BY " + payload->get("partition_by_expression").toString() + " ORDER BY "
         + payload->get("order_by_expression").toString() + " TTL " + payload->get("ttl_expression").toString();
-    return query;
+
+    return processQuery(query, http_status);
+}
+
+String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
+{
+    String query = "DROP TABLE " + database_name + "." + table_name;
+    return processQuery(query, http_status);
+}
+
+String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+{
+    String query = "ALTER TABLE " + database_name + "." + table_name;
+    if (payload->has("order_by_expression") && payload->has("ttl_expression"))
+        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString() + ", MODIFY  TTL "
+            + payload->get("ttl_expression").toString();
+    else if (payload->has("ttl_expression"))
+        query = query + " MODIFY  TTL " + payload->get("ttl_expression").toString();
+    else
+        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString();
+
+    return processQuery(query, http_status);
+}
+
+String TableRestRouterHandler::processQuery(const String & query, Int32 & /* http_status */) const
+{
+    BlockIO io{executeQuery(query, query_context, false /* internal */)};
+
+    if (io.pipeline.initialized())
+    {
+        return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
+    }
+    else if (io.in)
+    {
+        Block block = io.getInputStream()->read();
+        return block.getColumns().at(0)->getDataAt(0).data;
+    }
+    else
+    {
+        Poco::JSON::Object resp;
+        resp.set("query_id", query_context.getClientInfo().initial_query_id);
+        std::stringstream resp_str_stream;
+        resp.stringify(resp_str_stream, 4);
+        String resp_str = resp_str_stream.str();
+        return resp_str;
+    }
 }
 
 String TableRestRouterHandler::getColumnsDefination(const Poco::JSON::Array::Ptr & columns, const String & time_column) const
@@ -199,27 +196,6 @@ String TableRestRouterHandler::getColumnDefination(const Poco::JSON::Object::Ptr
     }
 
     return column_def;
-}
-
-String TableRestRouterHandler::getUpdateQuery(const Poco::JSON::Object::Ptr & payload) const
-{
-    String query = "ALTER TABLE " + database_name + "." + table_name;
-    if (payload->has("order_by_expression") && payload->has("ttl_expression"))
-        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString() + ", MODIFY  TTL "
-            + payload->get("ttl_expression").toString();
-    else if (payload->has("ttl_expression"))
-        query = query + " MODIFY  TTL " + payload->get("ttl_expression").toString();
-    else if (payload->has("order_by_expression"))
-        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString();
-    else
-        return "";
-    return query;
-}
-
-String TableRestRouterHandler::getDeleteQuery() const
-{
-    String query = "DROP TABLE " + database_name + "." + table_name;
-    return query;
 }
 
 }

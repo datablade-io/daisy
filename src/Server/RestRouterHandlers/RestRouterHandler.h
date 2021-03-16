@@ -1,10 +1,10 @@
 #pragma once
 
+#include <Interpreters/Context.h>
 #include <Server/HTTP/HTMLForm.h>
 #include <Server/HTTP/HTTPRequestHandler.h>
 #include <common/logger_useful.h>
 #include <common/types.h>
-#include <Interpreters/Context.h>
 
 #include <boost/noncopyable.hpp>
 #include <Poco/File.h>
@@ -208,22 +208,74 @@ private:
     virtual void parseURL(const Poco::Path & path) = 0;
 
     /// Streaming `execute`, so far Ingest API probably needs override this function
-    virtual String execute(ReadBuffer & input, HTTPServerResponse & response, Int32 & http_status)
+    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /*r esponse */, Int32 & http_status)
     {
-        input.eof();
-        response.getVersion();
         http_status = 404;
-        LOG_DEBUG(log, "Streaming execute not implemented");
+        String result = "Streaming executer not implemented";
+
+        LOG_DEBUG(log, result);
+        return result;
+    }
+
+private:
+    /// Admin APIs like DDL overrides this function
+    String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+    {
+        if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::GET)
+        {
+            return executeGet(payload, http_status);
+        }
+        else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::POST)
+        {
+            return executePost(payload, http_status);
+        }
+        else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::PATCH)
+        {
+            return executePatch(payload, http_status);
+        }
+        else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::DELETE)
+        {
+            return executeDelete(payload, http_status);
+        }
+        http_status = 404;
+
         return "";
     }
 
-    /// Admin APIs like DDL overrides this function
-    virtual String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+    virtual String executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
     {
-        payload.isNull();
         http_status = 404;
-        LOG_DEBUG(log, "DDL execute not implemented");
-        return "";
+        String result = "DDL GET executer not implemented";
+
+        LOG_DEBUG(log, result);
+        return result;
+    }
+
+    virtual String executePost(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
+    {
+        http_status = 404;
+        String result = "DDL POST executer not implemented";
+
+        LOG_DEBUG(log, result);
+        return result;
+    }
+
+    virtual String executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & http_status) const
+    {
+        http_status = 404;
+        String result = "DDL DELETE executer not implemented";
+
+        LOG_DEBUG(log, result);
+        return result;
+    }
+
+    virtual String executePatch(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & http_status) const
+    {
+        http_status = 404;
+        String result = "DDL PATCH executer not implemented";
+
+        LOG_DEBUG(log, result);
+        return result;
     }
 
 private:
@@ -250,10 +302,10 @@ private:
         return false;
     }
 
-    virtual bool validateGet(const Poco::JSON::Object::Ptr & /*payload*/) const { return true; }
-    virtual bool validatePost(const Poco::JSON::Object::Ptr & /*payload*/) const { return true; }
-    virtual bool validateDelete(const Poco::JSON::Object::Ptr & /*payload*/) const { return true; }
-    virtual bool validatePatch(const Poco::JSON::Object::Ptr & /*payload*/) const { return true; }
+    virtual bool validateGet(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
+    virtual bool validatePost(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
+    virtual bool validateDelete(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
+    virtual bool validatePatch(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
 
 protected:
     Context & query_context;
