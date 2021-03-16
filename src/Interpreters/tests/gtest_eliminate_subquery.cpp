@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <Interpreters/EliminateSubqueryVisitor.h>
+#include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/formatAST.h>
 #include <Parsers/parseQuery.h>
@@ -13,7 +14,15 @@ static String optimizeSubquery(const String & query)
     const char * end = start + query.size();
     ParserQuery parser(end);
     ASTPtr ast = parseQuery(parser, start, end, "", 0, 0);
-    EliminateSubqueryVisitor().visit(ast);
+    if (const auto * select_with_union_query = ast->as<ASTSelectWithUnionQuery>())
+    {
+        for (auto & select : select_with_union_query->list_of_selects->children)
+        {
+            EliminateSubqueryVisitorData data;
+            EliminateSubqueryVisitor(data).visit(select);
+        }
+    }
+
     return serializeAST(*ast);
 }
 
@@ -32,33 +41,33 @@ TEST(EliminateSubquery, OptimizedQuery)
         "SELECT count(*) FROM infoflow_url_data_dws AS a WHERE a.sign = 'abcd'");
     EXPECT_EQ(
         optimizeSubquery("SELECT count(*) FROM (SELECT a.sign, a.channel FROM infoflow_url_data_dws a WHERE a.sign = 'abcd') WHERE "
-                          "channel = 'online'"),
+                         "channel = 'online'"),
         "SELECT count(*) FROM infoflow_url_data_dws AS a WHERE (a.sign = 'abcd') AND (channel = 'online')");
     EXPECT_EQ(
         optimizeSubquery("SELECT product_name, Code, sum(asBaseName0) asBaseName0, sum(asBaseName01) asBaseName01 FROM (SELECT "
-                          "price asBaseName0, "
-                          "sale_price asBaseName01, product_name product_name, Code Code FROM price) GROUP BY product_name, Code"),
+                         "price asBaseName0, "
+                         "sale_price asBaseName01, product_name product_name, Code Code FROM price) GROUP BY product_name, Code"),
         "SELECT product_name, Code, sum(price) AS asBaseName0, sum(sale_price) AS asBaseName01 FROM price GROUP BY product_name, "
         "Code");
     EXPECT_EQ(
         optimizeSubquery("SELECT count(a.productid) FROM (SELECT a.*, b.* FROM access1 a, db2.product_info b WHERE (a.productid = "
-                          "b.productid))"),
+                         "b.productid))"),
         "SELECT count(a.productid) FROM access1 AS a , db2.product_info AS b WHERE a.productid = b.productid");
     EXPECT_EQ(
         optimizeSubquery("SELECT count(*) FROM (SELECT SIGN FROM (SELECT SIGN, query FROM tablea WHERE query_id='mock-1') WHERE "
-                          "query = "
-                          "'query_sql') WHERE SIGN = 'external'"),
+                         "query = "
+                         "'query_sql') WHERE SIGN = 'external'"),
         "SELECT count(*) FROM tablea WHERE ((query_id = 'mock-1') AND (query = 'query_sql')) AND (SIGN = 'external')");
     EXPECT_EQ(
         optimizeSubquery("SELECT sum(a.price), sum(b.sale) FROM (SELECT a.*, b.* FROM access1 a, product_info b WHERE (a.productid "
-                          "= "
-                          "b.productid)) GROUP BY a.name, b.sign"),
+                         "= "
+                         "b.productid)) GROUP BY a.name, b.sign"),
         "SELECT sum(a.price), sum(b.sale) FROM access1 AS a , product_info AS b WHERE a.productid = b.productid GROUP BY a.name, "
         "b.sign");
     EXPECT_EQ(
         optimizeSubquery("SELECT sum(a.price), sum(b.sale) FROM (SELECT a.*, b.* FROM access1 a JOIN product_info b ON a.productid "
-                          "= "
-                          "b.productid) WHERE a.name = 'foo' GROUP BY a.name, b.sign"),
+                         "= "
+                         "b.productid) WHERE a.name = 'foo' GROUP BY a.name, b.sign"),
         "SELECT sum(a.price), sum(b.sale) FROM access1 AS a INNER JOIN product_info AS b ON a.productid = b.productid WHERE a.name = "
         "'foo' "
         "GROUP BY a.name, b.sign");
@@ -74,9 +83,7 @@ TEST(EliminateSubquery, OptimizedQuery)
 TEST(EliminateSubquery, FailedOptimizedQuery)
 {
     EXPECT_EQ(
-        optimizeSubquery("SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)"),
-        "SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)"
-    );
+        optimizeSubquery(
+            "SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)"),
+        "SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)");
 }
-
-

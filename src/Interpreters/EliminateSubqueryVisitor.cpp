@@ -3,34 +3,11 @@
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTQualifiedAsterisk.h>
-#include <Parsers/ASTSelectQuery.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
-#include <Parsers/ASTTablesInSelectQuery.h>
 
 namespace DB
 {
-void EliminateSubqueryVisitor::visit(ASTPtr & ast)
-{
-    if (const auto * select_with_union_query = ast->as<ASTSelectWithUnionQuery>())
-    {
-        for (auto & select : select_with_union_query->list_of_selects->children)
-        {
-            if (auto * select_query = select->as<ASTSelectQuery>())
-            {
-                visit(*select_query);
-            }
-        }
-    }
-    else
-    {
-        for (auto & child : ast->children)
-        {
-            visit(child);
-        }
-    }
-}
-
-void EliminateSubqueryVisitor::visit(ASTSelectQuery & select_query)
+void EliminateSubqueryVisitorData::visit(ASTSelectQuery & select_query, ASTPtr &)
 {
     /// ignore "join" case
     if (select_query.tables() == nullptr || select_query.tables()->children.size() != 1)
@@ -50,28 +27,29 @@ void EliminateSubqueryVisitor::visit(ASTSelectQuery & select_query)
     }
 }
 
-void EliminateSubqueryVisitor::visit(ASTTableExpression & tableExpression, ASTSelectQuery & parent_select)
+void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQuery & parent_select)
 {
-    if (tableExpression.subquery == nullptr)
+    if (table.subquery == nullptr)
     {
         return;
     }
-    if (tableExpression.subquery->children.size() != 1)
+    if (table.subquery->children.size() != 1)
     {
         return;
     }
 
-    auto & select = tableExpression.subquery->children.at(0);
+    auto & select = table.subquery->children.at(0);
     if (auto * select_with_union_query = select->as<ASTSelectWithUnionQuery>())
     {
         if (select_with_union_query->list_of_selects->children.size() != 1)
         {
             return;
         }
-        if (auto * sub_query = select_with_union_query->list_of_selects->children.at(0)->as<ASTSelectQuery>())
+        auto & sub_query_node = select_with_union_query->list_of_selects->children.at(0);
+        if (auto * sub_query = sub_query_node->as<ASTSelectQuery>())
         {
             /// handle sub query in table expression recursively
-            visit(*sub_query);
+            visit(*sub_query, sub_query_node);
 
             if (sub_query->groupBy() || sub_query->having() || sub_query->orderBy() || sub_query->limitBy() || sub_query->limitByLength()
                 || sub_query->limitByOffset() || sub_query->limitLength() || sub_query->limitOffset() || sub_query->distinct
@@ -111,27 +89,27 @@ void EliminateSubqueryVisitor::visit(ASTTableExpression & tableExpression, ASTSe
     }
 }
 
-void EliminateSubqueryVisitor::rewriteColumns(ASTPtr & astPtr, std::unordered_map<String, ASTPtr> & subquery_selects)
+void EliminateSubqueryVisitorData::rewriteColumns(ASTPtr & ast, std::unordered_map<String, ASTPtr> & subquery_selects)
 {
-    if (auto * identifier = astPtr->as<ASTIdentifier>())
+    if (auto * identifier = ast->as<ASTIdentifier>())
     {
         auto it = subquery_selects.find(identifier->name());
         if (it != subquery_selects.end())
         {
-            astPtr = it->second->clone();
-            astPtr->setAlias("");
+            ast = it->second->clone();
+            ast->setAlias("");
         }
     }
     else
     {
-        for (auto & child : astPtr->children)
+        for (auto & child : ast->children)
         {
             rewriteColumns(child, subquery_selects);
         }
     }
 }
 
-bool EliminateSubqueryVisitor::mergeColumns(ASTSelectQuery & parent_query, ASTSelectQuery & child_query)
+bool EliminateSubqueryVisitorData::mergeColumns(ASTSelectQuery & parent_query, ASTSelectQuery & child_query)
 {
     /// select sum(b) from (select id as b from table)
     std::unordered_map<std::string, ASTPtr> subquery_selects;
@@ -157,6 +135,5 @@ bool EliminateSubqueryVisitor::mergeColumns(ASTSelectQuery & parent_query, ASTSe
     }
     return true;
 }
-
 
 }
