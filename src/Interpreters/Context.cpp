@@ -2641,7 +2641,15 @@ void Context::setupNodeIdentity()
         return;
     }
 
-    node_identity = getFQDNOrHostName();
+    auto id = getConfigRef().getString("system_settings.node_identity", "");
+    if (!id.empty())
+    {
+        node_identity = id;
+    }
+    else
+    {
+        node_identity = getFQDNOrHostName();
+    }
 }
 
 void Context::setupQueryStatusPollId()

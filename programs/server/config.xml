@@ -1074,13 +1074,6 @@
 
                 <internal_pool_size>2</internal_pool_size>
             </system_kafka>
-            <system_kafka>
-                <system_default>false</system_default>
-                <cluster_name>other-sys-kafka-cluster-name</cluster_name>
-                <!-- cluster_id canâ€™t be changed after the system is up and running -->
-                <!-- because the code depends on the immutability of cluster_id -->
-                <cluster_id>other-sys-kafka-cluster-id</cluster_id>
-            </system_kafka>
         </system_dwals>
 
         <system_roles>
@@ -1120,6 +1113,8 @@
             <!-- 24 hours -->
             <data_retention>24</data_retention>
         </system_task_dwal>
+
+        <node_identity>localhost</node_identity>
 
     </system_settings>
 
