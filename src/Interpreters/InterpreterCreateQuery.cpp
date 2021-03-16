@@ -836,6 +836,9 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
     if (storage->currentShard() >= 0)
     {
         LOG_INFO(log, "Local DistributedMergeTree table creation with shard assigned");
+        /// HACKY
+        context.setCreateDistributedMergeTreeTableLocally(true);
+
         return {};
     }
 

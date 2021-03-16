@@ -142,7 +142,7 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
     LOG_INFO(log, "Execute table statement={} on uri={}", query, uri.toString());
 
     /// One second for connect/send/receive
-    ConnectionTimeouts timeouts({1, 0}, {1, 0}, {1, 0});
+    ConnectionTimeouts timeouts({1, 0}, {1, 0}, {5, 0});
 
     PooledHTTPSessionPtr session;
     try
@@ -388,11 +388,7 @@ void DDLService::commit(Int64 last_sn)
     try
     {
         auto err = dwal->commit(last_sn, dwal_consume_ctx);
-        if (likely(err == 0))
-        {
-            LOG_INFO(log, "Successfully committed offset={}", last_sn);
-        }
-        else
+        if (unlikely(err != 0))
         {
             /// It is ok as next commit will override this commit if it makes through.
             /// If it failed and then crashes, we will redo and we will find resource
