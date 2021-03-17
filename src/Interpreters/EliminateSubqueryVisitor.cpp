@@ -67,7 +67,7 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
 
     if (sub_query->where() && parent_select.where())
     {
-        auto where = makeASTFunction("and", sub_query->refWhere(), parent_select.refWhere());
+        auto where = makeASTFunction("and", sub_query->where(), parent_select.where());
         parent_select.setExpression(ASTSelectQuery::Expression::WHERE, where);
     }
     else if (sub_query->where())
@@ -77,7 +77,7 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
 
     if (sub_query->prewhere() && parent_select.prewhere())
     {
-        auto prewhere = makeASTFunction("and", sub_query->refPrewhere(), parent_select.refPrewhere());
+        auto prewhere = makeASTFunction("and", sub_query->prewhere(), parent_select.prewhere());
         parent_select.setExpression(ASTSelectQuery::Expression::PREWHERE, prewhere);
     }
     else if (sub_query->prewhere())
@@ -87,7 +87,8 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
     parent_select.setExpression(ASTSelectQuery::Expression::TABLES, std::move(sub_query->refTables()));
 }
 
-void EliminateSubqueryVisitorData::rewriteColumns(ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects, bool drop_alias /*= false*/)
+void EliminateSubqueryVisitorData::rewriteColumns(
+    ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects, bool drop_alias /*= false*/)
 {
     if (auto * identifier = ast->as<ASTIdentifier>())
     {
@@ -96,10 +97,12 @@ void EliminateSubqueryVisitorData::rewriteColumns(ASTPtr & ast, const std::unord
         {
             String alias = ast->tryGetAlias();
             ast = it->second;
-            if(drop_alias){
+            if (drop_alias)
+            {
                 ast->setAlias("");
             }
-            else if (!alias.empty()){
+            else if (!alias.empty())
+            {
                 ast->setAlias(alias);
             }
         }
