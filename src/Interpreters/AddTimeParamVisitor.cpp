@@ -8,15 +8,15 @@
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/ASTTablesInSelectQuery.h>
 #include <Parsers/ASTWithAlias.h>
-#include <Parsers/IAST.h>
 #include <Parsers/ExpressionListParsers.h>
+#include <Parsers/IAST.h>
 #include <Parsers/parseQuery.h>
 #include <Storages/IStorage.h>
 
 
 namespace DB
 {
-bool AddTimeVisitorMatcher::containTimeField(ASTPtr& node, Context& context)
+bool AddTimeVisitorMatcher::containTimeField(ASTPtr & node, Context & context)
 {
     if (!node->as<ASTIdentifier>())
     {
@@ -28,7 +28,7 @@ bool AddTimeVisitorMatcher::containTimeField(ASTPtr& node, Context& context)
     auto table_id = context.resolveStorageID(storage_id);
     auto db = DatabaseCatalog::instance().getDatabase(table_id.database_name);
     auto table = db->tryGetTable(table_id.table_name, context);
-    
+
     if (!table)
     {
         return false;
@@ -39,7 +39,7 @@ bool AddTimeVisitorMatcher::containTimeField(ASTPtr& node, Context& context)
     return col_desc.has("_time") && col_desc.get("_time").type->getTypeId() == TypeIndex::DateTime64;
 }
 
-void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr& ast, Context& context)
+void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr & ast, Context & context)
 {
     if (!ast->as<ASTSelectQuery>())
     {
@@ -62,7 +62,7 @@ void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr& ast, Context& context)
 
     ASTTablesInSelectQueryElement * first_table = node->as<ASTTablesInSelectQueryElement>();
     ASTTableExpression * table_expression = first_table->table_expression->as<ASTTableExpression>();
-    
+
     if (table_expression->database_and_table_name)
     {
         insertTimeParamTime(select, table_expression->database_and_table_name, context);
@@ -81,7 +81,7 @@ void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr& ast, Context& context)
     }
 }
 
-void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr &table_name, Context& context)
+void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr & table_name, Context & context)
 {
     ParserExpressionWithOptionalAlias elem_parser(false);
     if (!containTimeField(table_name, context))
@@ -118,7 +118,7 @@ void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr 
     select->setExpression(ASTSelectQuery::Expression::WHERE, std::move(where_statement));
 }
 
-void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr& ast, Context& context)
+void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr & ast, Context & context)
 {
     if (!ast->as<ASTSelectWithUnionQuery>())
     {
@@ -135,7 +135,7 @@ void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr& ast, Context& cont
         visitSelectQuery(un->list_of_selects->children[0], context);
 }
 
-void AddTimeVisitorMatcher::visit(ASTPtr& ast, Context& context)
+void AddTimeVisitorMatcher::visit(ASTPtr & ast, Context & context)
 {
     if (ast->as<ASTSelectQuery>())
     {
