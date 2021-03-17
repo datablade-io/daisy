@@ -131,7 +131,15 @@ inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hos
     for (const auto & host : hosts)
     {
         /// FIXME : HTTP for now
-        uris.emplace_back("http://" + host + http_port);
+        if (host.rfind(":") != String::npos)
+        {
+            /// `host` contains port information
+            uris.emplace_back("http://" + host);
+        }
+        else
+        {
+            uris.emplace_back("http://" + host + http_port);
+        }
     }
 
     return uris;
