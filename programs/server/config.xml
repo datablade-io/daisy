@@ -1114,7 +1114,7 @@
             <data_retention>24</data_retention>
         </system_task_dwal>
 
-        <node_identity>localhost</node_identity>
+        <node_identity>localhost:8123</node_identity>
 
     </system_settings>
 
