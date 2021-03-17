@@ -9,7 +9,7 @@ namespace DB
 {
 void EliminateSubqueryVisitorData::visit(ASTSelectQuery & select_query, ASTPtr &)
 {
-    /// ignore "join" case
+    /// Ignore "join" case
     if (select_query.tables() == nullptr || select_query.tables()->children.size() != 1)
     {
         return;
@@ -33,86 +33,90 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
     {
         return;
     }
+
     if (table.subquery->children.size() != 1)
     {
         return;
     }
 
-    auto & select = table.subquery->children.at(0);
-    if (auto * select_with_union_query = select->as<ASTSelectWithUnionQuery>())
+    auto * select_with_union_query = table.subquery->children.at(0)->as<ASTSelectWithUnionQuery>();
+    if (!select_with_union_query || select_with_union_query->list_of_selects->children.size() != 1)
     {
-        if (select_with_union_query->list_of_selects->children.size() != 1)
-        {
-            return;
-        }
-        auto & sub_query_node = select_with_union_query->list_of_selects->children.at(0);
-        if (auto * sub_query = sub_query_node->as<ASTSelectQuery>())
-        {
-            /// handle sub query in table expression recursively
-            visit(*sub_query, sub_query_node);
-
-            if (sub_query->groupBy() || sub_query->having() || sub_query->orderBy() || sub_query->limitBy() || sub_query->limitByLength()
-                || sub_query->limitByOffset() || sub_query->limitLength() || sub_query->limitOffset() || sub_query->distinct
-                || sub_query->with())
-                return;
-
-            /// try to eliminate subquery
-            if (!mergeColumns(parent_select, *sub_query))
-            {
-                return;
-            }
-
-            if (sub_query->where() && parent_select.where())
-            {
-                auto where = makeASTFunction("and", sub_query->where()->clone(), parent_select.where()->clone());
-                parent_select.setExpression(ASTSelectQuery::Expression::WHERE, where);
-            }
-            else if (sub_query->where())
-            {
-                parent_select.setExpression(ASTSelectQuery::Expression::WHERE, sub_query->where()->clone());
-            }
-
-            if (sub_query->prewhere() && parent_select.prewhere())
-            {
-                auto prewhere = makeASTFunction("and", sub_query->prewhere()->clone(), parent_select.prewhere()->clone());
-                parent_select.setExpression(ASTSelectQuery::Expression::PREWHERE, prewhere);
-            }
-            else if (sub_query->prewhere())
-            {
-                parent_select.setExpression(ASTSelectQuery::Expression::PREWHERE, sub_query->prewhere()->clone());
-            }
-
-            parent_select.setExpression(ASTSelectQuery::Expression::TABLES, sub_query->tables()->clone());
-
-            return;
-        }
+        return;
     }
+
+    auto & sub_query_node = select_with_union_query->list_of_selects->children.at(0);
+    auto * sub_query = sub_query_node->as<ASTSelectQuery>();
+    if (!sub_query)
+    {
+        return;
+    }
+
+    /// Handle sub query in table expression recursively
+    visit(*sub_query, sub_query_node);
+
+    if (sub_query->groupBy() || sub_query->having() || sub_query->orderBy() || sub_query->limitBy() || sub_query->limitByLength()
+        || sub_query->limitByOffset() || sub_query->limitLength() || sub_query->limitOffset() || sub_query->distinct || sub_query->with())
+        return;
+
+    /// Try to eliminate subquery
+    if (!mergeColumns(parent_select, *sub_query))
+    {
+        return;
+    }
+
+    if (sub_query->where() && parent_select.where())
+    {
+        auto where = makeASTFunction("and", sub_query->refWhere(), parent_select.refWhere());
+        parent_select.setExpression(ASTSelectQuery::Expression::WHERE, where);
+    }
+    else if (sub_query->where())
+    {
+        parent_select.setExpression(ASTSelectQuery::Expression::WHERE, std::move(sub_query->refWhere()));
+    }
+
+    if (sub_query->prewhere() && parent_select.prewhere())
+    {
+        auto prewhere = makeASTFunction("and", sub_query->refPrewhere(), parent_select.refPrewhere());
+        parent_select.setExpression(ASTSelectQuery::Expression::PREWHERE, prewhere);
+    }
+    else if (sub_query->prewhere())
+    {
+        parent_select.setExpression(ASTSelectQuery::Expression::PREWHERE, std::move(sub_query->refPrewhere()));
+    }
+    parent_select.setExpression(ASTSelectQuery::Expression::TABLES, std::move(sub_query->refTables()));
 }
 
-void EliminateSubqueryVisitorData::rewriteColumns(ASTPtr & ast, std::unordered_map<String, ASTPtr> & subquery_selects)
+void EliminateSubqueryVisitorData::rewriteColumns(ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects, bool drop_alias /*= false*/)
 {
     if (auto * identifier = ast->as<ASTIdentifier>())
     {
         auto it = subquery_selects.find(identifier->name());
         if (it != subquery_selects.end())
         {
-            ast = it->second->clone();
-            ast->setAlias("");
+            String alias = ast->tryGetAlias();
+            ast = it->second;
+            if(drop_alias){
+                ast->setAlias("");
+            }
+            else if (!alias.empty()){
+                ast->setAlias(alias);
+            }
         }
     }
     else
     {
         for (auto & child : ast->children)
         {
-            rewriteColumns(child, subquery_selects);
+            rewriteColumns(child, subquery_selects, true);
         }
     }
 }
 
 bool EliminateSubqueryVisitorData::mergeColumns(ASTSelectQuery & parent_query, ASTSelectQuery & child_query)
 {
-    /// select sum(b) from (select id as b from table)
-    std::unordered_map<std::string, ASTPtr> subquery_selects;
+    /// E.g., select sum(b) from (select id as b from table)
+    std::unordered_map<String, ASTPtr> subquery_selects;
     for (auto & column : child_query.select()->children)
     {
         if (column->as<ASTAsterisk>() || column->as<ASTQualifiedAsterisk>())
@@ -128,7 +132,8 @@ bool EliminateSubqueryVisitorData::mergeColumns(ASTSelectQuery & parent_query, A
             return false;
         }
     }
-    /// try to merge select columns
+
+    /// Try to merge select columns
     for (auto & parent_select_item : parent_query.select()->children)
     {
         rewriteColumns(parent_select_item, subquery_selects);

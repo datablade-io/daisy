@@ -302,12 +302,13 @@ InterpreterSelectQuery::InterpreterSelectQuery(
         ApplyWithSubqueryVisitor().visit(query_ptr);
     }
 
-    /// Daisy: Try to eliminate subquery
+    /// Daisy : starts. Try to eliminate subquery
     if (settings.optimize_subqueries)
     {
         EliminateSubqueryVisitorData data;
         EliminateSubqueryVisitor(data).visit(query_ptr);
     }
+    /// Daisy : ends.
 
     JoinedTables joined_tables(getSubqueryContext(*context), getSelectQuery());
 

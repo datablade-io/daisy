@@ -28,6 +28,8 @@ static String optimizeSubquery(const String & query)
 
 TEST(EliminateSubquery, OptimizedQuery)
 {
+    EXPECT_EQ(optimizeSubquery("SELECT a FROM (SELECT b AS a FROM product)"), "SELECT b AS a FROM product");
+    EXPECT_EQ(optimizeSubquery("SELECT a AS c FROM (SELECT b AS a FROM product)"), "SELECT b AS c FROM product");
     EXPECT_EQ(optimizeSubquery("SELECT count(*) FROM (SELECT * FROM access1)"), "SELECT count(*) FROM access1");
     EXPECT_EQ(optimizeSubquery("SELECT count(1) FROM (SELECT * FROM access1 a)"), "SELECT count(1) FROM access1 AS a");
     EXPECT_EQ(
@@ -47,7 +49,8 @@ TEST(EliminateSubquery, OptimizedQuery)
         optimizeSubquery("SELECT product_name, Code, sum(asBaseName0) asBaseName0, sum(asBaseName01) asBaseName01 FROM (SELECT "
                          "price asBaseName0, "
                          "sale_price asBaseName01, product_name product_name, Code Code FROM price) GROUP BY product_name, Code"),
-        "SELECT product_name, Code, sum(price) AS asBaseName0, sum(sale_price) AS asBaseName01 FROM price GROUP BY product_name, "
+        "SELECT product_name AS product_name, Code AS Code, sum(price) AS asBaseName0, sum(sale_price) AS asBaseName01 FROM price GROUP BY "
+        "product_name, "
         "Code");
     EXPECT_EQ(
         optimizeSubquery("SELECT count(a.productid) FROM (SELECT a.*, b.* FROM access1 a, db2.product_info b WHERE (a.productid = "
@@ -78,6 +81,9 @@ TEST(EliminateSubquery, OptimizedQuery)
     EXPECT_EQ(
         optimizeSubquery("SELECT a, b from (select * from users1) UNION SELECT c, d from (select * from users2)"),
         "SELECT a, b FROM users1 UNION  SELECT c, d FROM users2");
+    EXPECT_EQ(
+        optimizeSubquery("SELECT * FROM (SELECT avg(price) FROM (SELECT price, product_name FROM product)  GROUP BY product_name)"),
+        "SELECT * FROM (SELECT avg(price) FROM product GROUP BY product_name)");
 }
 
 TEST(EliminateSubquery, FailedOptimizedQuery)
@@ -86,4 +92,5 @@ TEST(EliminateSubquery, FailedOptimizedQuery)
         optimizeSubquery(
             "SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)"),
         "SELECT count(*) FROM (SELECT runningDifference(i) AS diff FROM (SELECT * FROM test_query ORDER BY i DESC) WHERE diff > 0)");
+    EXPECT_EQ(optimizeSubquery("SELECT * FROM (SELECT avg(price) FROM product)"), "SELECT * FROM (SELECT avg(price) FROM product)");
 }

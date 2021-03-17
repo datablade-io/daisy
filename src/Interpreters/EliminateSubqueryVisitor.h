@@ -18,7 +18,7 @@ public:
 
 private:
     void visit(ASTTableExpression & table, ASTSelectQuery & parent_select);
-    void rewriteColumns(ASTPtr & ast, std::unordered_map<String, ASTPtr> & child_select);
+    void rewriteColumns(ASTPtr & ast, const std::unordered_map<String, ASTPtr> & child_select, bool drop_alias = false);
     bool mergeColumns(ASTSelectQuery & parent_query, ASTSelectQuery & child_query);
 };
 
