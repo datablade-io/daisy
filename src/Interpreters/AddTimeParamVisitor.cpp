@@ -16,7 +16,7 @@
 
 namespace DB
 {
-bool AddTimeParamVisitor::containTimeField(ASTPtr node)
+bool AddTimeVisitorMatcher::containTimeField(ASTPtr& node, Context& context)
 {
     if (!node->as<ASTIdentifier>())
     {
@@ -39,7 +39,7 @@ bool AddTimeParamVisitor::containTimeField(ASTPtr node)
     return col_desc.has("_time") && col_desc.get("_time").type->getTypeId() == TypeIndex::DateTime64;
 }
 
-void AddTimeParamVisitor::visitSelectQuery(ASTPtr ast)
+void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr& ast, Context& context)
 {
     if (!ast->as<ASTSelectQuery>())
     {
@@ -65,55 +65,60 @@ void AddTimeParamVisitor::visitSelectQuery(ASTPtr ast)
     
     if (table_expression->database_and_table_name)
     {
-        ParserExpressionWithOptionalAlias elem_parser(false);
-        if (!containTimeField(table_expression->database_and_table_name))
-        {
-            return;
-        }
-
-        /// merge time picker predicates into the where subtree of this select node
-        /// BE Careful: where_statement may be null, when the sql doesn't contain where expression
-        ASTPtr where_statement = select->where();
-        ASTPtr new_node;
-        if (!context.getTimeParam().getStart().empty())
-        {
-            new_node = parseQuery(
-                elem_parser,
-                context.getTimeParam().getStart(),
-                context.getSettingsRef().max_query_size,
-                context.getSettingsRef().max_parser_depth);
-            new_node = makeASTFunction("greaterOrEquals", std::make_shared<ASTIdentifier>("_time"), new_node);
-        }
-
-        if (!context.getTimeParam().getEnd().empty())
-        {
-            ASTPtr less = parseQuery(
-                elem_parser,
-                context.getTimeParam().getEnd(),
-                context.getSettingsRef().max_query_size,
-                context.getSettingsRef().max_parser_depth);
-            less = makeASTFunction("less", std::make_shared<ASTIdentifier>("_time"), less);
-            new_node = new_node ? makeASTFunction("and", less, new_node) : less;
-        }
-
-        where_statement = where_statement ? makeASTFunction("and", new_node, where_statement) : new_node;
-        select->setExpression(ASTSelectQuery::Expression::WHERE, std::move(where_statement));
+        insertTimeParamTime(select, table_expression->database_and_table_name, context);
     }
     else if (table_expression->subquery)
     {
         ASTPtr subquery = table_expression->subquery->children[0];
         if (subquery->as<ASTSelectWithUnionQuery>())
         {
-            visitSelectWithUnionQuery(subquery);
+            visitSelectWithUnionQuery(subquery, context);
         }
         else if (subquery->as<ASTSelectQuery>())
         {
-            visitSelectQuery(subquery);
+            visitSelectQuery(subquery, context);
         }
     }
 }
 
-void AddTimeParamVisitor::visitSelectWithUnionQuery(ASTPtr ast)
+void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr &table_name, Context& context)
+{
+    ParserExpressionWithOptionalAlias elem_parser(false);
+    if (!containTimeField(table_name, context))
+    {
+        return;
+    }
+
+    /// merge time picker predicates into the where subtree of this select node
+    /// BE Careful: where_statement may be null, when the sql doesn't contain where expression
+    ASTPtr where_statement = select->where();
+    ASTPtr new_node;
+    if (!context.getTimeParam().getStart().empty())
+    {
+        new_node = parseQuery(
+            elem_parser,
+            context.getTimeParam().getStart(),
+            context.getSettingsRef().max_query_size,
+            context.getSettingsRef().max_parser_depth);
+        new_node = makeASTFunction("greaterOrEquals", std::make_shared<ASTIdentifier>("_time"), new_node);
+    }
+
+    if (!context.getTimeParam().getEnd().empty())
+    {
+        ASTPtr less = parseQuery(
+            elem_parser,
+            context.getTimeParam().getEnd(),
+            context.getSettingsRef().max_query_size,
+            context.getSettingsRef().max_parser_depth);
+        less = makeASTFunction("less", std::make_shared<ASTIdentifier>("_time"), less);
+        new_node = new_node ? makeASTFunction("and", less, new_node) : less;
+    }
+
+    where_statement = where_statement ? makeASTFunction("and", new_node, where_statement) : new_node;
+    select->setExpression(ASTSelectQuery::Expression::WHERE, std::move(where_statement));
+}
+
+void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr& ast, Context& context)
 {
     if (!ast->as<ASTSelectWithUnionQuery>())
     {
@@ -127,18 +132,18 @@ void AddTimeParamVisitor::visitSelectWithUnionQuery(ASTPtr ast)
     }
 
     if (un->list_of_selects->children[0]->as<ASTSelectQuery>())
-        visitSelectQuery(un->list_of_selects->children[0]);
+        visitSelectQuery(un->list_of_selects->children[0], context);
 }
 
-void AddTimeParamVisitor::visit(ASTPtr ast)
+void AddTimeVisitorMatcher::visit(ASTPtr& ast, Context& context)
 {
     if (ast->as<ASTSelectQuery>())
     {
-        visitSelectQuery(ast);
+        visitSelectQuery(ast, context);
     }
     else if (ast->as<ASTSelectWithUnionQuery>())
     {
-        visitSelectWithUnionQuery(ast);
+        visitSelectWithUnionQuery(ast, context);
     }
 }
 
