@@ -287,7 +287,10 @@ private:
                                                     /// to DatabaseOnDisk::commitCreateTable(...) or IStorage::alter(...) without changing
                                                     /// thousands of signatures.
                                                     /// And I hope it will be replaced with more common Transaction sometime.
-    TimeParam time_param; /// parameters for time predicates of main table
+    
+    /// Daisy : starts. Parameters for time predicates of main table
+    TimeParam time_param;
+    /// Daisy : end.
 
     /// Use copy constructor or createGlobal() instead
     Context();
@@ -736,9 +739,11 @@ public:
     void setQueryParameter(const String & name, const String & value);
     void setQueryParameters(const NameToNameMap & parameters) { query_parameters = parameters; }
 
+    /// Daisy : starts. Getter and setter method for time param
     const TimeParam & getTimeParam() const { return time_param; }
     void setTimeParamStart(const String & start) { time_param.setStart(start); }
     void setTimeParamEnd(const String & end) { time_param.setEnd(end); }
+    /// Daisy : ends.
 
 #if USE_EMBEDDED_COMPILER
     std::shared_ptr<CompiledExpressionCache> getCompiledExpressionCache() const;

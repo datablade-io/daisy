@@ -476,13 +476,14 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
             query = serializeAST(*ast);
         }
 
-        /// Add time param into AST
+        /// Daisy : starts. Add time param into AST
         if (!context.getTimeParam().empty())
         {
             AddTimeParamVisitor visitor(context);
             visitor.visit(ast);
             query = serializeAST(*ast);
         }
+        /// Daisy : ends.
 
         /// Check the limits.
         checkASTSizeLimits(*ast, settings);

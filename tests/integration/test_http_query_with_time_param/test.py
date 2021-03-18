@@ -104,7 +104,9 @@ def setup_nodes():
     (
         "SELECT count(1) FROM (SELECT _time FROM A "
         "WHERE _time >= '2021-01-20 00:00:00.000' AND _time < '2021-01-25 00:00:00.000' "
-        "UNION ALL SELECT _time FROM B)",
+        "UNION ALL "
+        "SELECT _time FROM B "
+        "WHERE _time >= '2021-01-20 00:00:00.000' AND _time < '2021-01-25 00:00:00.000')",
         {
             "query": "SELECT count(1) FROM (SELECT _time FROM A UNION ALL SELECT _time FROM B)",
             "params":{

@@ -89,7 +89,7 @@ void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr 
         return;
     }
 
-    /// merge time picker predicates into the where subtree of this select node
+    /// Merge time picker predicates into the where subtree of this select node
     /// BE Careful: where_statement may be null, when the sql doesn't contain where expression
     ASTPtr where_statement = select->where();
     ASTPtr new_node;
@@ -131,8 +131,13 @@ void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr & ast, Context & co
         return;
     }
 
-    if (un->list_of_selects->children[0]->as<ASTSelectQuery>())
-        visitSelectQuery(un->list_of_selects->children[0], context);
+    for (auto & child : un->list_of_selects->children)
+    {
+        if (child->as<ASTSelectQuery>())
+        {
+            visitSelectQuery(un->list_of_selects->children[0], context);
+        }
+    }
 }
 
 void AddTimeVisitorMatcher::visit(ASTPtr & ast, Context & context)

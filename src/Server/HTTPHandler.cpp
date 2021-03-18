@@ -803,6 +803,7 @@ bool DynamicQueryHandler::customizeQueryParam(Context & context, const std::stri
         return true;
     }
 
+    /// Daisy : starts. Add time param into context
     if (key == "time_start")
     {
         context.setTimeParamStart(value);
@@ -813,6 +814,7 @@ bool DynamicQueryHandler::customizeQueryParam(Context & context, const std::stri
         context.setTimeParamEnd(value);
         return true;
     }
+    /// Daisy : ends.
 
     return false;
 }
