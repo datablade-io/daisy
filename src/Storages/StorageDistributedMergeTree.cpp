@@ -3,9 +3,14 @@
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Functions/IFunction.h>
+#include <Interpreters/ClusterProxy/DistributedSelectStreamFactory.h>
+#include <Interpreters/ClusterProxy/executeQuery.h>
 #include <Interpreters/ExpressionAnalyzer.h>
+#include <Interpreters/InDepthNodeVisitor.h>
+#include <Interpreters/InterpreterSelectQuery.h>
 #include <Interpreters/TreeRewriter.h>
 #include <Interpreters/createBlockSelector.h>
+#include <Interpreters/evaluateConstantExpression.h>
 #include <Processors/Pipe.h>
 #include <Storages/MergeTree/DistributedMergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
@@ -21,10 +26,16 @@ namespace ErrorCodes
     extern const int INVALID_CONFIG_PARAMETER;
     extern const int NOT_IMPLEMENTED;
     extern const int OK;
+    extern const int UNABLE_TO_SKIP_UNUSED_SHARDS;
+    extern const int TOO_MANY_ROWS;
 }
 
 namespace
 {
+const UInt64 FORCE_OPTIMIZE_SKIP_UNUSED_SHARDS_HAS_SHARDING_KEY = 1;
+const UInt64 FORCE_OPTIMIZE_SKIP_UNUSED_SHARDS_ALWAYS = 2;
+const UInt64 DISTRIBUTED_GROUP_BY_NO_MERGE_AFTER_AGGREGATION = 2;
+
 ExpressionActionsPtr
 buildShardingKeyExpression(const ASTPtr & sharding_key, const Context & context, const NamesAndTypesList & columns, bool project)
 {
@@ -44,6 +55,142 @@ bool isExpressionActionsDeterministics(const ExpressionActionsPtr & actions)
             return false;
     }
     return true;
+}
+
+class ReplacingConstantExpressionsMatcher
+{
+public:
+    using Data = Block;
+
+    static bool needChildVisit(ASTPtr &, const ASTPtr &)
+    {
+        return true;
+    }
+
+    static void visit(ASTPtr & node, Block & block_with_constants)
+    {
+        if (!node->as<ASTFunction>())
+            return;
+
+        std::string name = node->getColumnName();
+        if (block_with_constants.has(name))
+        {
+            auto result = block_with_constants.getByName(name);
+            if (!isColumnConst(*result.column))
+                return;
+
+            node = std::make_shared<ASTLiteral>(assert_cast<const ColumnConst &>(*result.column).getField());
+        }
+    }
+};
+
+void replaceConstantExpressions(
+    ASTPtr & node,
+    const Context & context,
+    const NamesAndTypesList & columns,
+    ConstStoragePtr storage,
+    const StorageMetadataPtr & metadata_snapshot)
+{
+    auto syntax_result = TreeRewriter(context).analyze(node, columns, storage, metadata_snapshot);
+    Block block_with_constants = KeyCondition::getBlockWithConstants(node, syntax_result, context);
+
+    InDepthNodeVisitor<ReplacingConstantExpressionsMatcher, true> visitor(block_with_constants);
+    visitor.visit(node);
+}
+
+/// Returns one of the following:
+/// - QueryProcessingStage::Complete
+/// - QueryProcessingStage::WithMergeableStateAfterAggregation
+/// - none (in this case regular WithMergeableState should be used)
+std::optional<QueryProcessingStage::Enum> getOptimizedQueryProcessingStage(const ASTPtr & query_ptr, bool extremes, const Block & sharding_key_block)
+{
+    const auto & select = query_ptr->as<ASTSelectQuery &>();
+
+    auto sharding_block_has = [&](const auto & exprs, size_t limit = SIZE_MAX) -> bool
+    {
+        size_t i = 0;
+        for (auto & expr : exprs)
+        {
+            ++i;
+            if (i > limit)
+                break;
+
+            auto id = expr->template as<ASTIdentifier>();
+            if (!id)
+                return false;
+            /// TODO: if GROUP BY contains multiIf()/if() it should contain only columns from sharding_key
+            if (!sharding_key_block.has(id->name()))
+                return false;
+        }
+        return true;
+    };
+
+    // GROUP BY qualifiers
+    // - TODO: WITH TOTALS can be implemented
+    // - TODO: WITH ROLLUP can be implemented (I guess)
+    if (select.group_by_with_totals || select.group_by_with_rollup || select.group_by_with_cube)
+        return {};
+
+    // TODO: extremes support can be implemented
+    if (extremes)
+        return {};
+
+    // DISTINCT
+    if (select.distinct)
+    {
+        if (!sharding_block_has(select.select()->children))
+            return {};
+    }
+
+    // GROUP BY
+    const ASTPtr group_by = select.groupBy();
+    if (!group_by)
+    {
+        if (!select.distinct)
+            return {};
+    }
+    else
+    {
+        if (!sharding_block_has(group_by->children, 1))
+            return {};
+    }
+
+    // ORDER BY
+    const ASTPtr order_by = select.orderBy();
+    if (order_by)
+        return QueryProcessingStage::WithMergeableStateAfterAggregation;
+
+    // LIMIT BY
+    // LIMIT
+    // OFFSET
+    if (select.limitBy() || select.limitLength() || select.limitOffset())
+        return QueryProcessingStage::WithMergeableStateAfterAggregation;
+
+    // Only simple SELECT FROM GROUP BY sharding_key can use Complete state.
+    return QueryProcessingStage::Complete;
+}
+
+size_t getClusterQueriedNodes(const Settings & settings, const ClusterPtr & cluster)
+{
+    size_t num_local_shards = cluster->getLocalShardCount();
+    size_t num_remote_shards = cluster->getRemoteShardCount();
+    return (num_remote_shards * settings.max_parallel_replicas) + num_local_shards;
+}
+
+std::string makeFormattedListOfShards(const ClusterPtr & cluster)
+{
+    WriteBufferFromOwnString buf;
+
+    bool head = true;
+    buf << "[";
+    for (const auto & shard_info : cluster->getShardsInfo())
+    {
+        (head ? buf : buf << ", ") << shard_info.shard_num;
+        head = false;
+    }
+    buf << "]";
+
+    return buf.str();
 }
 }
 
@@ -107,6 +254,18 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     }
 }
 
+void StorageDistributedMergeTree::readRemote(
+    QueryPlan & query_plan, SelectQueryInfo & query_info, const Context & context, QueryProcessingStage::Enum processed_stage)
+{
+    Block header = InterpreterSelectQuery(query_info.query, context, SelectQueryOptions(processed_stage)).getSampleBlock();
+    const Scalars & scalars = context.hasQueryContext() ? context.getQueryContext().getScalars() : Scalars{};
+
+    ClusterProxy::DistributedSelectStreamFactory select_stream_factory
+        = ClusterProxy::DistributedSelectStreamFactory(header, processed_stage, getStorageID(), scalars, context.getExternalTables());
+
+    ClusterProxy::executeQuery(query_plan, select_stream_factory, log, query_info.query, context, query_info);
+}
+
 void StorageDistributedMergeTree::read(
     QueryPlan & query_plan,
     const Names & column_names,
@@ -117,7 +276,15 @@ void StorageDistributedMergeTree::read(
     size_t max_block_size,
     unsigned num_streams)
 {
-    storage->read(query_plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+    if (!isRemote())
+    {
+        storage->read(query_plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+    }
+    else
+    {
+        /// This is a distributed query
+        readRemote(query_plan, query_info, context, processed_stage);
+    }
 }
 
 Pipe StorageDistributedMergeTree::read(
@@ -129,7 +296,9 @@ Pipe StorageDistributedMergeTree::read(
     size_t max_block_size,
     unsigned num_streams)
 {
-    return storage->read(column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+    QueryPlan plan;
+    read(plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+    return plan.convertToPipe();
 }
 
 void StorageDistributedMergeTree::startup()
@@ -161,6 +330,13 @@ void StorageDistributedMergeTree::shutdown()
 String StorageDistributedMergeTree::getName() const
 {
     return "DistributedMergeTree";
+}
+
+bool StorageDistributedMergeTree::isRemote() const
+{
+    /// If it is virtual table, then it is remote
+    /// virtual table doesn't have backing storage
+    return !storage;
 }
 
 bool StorageDistributedMergeTree::supportsParallelInsert() const
@@ -269,6 +445,19 @@ std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
     return storage->getDataProcessingJob();
 }
 
+QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStage(
+    const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
+{
+    if (!isRemote())
+    {
+        return storage->getQueryProcessingStage(context, to_stage, query_info);
+    }
+    else
+    {
+        return getQueryProcessingStageRemote(context, to_stage, query_info);
+    }
+}
+
 void StorageDistributedMergeTree::dropPartition(const ASTPtr & partition, bool detach, bool drop_part, const Context & context, bool throw_if_noop)
 {
     storage->dropPartition(partition, detach, drop_part, context, throw_if_noop);
@@ -312,7 +501,175 @@ void StorageDistributedMergeTree::startBackgroundMovesIfNeeded()
     return storage->startBackgroundMovesIfNeeded();
 }
 
-///////////////////////// NEW FUNCTIONS //////////////////////
+/// Distributed query related functions
+
+
+ClusterPtr StorageDistributedMergeTree::getCluster() const
+{
+    return nullptr;
+}
+
+/// Returns a new cluster with fewer shards if constant folding for `sharding_key_expr` is possible
+/// using constraints from "PREWHERE" and "WHERE" conditions, otherwise returns `nullptr`
+ClusterPtr StorageDistributedMergeTree::skipUnusedShards(
+    ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, const Context & context) const
+{
+    const auto & select = query_ptr->as<ASTSelectQuery &>();
+
+    if (!select.prewhere() && !select.where())
+    {
+        return nullptr;
+    }
+
+    ASTPtr condition_ast;
+    if (select.prewhere() && select.where())
+    {
+        condition_ast = makeASTFunction("and", select.prewhere()->clone(), select.where()->clone());
+    }
+    else
+    {
+        condition_ast = select.prewhere() ? select.prewhere()->clone() : select.where()->clone();
+    }
+
+    replaceConstantExpressions(condition_ast, context, metadata_snapshot->getColumns().getAll(), shared_from_this(), metadata_snapshot);
+    const auto blocks = evaluateExpressionOverConstantCondition(condition_ast, sharding_key_expr);
+
+    /// Can't get definite answer if we can skip any shards
+    if (!blocks)
+    {
+        return nullptr;
+    }
+
+    std::set<int> shard_ids;
+
+    for (const auto & block : *blocks)
+    {
+        if (!block.has(sharding_key_column_name))
+        {
+            throw Exception("sharding_key_expr should evaluate as a single row", ErrorCodes::TOO_MANY_ROWS);
+        }
+
+        const ColumnWithTypeAndName & result = block.getByName(sharding_key_column_name);
+        const auto selector = createSelector(result);
+
+        shard_ids.insert(selector.begin(), selector.end());
+    }
+
+    return cluster->getClusterWithMultipleShards({shard_ids.begin(), shard_ids.end()});
+}
+
+ClusterPtr StorageDistributedMergeTree::getOptimizedCluster(
+    const Context & context, const StorageMetadataPtr & metadata_snapshot, const ASTPtr & query_ptr) const
+{
+    ClusterPtr cluster = getCluster();
+    const Settings & settings = context.getSettingsRef();
+
+    bool sharding_key_is_usable = settings.allow_nondeterministic_optimize_skip_unused_shards || sharding_key_is_deterministic;
+
+    if (sharding_key_expr && sharding_key_is_usable)
+    {
+        ClusterPtr optimized = skipUnusedShards(cluster, query_ptr, metadata_snapshot, context);
+        if (optimized)
+        {
+            return optimized;
+        }
+    }
+
+    UInt64 force = settings.force_optimize_skip_unused_shards;
+    if (force)
+    {
+        WriteBufferFromOwnString exception_message;
+        if (!sharding_key_expr)
+        {
+            exception_message << "No sharding key";
+        }
+        else if (!sharding_key_is_usable)
+        {
+            exception_message << "Sharding key is not deterministic";
+        }
+        else
+        {
+            exception_message << "Sharding key " << sharding_key_column_name << " is not used";
+        }
+
+        if (force == FORCE_OPTIMIZE_SKIP_UNUSED_SHARDS_ALWAYS)
+        {
+            throw Exception(exception_message.str(), ErrorCodes::UNABLE_TO_SKIP_UNUSED_SHARDS);
+        }
+
+        if (force == FORCE_OPTIMIZE_SKIP_UNUSED_SHARDS_HAS_SHARDING_KEY && sharding_key_expr)
+        {
+            throw Exception(exception_message.str(), ErrorCodes::UNABLE_TO_SKIP_UNUSED_SHARDS);
+        }
+    }
+
+    return cluster;
+}
+
+QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageRemote(
+    const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
+{
+    const auto & settings = context.getSettingsRef();
+    auto metadata_snapshot = getInMemoryMetadataPtr();
+
+    ClusterPtr cluster = getCluster();
+    query_info.cluster = cluster;
+
+    /// Always calculate optimized cluster here, to avoid conditions during read()
+    /// (Anyway it will be calculated in the read())
+    if (settings.optimize_skip_unused_shards)
+    {
+        ClusterPtr optimized_cluster = getOptimizedCluster(context, metadata_snapshot, query_info.query);
+        if (optimized_cluster)
+        {
+            LOG_DEBUG(log, "Skipping irrelevant shards - the query will be sent to the following shards of the cluster (shard numbers): {}", makeFormattedListOfShards(optimized_cluster));
+            cluster = optimized_cluster;
+            query_info.cluster = cluster;
+        }
+        else
+        {
+            LOG_DEBUG(
+                log,
+                "Unable to figure out irrelevant shards from WHERE/PREWHERE clauses - the query will be sent to all shards of the "
+                "cluster{}",
+                sharding_key_expr ? "" : " (no sharding key)");
+        }
+    }
+
+    if (settings.distributed_group_by_no_merge)
+    {
+        if (settings.distributed_group_by_no_merge == DISTRIBUTED_GROUP_BY_NO_MERGE_AFTER_AGGREGATION)
+            return QueryProcessingStage::WithMergeableStateAfterAggregation;
+        else
+            return QueryProcessingStage::Complete;
+    }
+
+    /// Nested distributed query cannot return Complete stage,
+    /// since the parent query need to aggregate the results after.
+    if (to_stage == QueryProcessingStage::WithMergeableState)
+        return QueryProcessingStage::WithMergeableState;
+
+    /// If there is only one node, the query can be fully processed by the
+    /// shard, initiator will work as a proxy only.
+    if (getClusterQueriedNodes(settings, cluster) == 1)
+        return QueryProcessingStage::Complete;
+
+    if (settings.optimize_skip_unused_shards && settings.optimize_distributed_group_by_sharding_key && sharding_key_expr
+        && (settings.allow_nondeterministic_optimize_skip_unused_shards || sharding_key_is_deterministic))
+    {
+        Block sharding_key_block = sharding_key_expr->getSampleBlock();
+        auto stage = getOptimizedQueryProcessingStage(query_info.query, settings.extremes, sharding_key_block);
+        if (stage)
+        {
+            LOG_DEBUG(log, "Force processing stage to {}", QueryProcessingStage::toString(*stage));
+            return *stage;
+        }
+    }
+
+    return QueryProcessingStage::WithMergeableState;
+}
+
+/// New functions
 
 IColumn::Selector StorageDistributedMergeTree::createSelector(const ColumnWithTypeAndName & result) const
 {
@@ -371,9 +728,9 @@ size_t StorageDistributedMergeTree::getRandomShardIndex()
     return std::uniform_int_distribution<size_t>(0, shards - 1)(rng);
 }
 
-IDistributedWriteAheadLog::RecordSequenceNumber StorageDistributedMergeTree::lastSequenceNumber()
+IDistributedWriteAheadLog::RecordSequenceNumber StorageDistributedMergeTree::lastSequenceNumber() const
 {
-    /// FIXME, load from ckpt file
+    std::lock_guard lock(sns_mutex);
     return last_sn;
 }
 
@@ -621,6 +978,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
     auto topic = getStorageID().getFullTableName();
     setThreadName("DistMergeTree");
 
+    /// FIXME, load last sequence number from ckpt in local file system
     DistributedWriteAheadLogKafkaContext consume_ctx{topic, shard, lastSequenceNumber()};
     consume_ctx.auto_offset_reset = dwal_auto_offset_reset;
 
