@@ -16,18 +16,9 @@ public:
     }
 
 private:
-    void parseURL(const Poco::Path & path) override;
-
-    bool validatePost(const Poco::JSON::Object::Ptr & /* payload */) const override
-    {
-        return false;
-    }
+    bool validatePost(const Poco::JSON::Object::Ptr & /* payload */) const override { return false; }
 
     bool streaming() override { return true; }
-
-private:
-    String database_name;
-    String table_name;
 };
 
 }

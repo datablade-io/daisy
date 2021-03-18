@@ -16,13 +16,11 @@ public:
     ~TableRestRouterHandler() override { }
 
 private:
-    void parseURL(const Poco::Path & path) override;
-
     bool validateGet(const Poco::JSON::Object::Ptr & payload) const override;
     bool validatePost(const Poco::JSON::Object::Ptr & payload) const override;
     bool validatePatch(const Poco::JSON::Object::Ptr & payload) const override;
 
-    String executeGet(const Poco::JSON::Object::Ptr &  payload, Int32 & http_status) const override;
+    String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     String executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     String executeDelete(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const override;
     String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
@@ -36,10 +34,6 @@ private:
     String getColumnDefination(const Poco::JSON::Object::Ptr & column) const;
 
     String processQuery(const String & query, Int32 & /* http_status */) const;
-
-private:
-    String database_name;
-    String table_name;
 };
 
 }
