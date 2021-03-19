@@ -618,7 +618,7 @@ void ingestAsync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex
         auto record = make_shared<IDistributedWriteAheadLog::Record>(
             IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, prepareData(bench_settings.producer_settings.batch_size));
         record->partition_key = 0;
-        record->idempotent_key = to_string(i);
+        record->headers["_idem"] = to_string(i);
 
         unique_ptr<Data> data{new Data(cmutex, inflights, result_queue, total, failed, i)};
 
@@ -680,7 +680,7 @@ void ingestSync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex,
         IDistributedWriteAheadLog::Record record{
             IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, prepareData(bench_settings.producer_settings.batch_size)};
         record.partition_key = i;
-        record.idempotent_key = to_string(i);
+        record.headers["_idem"] = to_string(i);
 
         auto start = chrono::steady_clock::now();
         const IDistributedWriteAheadLog::AppendResult & result = wal->append(record, ctx);
@@ -769,7 +769,7 @@ void doConsume(IDistributedWriteAheadLog::RecordPtrs records, void * data)
     {
         lock_guard<mutex> lock(cctx->stdout_mutex);
 
-        cout << "partition=" << record->partition_key << " offset=" << record->sn << " idem=" << record->idempotent_key << endl;
+        cout << "partition=" << record->partition_key << " offset=" << record->sn << " idem=" << record->headers["_idem"] << endl;
         dumpData(record->block);
     }
 

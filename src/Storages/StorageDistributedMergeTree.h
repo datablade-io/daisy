@@ -17,7 +17,13 @@ namespace DB
 
 class StorageMergeTree;
 
-/** See the description of the data structure in MergeTreeData.
+/** A StorageDistributedMergeTree is an table engine that uses merge tree and replicated via
+  * distributed write ahead log which is now implemented by using Kafka. Users can issue
+  * distributed data ingestions and distributed queries against this single table engine directly.
+  * The goals of this table engine are resolving the following major requirements
+  *   1. Large scale perf data ingestion
+  *   2. Streaming query
+  *   3. Simplified usabilities (from end users point of view)
   */
 class StorageDistributedMergeTree final : public ext::shared_ptr_helper<StorageDistributedMergeTree>, public MergeTreeData
 {
@@ -28,6 +34,8 @@ public:
     ~StorageDistributedMergeTree() override = default;
 
     String getName() const override;
+
+    bool isRemote() const override;
 
     bool supportsParallelInsert() const override;
 
@@ -93,6 +101,9 @@ public:
 
     std::optional<JobAndPool> getDataProcessingJob() override;
 
+    QueryProcessingStage::Enum
+    getQueryProcessingStage(const Context &, QueryProcessingStage::Enum to_stage, SelectQueryInfo &) const override;
+
 private:
     /// Partition helpers
 
@@ -117,6 +128,20 @@ private:
 
     void startBackgroundMovesIfNeeded() override;
 
+    /// Distributed query
+    QueryProcessingStage::Enum
+    getQueryProcessingStageRemote(const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const;
+
+    ClusterPtr getOptimizedCluster(const Context & context, const StorageMetadataPtr & metadata_snapshot, const ASTPtr & query_ptr) const;
+
+    ClusterPtr getCluster() const;
+
+    ClusterPtr skipUnusedShards(
+        ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, const Context & context) const;
+
+    void
+    readRemote(QueryPlan & query_plan, SelectQueryInfo & query_info, const Context & context, QueryProcessingStage::Enum processed_stage);
+
 public:
     IColumn::Selector createSelector(const ColumnWithTypeAndName & result) const;
     IColumn::Selector createSelector(const Block & block) const;
@@ -130,6 +155,8 @@ public:
 
     size_t getRandomShardIndex();
     Int32 currentShard() const { return shard; }
+
+    IDistributedWriteAheadLog::RecordSequenceNumber lastSequenceNumber() const;
 
     friend class DistributedMergeTreeBlockOutputStream;
     friend class MergeTreeData;
@@ -151,7 +178,6 @@ protected:
 
 private:
     void initWal();
-    IDistributedWriteAheadLog::RecordSequenceNumber lastSequenceNumber();
 
 private:
     struct WriteCallbackData
@@ -211,7 +237,7 @@ private:
 
     ThreadPool & part_commit_pool;
 
-    std::mutex sns_mutex;
+    mutable std::mutex sns_mutex;
     IDistributedWriteAheadLog::RecordSequenceNumber last_sn = -1;
     IDistributedWriteAheadLog::RecordSequenceNumber prev_sn = -1;
     std::set<SequencePair> local_committed_sns;
