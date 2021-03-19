@@ -56,19 +56,26 @@ std::vector<String> PlacementService::place(Int32 shards, Int32 replication_fact
 {
     size_t total_replicas = static_cast<size_t>(shards * replication_factor);
 
-    std::vector<String> hosts{catalog.hosts()};
-    if (hosts.size() < total_replicas)
+    auto nodes{catalog.nodes()};
+    if (nodes.size() < total_replicas)
     {
-        /// Hosts are not enough
+        /// nodes are not enough
         return {};
     }
 
     /// FIXME, for now use randomization
     std::random_device rd;
     std::mt19937 g(rd());
-    std::shuffle(hosts.begin(), hosts.end(), g);
+    std::shuffle(nodes.begin(), nodes.end(), g);
 
-    return std::vector<String>{hosts.begin(), hosts.begin() + total_replicas};
+    std::vector<String> target_nodes;
+    target_nodes.reserve(total_replicas);
+
+    for (size_t i = 0; i < total_replicas; ++i)
+    {
+        target_nodes.push_back(nodes[i]->host + ":" + std::to_string(nodes[i]->http_port));
+    }
+    return target_nodes;
 }
 
 std::vector<String> PlacementService::placed(const String & database, const String & table) const
