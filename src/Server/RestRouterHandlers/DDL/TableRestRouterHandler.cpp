@@ -1,12 +1,12 @@
 #include "TableRestRouterHandler.h"
 
-#include <Server/RestRouterHandlers/Common/SchemaValidator.h>
 #include <Interpreters/executeQuery.h>
+#include <Server/RestRouterHandlers/Common/SchemaValidator.h>
 
-#include <vector>
 #include <Core/Block.h>
 #include <Poco/Path.h>
 
+#include <vector>
 
 namespace DB
 {
@@ -57,12 +57,6 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::update_schem
     }
 };
 
-void TableRestRouterHandler::parseURL(const Poco::Path & path)
-{
-    database_name = path[DATABASE_DEPTH_INDEX - 1];
-    table_name = path[TABLE_DEPTH_INDEX - 1];
-}
-
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload) const
 {
     SchemaValidator::validateSchema(create_schema, payload);
@@ -94,6 +88,8 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
 
 String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
+    String database_name = getUriParamValue("database");
+
     String query = "CREATE TABLE " + database_name + "." + payload->get("name").toString() + "("
         + getColumnsDefination(payload->getArray("columns"), payload->get("_time_column").toString())
         + ") ENGINE = MergeTree() PARTITION BY " + payload->get("partition_by_expression").toString() + " ORDER BY "
@@ -104,12 +100,18 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
 {
+    String database_name = getUriParamValue("database");
+    String table_name = getUriParamValue("table");
+
     String query = "DROP TABLE " + database_name + "." + table_name;
     return processQuery(query, http_status);
 }
 
 String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
+    String database_name = getUriParamValue("database");
+    String table_name = getUriParamValue("table");
+
     String query = "ALTER TABLE " + database_name + "." + table_name;
     if (payload->has("order_by_expression") && payload->has("ttl_expression"))
         query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString() + ", MODIFY  TTL "
