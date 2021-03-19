@@ -484,7 +484,14 @@ ClusterPtr CatalogService::tableCluster(const String & database, const String & 
 
     /// FIXME, user/password etc
     auto table_cluster = std::make_shared<Cluster>(
-        global_context.getSettingsRef(), host_ports, /* username = */ "", /* password = */ "", 9000, /* secure = */ false, /* priority = */ 1);
+        global_context.getSettingsRef(),
+        host_ports,
+        /* username = */ "",
+        /* password = */ "",
+        9000,
+        /* treat_local_as_remote = */ false,
+        /* secure = */ false,
+        /* priority = */ 1);
 
     {
         std::unique_lock guard{table_cluster_rwlock};
