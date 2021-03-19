@@ -30,9 +30,7 @@ using KTopicConfPtr = std::unique_ptr<rd_kafka_topic_conf_t, decltype(rd_kafka_t
 using KConfCallback = std::function<void(rd_kafka_conf_t *)>;
 using KConfParams = std::vector<std::pair<String, String>>;
 
-/// static globals
 const char * IDEM_HEADER_NAME = "_idem";
-
 
 Int32 mapErrorCode(rd_kafka_resp_err_t err)
 {
@@ -255,12 +253,18 @@ inline IDistributedWriteAheadLog::RecordPtr kafkaMsgToRecord(rd_kafka_message_t 
     rd_kafka_headers_t *hdrs = nullptr;
     if (rd_kafka_message_headers(msg, &hdrs) == RD_KAFKA_RESP_ERR_NO_ERROR)
     {
-        /// Has header, shall have only one header
-        const void * value = nullptr;
-        size_t size = 0;
-        if (rd_kafka_header_get(hdrs, 0, IDEM_HEADER_NAME, &value, &size) == RD_KAFKA_RESP_ERR_NO_ERROR)
+        /// Has headers
+        auto n = rd_kafka_header_cnt(hdrs);
+        for (size_t i = 0; i < n; ++i)
         {
-            record->idempotent_key = String{static_cast<const char *>(value), size};
+            const char * name = nullptr;
+            const void * value = nullptr;
+            size_t size = 0;
+
+            if (rd_kafka_header_get_all(hdrs, i, &name, &value, &size) == RD_KAFKA_RESP_ERR_NO_ERROR)
+            {
+                record->headers.emplace(name, String{static_cast<const char*>(value), size});
+            }
         }
     }
 
@@ -714,12 +718,29 @@ Int32 DistributedWriteAheadLogKafka::doAppend(const Record & record, DeliveryRep
         walctx.topic_handle = initProducerTopic(walctx);
     }
 
-    /// Setup idempotent ID header
-    using KHeadPtr = std::unique_ptr<rd_kafka_headers_t, decltype(rd_kafka_headers_destroy) *>;
+    const char * key_data = nullptr;
+    size_t key_size = 0;
 
-    KHeadPtr headers{rd_kafka_headers_new(1), rd_kafka_headers_destroy};
-    rd_kafka_header_add(
-        headers.get(), IDEM_HEADER_NAME, std::strlen(IDEM_HEADER_NAME), record.idempotent_key.data(), record.idempotent_key.size());
+    using KHeadPtr = std::unique_ptr<rd_kafka_headers_t, decltype(rd_kafka_headers_destroy) *>;
+    KHeadPtr headers{nullptr, rd_kafka_headers_destroy};
+
+    if (!record.headers.empty())
+    {
+        /// Setup headers
+        KHeadPtr header_ptr{rd_kafka_headers_new(record.headers.size()), rd_kafka_headers_destroy};
+
+        for (const auto & h : record.headers)
+        {
+            rd_kafka_header_add(header_ptr.get(), h.first.data(), h.first.size(), h.second.data(), h.second.size());
+            if (h.first == IDEM_HEADER_NAME)
+            {
+                key_data = h.first.data();
+                key_size = h.first.size();
+            }
+        }
+
+        headers.swap(header_ptr);
+    }
 
     ByteVector data{Record::write(record)};
 
@@ -733,7 +754,8 @@ Int32 DistributedWriteAheadLogKafka::doAppend(const Record & record, DeliveryRep
 #    pragma clang diagnostic ignored "-Wgnu-statement-expression"
 #endif /// __clang__
 
-    /// TODO: without block if queue is full and retry with backoff, return failure if retries don't make it through
+    /// TODO: without block if queue is full and retry with backoff
+    /// return failure if retries don't make it through
     int err = rd_kafka_producev(
         producer_handle.get(),
         /// Topic
@@ -746,7 +768,7 @@ Int32 DistributedWriteAheadLogKafka::doAppend(const Record & record, DeliveryRep
         /// of data will move moved to producev if it succeeds
         RD_KAFKA_V_VALUE(data.data(), data.size()),
         /// For compaction
-        RD_KAFKA_V_KEY(record.idempotent_key.data(), record.idempotent_key.size()),
+        RD_KAFKA_V_KEY(key_data, key_size),
         /// Partioner
         RD_KAFKA_V_PARTITION(record.partition_key),
         /// Headers, the memory ownership will be moved to librdkafka

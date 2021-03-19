@@ -2,6 +2,7 @@
 
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
+#include <DistributedMetadata/CatalogService.h>
 #include <Functions/IFunction.h>
 #include <Interpreters/ClusterProxy/DistributedSelectStreamFactory.h>
 #include <Interpreters/ClusterProxy/executeQuery.h>
@@ -276,14 +277,14 @@ void StorageDistributedMergeTree::read(
     size_t max_block_size,
     unsigned num_streams)
 {
-    if (!isRemote())
-    {
-        storage->read(query_plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
-    }
-    else
+    if (isRemote())
     {
         /// This is a distributed query
         readRemote(query_plan, query_info, context, processed_stage);
+    }
+    else
+    {
+        storage->read(query_plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
     }
 }
 
@@ -448,13 +449,13 @@ std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
 QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStage(
     const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
 {
-    if (!isRemote())
+    if (isRemote())
     {
-        return storage->getQueryProcessingStage(context, to_stage, query_info);
+        return getQueryProcessingStageRemote(context, to_stage, query_info);
     }
     else
     {
-        return getQueryProcessingStageRemote(context, to_stage, query_info);
+        return storage->getQueryProcessingStage(context, to_stage, query_info);
     }
 }
 
@@ -503,10 +504,10 @@ void StorageDistributedMergeTree::startBackgroundMovesIfNeeded()
 
 /// Distributed query related functions
 
-
 ClusterPtr StorageDistributedMergeTree::getCluster() const
 {
-    return nullptr;
+    auto sid = getStorageID();
+    return CatalogService::instance(global_context).tableCluster(sid.database_name, sid.table_name, replication_factor, shards);
 }
 
 /// Returns a new cluster with fewer shards if constant folding for `sharding_key_expr` is possible
@@ -610,15 +611,14 @@ QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageR
     const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
 {
     const auto & settings = context.getSettingsRef();
-    auto metadata_snapshot = getInMemoryMetadataPtr();
 
     ClusterPtr cluster = getCluster();
     query_info.cluster = cluster;
 
-    /// Always calculate optimized cluster here, to avoid conditions during read()
-    /// (Anyway it will be calculated in the read())
+    /// Always calculate optimized cluster here to avoid conditions during read()
     if (settings.optimize_skip_unused_shards)
     {
+        auto metadata_snapshot = getInMemoryMetadataPtr();
         ClusterPtr optimized_cluster = getOptimizedCluster(context, metadata_snapshot, query_info.query);
         if (optimized_cluster)
         {

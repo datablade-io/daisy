@@ -105,9 +105,6 @@ public:
     getQueryProcessingStage(const Context &, QueryProcessingStage::Enum to_stage, SelectQueryInfo &) const override;
 
 private:
-    QueryProcessingStage::Enum
-    getQueryProcessingStageRemote(const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const;
-
     /// Partition helpers
 
     void dropPartition(const ASTPtr & partition, bool detach, bool drop_part, const Context & context, bool throw_if_noop = true) override;
@@ -132,6 +129,8 @@ private:
     void startBackgroundMovesIfNeeded() override;
 
     /// Distributed query
+    QueryProcessingStage::Enum
+    getQueryProcessingStageRemote(const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const;
 
     ClusterPtr getOptimizedCluster(const Context & context, const StorageMetadataPtr & metadata_snapshot, const ASTPtr & query_ptr) const;
 
