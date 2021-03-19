@@ -423,6 +423,7 @@ bool CatalogService::tableExists(const String & database, const String & table) 
 
 ClusterPtr CatalogService::tableCluster(const String & database, const String & table, Int32 replication_factor, Int32 shards)
 {
+    /// FIXME : pick the right replica to service the query request
     auto key = std::make_pair(database, table);
     {
         std::shared_lock guard{table_cluster_rwlock};
