@@ -63,14 +63,14 @@ public:
         /// fields on the wire
         OpCode op_code = OpCode::UNKNOWN;
 
+        std::unordered_map<String, String> headers;
+
         Block block;
 
         /// fields which are not on the wire
         UInt64 partition_key = 0;
 
         RecordSequenceNumber sn = -1;
-
-        String idempotent_key;
 
         bool empty() const { return block.rows() == 0; }
 

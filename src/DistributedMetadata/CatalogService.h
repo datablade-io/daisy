@@ -3,6 +3,7 @@
 #include "MetadataService.h"
 
 #include <DataStreams/IBlockStream_fwd.h>
+#include <Interpreters/Cluster.h>
 #include <Processors/QueryPipeline.h>
 
 #include <boost/functional/hash.hpp>
@@ -17,10 +18,11 @@ class CatalogService final : public MetadataService
 public:
     struct Table
     {
-        /// `host` is network reachable like hostname, FQDN or IP
+        /// `node_identity` can be unique uuid
+        String node_identity;
+        /// Duplicate host here for conveniency. Host is an ip or hostname which
+        /// can be reachable via network
         String host;
-        /// host_identity can be unique uuid
-        String host_identity;
 
         String database;
         String name;
@@ -42,11 +44,55 @@ public:
         UInt8 is_temporary = 0;
         Int32 shard = 0;
 
-        explicit Table(const String & host_) : host(host_) { }
+        Table(const String & node_identity_, const String & host_) : node_identity(node_identity_), host(host_) { }
     };
 
     using TablePtr = std::shared_ptr<Table>;
-    using TablePtrs = std::vector<std::shared_ptr<Table>>;
+    using TablePtrs = std::vector<TablePtr>;
+
+    struct Node
+    {
+        /// Node identity
+        String identity;
+
+        /// `host` is network reachable like hostname, FQDN or IP
+        String host;
+
+        Int32 http_port = 8123;
+        Int32 tcp_port = 9000;
+
+        explicit Node(const std::unordered_map<String, String> & headers)
+        {
+            auto iter = headers.find("_idem");
+            if (iter != headers.end())
+            {
+                identity = iter->second;
+            }
+
+            iter = headers.find("_host");
+            if (iter != headers.end())
+            {
+                host = iter->second;
+            }
+
+            iter = headers.find("_http_port");
+            if (iter != headers.end())
+            {
+                http_port = std::stoi(iter->second);
+            }
+
+            iter = headers.find("_tcp_port");
+            if (iter != headers.end())
+            {
+                tcp_port = std::stoi(iter->second);
+            }
+        }
+
+        bool isValid() const { return !identity.empty() && !host.empty() && http_port > 0 && tcp_port > 0; }
+
+        String string() const { return identity + "," + std::to_string(http_port) + "," + std::to_string(tcp_port); }
+    };
+    using NodePtr = std::shared_ptr<Node>;
 
 public:
     static CatalogService & instance(Context & context_);
@@ -63,17 +109,19 @@ public:
     std::pair<TablePtr, StoragePtr> findTableStorageById(const UUID & uuid) const;
     std::pair<TablePtr, StoragePtr> findTableStorageByName(const String & database, const String & table) const;
 
-    std::vector<TablePtr> findTableByName(const String & database, const String & table) const;
-    std::vector<TablePtr> findTableByHost(const String & host) const;
-    std::vector<TablePtr> findTableByDB(const String & database) const;
+    TablePtrs findTableByName(const String & database, const String & table) const;
+    TablePtrs findTableByNode(const String & node_identity) const;
+    TablePtrs findTableByDB(const String & database) const;
 
     bool tableExists(const String & database, const String & table) const;
 
-    std::vector<TablePtr> tables() const;
+    TablePtrs tables() const;
     std::vector<String> databases() const;
 
-    /// FIXME : remove `hosts` when Placement service is ready
-    std::vector<String> hosts() const;
+    /// FIXME : remove `nodes` when Placement service is ready
+    std::vector<NodePtr> nodes() const;
+
+    ClusterPtr tableCluster(const String & database, const String & table, Int32 replication_factor, Int32 shards);
 
 private:
     bool setTableStorageByName(const String & database, const String & table, const StoragePtr & storage);
@@ -91,30 +139,34 @@ private:
     void append(Block && block);
 
 private:
-    using HostShard = std::pair<String, Int32>;
+    using NodeShard = std::pair<String, Int32>;
     using TableShard = std::pair<String, Int32>;
     using DatabaseTable = std::pair<String, String>;
     using DatabaseTableShard = std::pair<String, TableShard>;
 
     /// In the cluster, (database, table, shard) is unique
-    using TableContainerPerHost = std::unordered_map<DatabaseTableShard, TablePtr, boost::hash<DatabaseTableShard>>;
+    using TableContainerPerNode = std::unordered_map<DatabaseTableShard, TablePtr, boost::hash<DatabaseTableShard>>;
 
-    TableContainerPerHost buildCatalog(const String & host, const Block & bock);
-    void mergeCatalog(const String & host, TableContainerPerHost snapshot);
+    TableContainerPerNode buildCatalog(const NodePtr & node, const Block & bock);
+    void mergeCatalog(NodePtr node, TableContainerPerNode snapshot);
 
 private:
-    using TableContainerByHostShard = std::unordered_map<HostShard, TablePtr, boost::hash<HostShard>>;
+    using TableContainerByNodeShard = std::unordered_map<NodeShard, TablePtr, boost::hash<NodeShard>>;
 
-    mutable std::shared_mutex rwlock;
+    mutable std::shared_mutex catalog_rwlock;
 
-    /// (database, table) -> ((host, shard) -> TablePtr))
-    std::unordered_map<DatabaseTable, TableContainerByHostShard, boost::hash<DatabaseTable>> indexedByName;
+    /// (database, table) -> ((node_identity, shard) -> TablePtr))
+    std::unordered_map<DatabaseTable, TableContainerByNodeShard, boost::hash<DatabaseTable>> indexed_by_name;
 
-    /// host -> ((database, table, shard) -> TablePtr))
-    std::unordered_map<String, TableContainerPerHost> indexedByHost;
+    /// node_identity -> ((database, table, shard) -> TablePtr))
+    std::unordered_map<String, TableContainerPerNode> indexed_by_node;
+    std::unordered_map<String, NodePtr> table_nodes;
 
     mutable std::shared_mutex storage_rwlock;
-    std::unordered_map<UUID, TablePtr> indexedById;
+    std::unordered_map<UUID, TablePtr> indexed_by_id;
     std::unordered_map<DatabaseTable, StoragePtr, boost::hash<DatabaseTable>> storages;
+
+    mutable std::shared_mutex table_cluster_rwlock;
+    std::unordered_map<DatabaseTable, ClusterPtr, boost::hash<DatabaseTable>> table_clusters;
 };
 }

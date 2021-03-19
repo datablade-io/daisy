@@ -29,8 +29,6 @@ struct DistributedWriteAheadLogKafkaContext
     /// - RD_KAFKA_OFFSET_TAIL
     Int64 offset = -1000;
 
-    /// ************************************************
-
     /// Admin API settings
     Int32 partitions = 1;
     Int32 replication_factor = 1;
@@ -44,13 +42,9 @@ struct DistributedWriteAheadLogKafkaContext
     /// `compact` or `delete`
     String cleanup_policy = "delete";
 
-    /// ************************************************
-
     /// Per topic producer settings
     Int32 request_required_acks = 1;
     Int32 request_timeout_ms = 30000;
-
-    /// ************************************************
 
     /// Per topic consumer settings
     String auto_offset_reset = "earliest";

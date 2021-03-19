@@ -103,7 +103,10 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
     {
         IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(current_block.block)};
         record.partition_key = current_block.shard;
-        record.idempotent_key = query_context.getIdempotentKey();
+        if (!query_context.getIdempotentKey().empty())
+        {
+            record.headers["_idem"] = query_context.getIdempotentKey();
+        }
 
         if (ingest_mode == "sync")
         {
