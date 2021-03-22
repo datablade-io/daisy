@@ -7,6 +7,6 @@
 
 namespace DB
 {
-void validateSchema(const std::map<String, std::map<String, String>> schema, Poco::JSON::Object::Ptr payload);
+void validateSchema(const std::map<String, std::map<String, String>> & schema, const Poco::JSON::Object::Ptr & payload);
 
 }

@@ -95,20 +95,22 @@ private:
 private:
     /// Admin APIs like DDL overrides this function
     String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
-    {
-        if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::GET)
+    {   
+        const auto & client_info = query_context.getClientInfo();
+        
+        if (client_info.http_method == ClientInfo::HTTPMethod::GET)
         {
             return executeGet(payload, http_status);
         }
-        else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::POST)
+        else if (client_info.http_method == ClientInfo::HTTPMethod::POST)
         {
             return executePost(payload, http_status);
         }
-        else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::PATCH)
+        else if (client_info.http_method == ClientInfo::HTTPMethod::PATCH)
         {
             return executePatch(payload, http_status);
         }
-        else if (query_context.getClientInfo().http_method == ClientInfo::HTTPMethod::DELETE)
+        else if (client_info.http_method == ClientInfo::HTTPMethod::DELETE)
         {
             return executeDelete(payload, http_status);
         }

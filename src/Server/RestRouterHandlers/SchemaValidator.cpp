@@ -9,9 +9,9 @@ namespace ErrorCodes
     extern const int POCO_EXCEPTION;
 }
 
-void validateSchema(std::map<String, std::map<String, String>> schema, Poco::JSON::Object::Ptr payload)
+void validateSchema(const std::map<String, std::map<String, String>> & schema, const Poco::JSON::Object::Ptr & payload)
 {
-    for (auto & required : schema["required"])
+    for (const auto & required : schema.at("required"))
     {
         if (!payload->has(required.first))
         {
@@ -27,7 +27,8 @@ void validateSchema(std::map<String, std::map<String, String>> schema, Poco::JSO
             throw Exception("Invalid type of param '" + required.first + "'", ErrorCodes::POCO_EXCEPTION);
         }
     }
-    for (auto & optional : schema["optional"])
+
+    for (const auto & optional : schema.at("optional"))
     {
         if (payload->has(optional.first)
             && ((optional.second == "int" && !payload->get(optional.first).isInteger())

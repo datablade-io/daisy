@@ -30,15 +30,6 @@ public:
     {
         auto & factory = DB::RestRouterFactory::instance();
 
-        factory.registerRouterHandler(
-            "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)", "PATCH/DELETE", [](DB::Context & query_context) {
-                return std::make_shared<DB::TableRestRouterHandler>(query_context);
-            });
-
-        factory.registerRouterHandler("/dae/v1/ddl/(?P<database>\\w+)/tables", "GET/POST", [](DB::Context & query_context) {
-            return std::make_shared<DB::TableRestRouterHandler>(query_context);
-        });
-
         factory.registerRouterHandler("/dae/v1/ingest/(?:database\\w+)/tables/(?:table:\\w+)", "POST", [](DB::Context & query_context) {
             return std::make_shared<DB::IngestRestRouterHandler>(query_context);
         });
@@ -46,6 +37,15 @@ public:
         factory.registerRouterHandler("/dae/v1/ingest/statuses/(?:poll_id.+)", "GET", [](DB::Context & query_context) {
             return std::make_shared<DB::IngestRestRouterHandler>(query_context);
         });
+
+        factory.registerRouterHandler("/dae/v1/ddl/(?P<database>\\w+)/tables", "GET/POST", [](DB::Context & query_context) {
+            return std::make_shared<DB::TableRestRouterHandler>(query_context);
+        });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)", "PATCH/DELETE", [](DB::Context & query_context) {
+                return std::make_shared<DB::TableRestRouterHandler>(query_context);
+            });
     }
 
 public:
