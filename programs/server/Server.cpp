@@ -76,7 +76,7 @@
 #include <DistributedMetadata/CatalogService.h>
 #include <DistributedMetadata/DDLService.h>
 #include <DistributedMetadata/PlacementService.h>
-
+#include <Server/RestRouterHandlers/RestRouterFactory.h>
 
 #if !defined(ARCADIA_BUILD)
 #   include "config_core.h"
@@ -1123,6 +1123,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
             *global_context, config().getUInt("asynchronous_metrics_update_period_s", 60), servers_to_start_before_tables, servers);
         attachSystemTablesAsync(*DatabaseCatalog::instance().getSystemDatabase(), async_metrics);
 
+        /// Daisy : start. Register Rest api route handlers
+        RestRouterFactory::registerRestRouterHandlers();
+        /// Daisy : end.
+        
         for (const auto & listen_host : listen_hosts)
         {
             /// HTTP
