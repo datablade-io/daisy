@@ -36,6 +36,8 @@ public:
         UNKNOWN = 0,
         GET = 1,
         POST = 2,
+        PATCH = 3,
+        DELETE = 4,
     };
 
     enum class QueryKind : uint8_t
