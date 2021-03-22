@@ -1,13 +1,12 @@
 #pragma once
 
+#include "IngestRestRouterHandler.h"
 #include "RestRouterHandler.h"
-
-#include <Server/RestRouterHandlers/DDL/TableRestRouterHandler.h>
-#include <Server/RestRouterHandlers/Ingest/IngestRestRouterHandler.h>
-
-#include <unordered_map>
+#include "TableRestRouterHandler.h"
 
 #include <re2/re2.h>
+
+#include <unordered_map>
 
 namespace DB
 {
@@ -33,8 +32,8 @@ public:
 
         factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)", "PATCH/DELETE", [](DB::Context & query_context) {
-            return std::make_shared<DB::TableRestRouterHandler>(query_context);
-         });
+                return std::make_shared<DB::TableRestRouterHandler>(query_context);
+            });
 
         factory.registerRouterHandler("/dae/v1/ddl/(?P<database>\\w+)/tables", "GET/POST", [](DB::Context & query_context) {
             return std::make_shared<DB::TableRestRouterHandler>(query_context);
@@ -52,31 +51,33 @@ public:
 public:
     RestRouterHandlerPtr get(const String & url, const String & method, Context & query_context) const
     {
-        auto iter = router_handlers.begin();
-        for (; iter != router_handlers.end(); ++iter)
+        for (auto & router_handler : router_handlers)
         {
-            CompiledRegexPtr compiled_regex = iter->first.second;
-            int num_captures = compiled_regex->NumberOfCapturingGroups() + 1;
+            int num_captures = router_handler.regex->NumberOfCapturingGroups() + 1;
 
             /// Match request method
-            if (iter->first.first.find(method) != String::npos)
+            if (router_handler.method.find(method) != String::npos)
             {
                 /// captures param value
                 re2::StringPiece matches[num_captures];
 
                 /// Match request url
-                if (compiled_regex->Match(url, 0, url.size(), re2::RE2::Anchor::ANCHOR_BOTH, matches, num_captures))
+                if (router_handler.regex->Match(url, 0, url.size(), re2::RE2::Anchor::ANCHOR_BOTH, matches, num_captures))
                 {
+                    auto handler = router_handler.handler(query_context);
+
                     /// Get param name
-                    for (const auto & [capturing_name, capturing_index] : compiled_regex->NamedCapturingGroups())
+                    for (const auto & [capturing_name, capturing_index] : router_handler.regex->NamedCapturingGroups())
                     {
                         const auto & capturing_value = matches[capturing_index];
                         if (capturing_value.data())
-                            /// Put parameters into query_context.QueryParameter map< string name, string value>
-                            query_context.setQueryParameter(capturing_name, String(capturing_value.data(), capturing_value.size()));
+                        {
+                            /// Put path parameters into handler map<string name, string value>
+                            handler->setPathParameter(capturing_name, String(capturing_value.data(), capturing_value.size()));
+                        }
                     }
 
-                    return iter->second(query_context);
+                    return handler;
                 }
             }
         }
@@ -86,12 +87,12 @@ public:
 
     void registerRouterHandler(const String & route, const String & method, std::function<RestRouterHandlerPtr(Context &)> func)
     {
-        auto regex = getCompiledRegex(route);
-        router_handlers.emplace(std::make_pair(method, regex), func);
+        auto regex = compileRegex(route);
+        router_handlers.emplace_back(RouterHandler(method, regex, func));
     }
 
 private:
-    CompiledRegexPtr getCompiledRegex(const String & expression)
+    CompiledRegexPtr compileRegex(const String & expression)
     {
         auto compiled_regex = std::make_shared<const re2::RE2>(expression);
 
@@ -106,11 +107,19 @@ private:
         return compiled_regex;
     }
 
-    /// (method, regex(url))
-    using url_regex = std::pair<String, CompiledRegexPtr>;
+    struct RouterHandler
+    {
+        String method;
+        CompiledRegexPtr regex;
+        std::function<RestRouterHandlerPtr(Context &)> handler;
 
-    /// (method, regex(url)) -> RestRouterHandler)
-    std::unordered_map<url_regex, std::function<RestRouterHandlerPtr(Context &)>, boost::hash<url_regex>> router_handlers;
+        RouterHandler(const String & method_, const CompiledRegexPtr & regex_, std::function<RestRouterHandlerPtr(Context &)> handler_)
+            : method(method_), regex(regex_), handler(handler_)
+        {
+        }
+    };
+
+    std::vector<RouterHandler> router_handlers;
 };
 
 }

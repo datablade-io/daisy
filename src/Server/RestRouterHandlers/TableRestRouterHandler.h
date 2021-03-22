@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Server/RestRouterHandlers/RestRouterHandler.h"
+#include "RestRouterHandler.h"
 
 #include <DataStreams/IBlockStream_fwd.h>
 #include <Processors/QueryPipeline.h>
@@ -12,7 +12,7 @@ namespace DB
 class TableRestRouterHandler final : public RestRouterHandler
 {
 public:
-    TableRestRouterHandler(Context & query_context_) : RestRouterHandler(query_context_, "Table") { }
+    explicit TableRestRouterHandler(Context & query_context_) : RestRouterHandler(query_context_, "Table") { }
     ~TableRestRouterHandler() override { }
 
 private:

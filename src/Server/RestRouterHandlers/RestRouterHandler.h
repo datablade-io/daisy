@@ -64,22 +64,20 @@ public:
         }
     }
 
-    String getUriParamValue(const String & key) const
+    const String & getPathParameter(const String & name, const String & default_value = "") const
     {
-        String value = "";
-        auto iter = query_context.getQueryParameters().find(key);
-
-        if (iter != query_context.getQueryParameters().end())
+        auto iter = path_parameters.find(name);
+        if (iter != path_parameters.end())
         {
-            value = iter->second;
+            return iter->second;
         }
         else
         {
-            throw Exception("Cannot get uri param : " + key + " for rest http handling ", ErrorCodes::INCORRECT_DATA);
+            return default_value;
         }
-
-        return value;
     }
+
+    void setPathParameter(const String & name, const String & value) { path_parameters[name] = value; }
 
 private:
     virtual bool streaming() { return false; }
@@ -187,6 +185,8 @@ private:
 protected:
     Context & query_context;
     Poco::Logger * log;
+
+    std::unordered_map<String, String> path_parameters;
 };
 
 using RestRouterHandlerPtr = std::shared_ptr<RestRouterHandler>;

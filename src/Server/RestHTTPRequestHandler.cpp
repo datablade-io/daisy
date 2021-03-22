@@ -13,55 +13,55 @@ namespace DB
 {
 namespace ErrorCodes
 {
-extern const int LOGICAL_ERROR;
-extern const int CANNOT_PARSE_TEXT;
-extern const int CANNOT_PARSE_ESCAPE_SEQUENCE;
-extern const int CANNOT_PARSE_QUOTED_STRING;
-extern const int CANNOT_PARSE_DATE;
-extern const int CANNOT_PARSE_DATETIME;
-extern const int CANNOT_PARSE_NUMBER;
-extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
-extern const int CANNOT_OPEN_FILE;
-extern const int CANNOT_COMPILE_REGEXP;
+    extern const int LOGICAL_ERROR;
+    extern const int CANNOT_PARSE_TEXT;
+    extern const int CANNOT_PARSE_ESCAPE_SEQUENCE;
+    extern const int CANNOT_PARSE_QUOTED_STRING;
+    extern const int CANNOT_PARSE_DATE;
+    extern const int CANNOT_PARSE_DATETIME;
+    extern const int CANNOT_PARSE_NUMBER;
+    extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
+    extern const int CANNOT_OPEN_FILE;
+    extern const int CANNOT_COMPILE_REGEXP;
 
-extern const int UNKNOWN_ELEMENT_IN_AST;
-extern const int UNKNOWN_TYPE_OF_AST_NODE;
-extern const int TOO_DEEP_AST;
-extern const int TOO_BIG_AST;
-extern const int UNEXPECTED_AST_STRUCTURE;
+    extern const int UNKNOWN_ELEMENT_IN_AST;
+    extern const int UNKNOWN_TYPE_OF_AST_NODE;
+    extern const int TOO_DEEP_AST;
+    extern const int TOO_BIG_AST;
+    extern const int UNEXPECTED_AST_STRUCTURE;
 
-extern const int SYNTAX_ERROR;
+    extern const int SYNTAX_ERROR;
 
-extern const int INCORRECT_DATA;
-extern const int TYPE_MISMATCH;
+    extern const int INCORRECT_DATA;
+    extern const int TYPE_MISMATCH;
 
-extern const int UNKNOWN_TABLE;
-extern const int UNKNOWN_FUNCTION;
-extern const int UNKNOWN_IDENTIFIER;
-extern const int UNKNOWN_TYPE;
-extern const int UNKNOWN_STORAGE;
-extern const int UNKNOWN_DATABASE;
-extern const int UNKNOWN_SETTING;
-extern const int UNKNOWN_DIRECTION_OF_SORTING;
-extern const int UNKNOWN_AGGREGATE_FUNCTION;
-extern const int UNKNOWN_FORMAT;
-extern const int UNKNOWN_DATABASE_ENGINE;
-extern const int UNKNOWN_TYPE_OF_QUERY;
-extern const int NO_ELEMENTS_IN_CONFIG;
+    extern const int UNKNOWN_TABLE;
+    extern const int UNKNOWN_FUNCTION;
+    extern const int UNKNOWN_IDENTIFIER;
+    extern const int UNKNOWN_TYPE;
+    extern const int UNKNOWN_STORAGE;
+    extern const int UNKNOWN_DATABASE;
+    extern const int UNKNOWN_SETTING;
+    extern const int UNKNOWN_DIRECTION_OF_SORTING;
+    extern const int UNKNOWN_AGGREGATE_FUNCTION;
+    extern const int UNKNOWN_FORMAT;
+    extern const int UNKNOWN_DATABASE_ENGINE;
+    extern const int UNKNOWN_TYPE_OF_QUERY;
+    extern const int NO_ELEMENTS_IN_CONFIG;
 
-extern const int QUERY_IS_TOO_LARGE;
+    extern const int QUERY_IS_TOO_LARGE;
 
-extern const int NOT_IMPLEMENTED;
-extern const int SOCKET_TIMEOUT;
+    extern const int NOT_IMPLEMENTED;
+    extern const int SOCKET_TIMEOUT;
 
-extern const int UNKNOWN_USER;
-extern const int WRONG_PASSWORD;
-extern const int REQUIRED_PASSWORD;
+    extern const int UNKNOWN_USER;
+    extern const int WRONG_PASSWORD;
+    extern const int REQUIRED_PASSWORD;
 
-extern const int BAD_REQUEST_PARAMETER;
-extern const int INVALID_SESSION_TIMEOUT;
-extern const int HTTP_LENGTH_REQUIRED;
-extern const int UNACCEPTABLE_URL;
+    extern const int BAD_REQUEST_PARAMETER;
+    extern const int INVALID_SESSION_TIMEOUT;
+    extern const int HTTP_LENGTH_REQUIRED;
+    extern const int UNACCEPTABLE_URL;
 }
 
 namespace
@@ -165,7 +165,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
                 (ErrorCodes::REQUIRED_PASSWORD),
                 request,
                 response);
-            return ;
+            return;
         }
     }
 
@@ -208,11 +208,12 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
         if (router_handler == nullptr)
         {
             trySendExceptionToClient(
-                "Cannot find the handler corresponding to the route :  " + request.getURI() + " and the request method  is : " + request.getMethod(),
-                (ErrorCodes::UNKNOWN_FUNCTION),
+                "Cannot find the handler corresponding to the route :  " + request.getURI()
+                    + " and the request method  is : " + request.getMethod(),
+                ErrorCodes::UNKNOWN_FUNCTION,
                 request,
                 response);
-            return ;
+            return;
         }
 
         /// Setup common reponse headers etc
@@ -271,7 +272,7 @@ void RestHTTPRequestHandler::trySendExceptionToClient(
         }
 
         bool auth_fail = exception_code == ErrorCodes::UNKNOWN_USER || exception_code == ErrorCodes::WRONG_PASSWORD
-                         || exception_code == ErrorCodes::REQUIRED_PASSWORD;
+            || exception_code == ErrorCodes::REQUIRED_PASSWORD;
 
         if (auth_fail)
         {

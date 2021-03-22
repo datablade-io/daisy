@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Server/RestRouterHandlers/RestRouterHandler.h>
+#include "RestRouterHandler.h"
 
 namespace DB
 {

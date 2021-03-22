@@ -1,10 +1,10 @@
 #include "TableRestRouterHandler.h"
-
-#include <Interpreters/executeQuery.h>
-#include <Server/RestRouterHandlers/Common/SchemaValidator.h>
+#include "SchemaValidator.h"
 
 #include <Core/Block.h>
-#include <Poco/Path.h>
+#include <Interpreters/executeQuery.h>
+
+#include <boost/algorithm/string/join.hpp>
 
 #include <vector>
 
@@ -59,11 +59,11 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::update_schem
 
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload) const
 {
-    SchemaValidator::validateSchema(create_schema, payload);
+    validateSchema(create_schema, payload);
     Poco::JSON::Array::Ptr columns = payload->getArray("columns");
     for (auto & col : *columns)
     {
-        SchemaValidator::validateSchema(column_schema, col.extract<Poco::JSON::Object::Ptr>());
+        validateSchema(column_schema, col.extract<Poco::JSON::Object::Ptr>());
     }
     return true;
 }
@@ -76,7 +76,7 @@ bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & payload
 
 bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload) const
 {
-    SchemaValidator::validateSchema(update_schema, payload);
+    validateSchema(update_schema, payload);
     return true;
 }
 
@@ -88,20 +88,26 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
 
 String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
-    String database_name = getUriParamValue("database");
+    String database_name = getPathParameter("database");
+    std::vector<String> create_segments;
 
-    String query = "CREATE TABLE " + database_name + "." + payload->get("name").toString() + "("
-        + getColumnsDefination(payload->getArray("columns"), payload->get("_time_column").toString())
-        + ") ENGINE = MergeTree() PARTITION BY " + payload->get("partition_by_expression").toString() + " ORDER BY "
-        + payload->get("order_by_expression").toString() + " TTL " + payload->get("ttl_expression").toString();
+    create_segments.push_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
+    create_segments.push_back("(");
+    create_segments.push_back(getColumnsDefination(payload->getArray("columns"), payload->get("_time_column").toString()));
+    create_segments.push_back(")");
+    create_segments.push_back("ENGINE = MergeTree() PARTITION BY " + payload->get("partition_by_expression").toString());
+    create_segments.push_back("ORDER BY " + payload->get("order_by_expression").toString());
+    create_segments.push_back(" TTL " + payload->get("ttl_expression").toString());
+
+    String query = boost::algorithm::join(create_segments, " ");
 
     return processQuery(query, http_status);
 }
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
 {
-    String database_name = getUriParamValue("database");
-    String table_name = getUriParamValue("table");
+    String database_name = getPathParameter("database");
+    String table_name = getPathParameter("table");
 
     String query = "DROP TABLE " + database_name + "." + table_name;
     return processQuery(query, http_status);
@@ -109,17 +115,34 @@ String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /* 
 
 String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
-    String database_name = getUriParamValue("database");
-    String table_name = getUriParamValue("table");
+    String database_name = getPathParameter("database");
+    String table_name = getPathParameter("table");
+    bool has_order_by = payload->has("order_by_expression");
+    bool has_ttl = payload->has("ttl_expression");
 
-    String query = "ALTER TABLE " + database_name + "." + table_name;
-    if (payload->has("order_by_expression") && payload->has("ttl_expression"))
-        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString() + ", MODIFY  TTL "
-            + payload->get("ttl_expression").toString();
-    else if (payload->has("ttl_expression"))
-        query = query + " MODIFY  TTL " + payload->get("ttl_expression").toString();
-    else
-        query = query + " MODIFY" + " ORDER BY " + payload->get("order_by_expression").toString();
+    std::vector<String> create_segments;
+
+    if (has_order_by || has_ttl)
+    {
+        create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
+
+        if (payload->has("order_by_expression"))
+        {
+            create_segments.push_back(" MODIFY ORDER BY " + payload->get("order_by_expression").toString());
+        }
+
+        if (has_order_by && has_ttl)
+        {
+            create_segments.push_back(",");
+        }
+
+        if (payload->has("ttl_expression"))
+        {
+            create_segments.push_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
+        }
+    }
+
+    String query = boost::algorithm::join(create_segments, " ");
 
     return processQuery(query, http_status);
 }
@@ -150,7 +173,7 @@ String TableRestRouterHandler::processQuery(const String & query, Int32 & /* htt
 
 String TableRestRouterHandler::getColumnsDefination(const Poco::JSON::Array::Ptr & columns, const String & time_column) const
 {
-    std::ostringstream oss;
+    std::ostringstream oss; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     using std::begin;
     using std::end;
     std::vector<String> column_definatins;
@@ -160,44 +183,46 @@ String TableRestRouterHandler::getColumnsDefination(const Poco::JSON::Array::Ptr
         column_definatins.push_back(getColumnDefination(col.extract<Poco::JSON::Object::Ptr>()));
     }
 
+    /// FIXME : we can choose between ALIAS or DEFAULT
     std::copy(begin(column_definatins), end(column_definatins), std::ostream_iterator<String>(oss, ","));
     return oss.str() + " `_time` DateTime64(3) ALIAS " + time_column;
 }
 
 String TableRestRouterHandler::getColumnDefination(const Poco::JSON::Object::Ptr & column) const
 {
-    String column_def = column->get("name").toString();
+    std::vector<String> create_segments;
 
+    create_segments.push_back(column->get("name").toString());
     if (column->has("nullable") && column->get("nullable"))
     {
-        column_def += " Nullable(" + column->get("type").toString() + ")";
+        create_segments.push_back(" Nullable(" + column->get("type").toString() + ")");
     }
     else
     {
-        column_def += " " + column->get("type").toString();
+        create_segments.push_back(" " + column->get("type").toString());
     }
 
     if (column->has("default"))
     {
-        column_def += " DEFAULT " + column->get("default").toString();
+        create_segments.push_back(" DEFAULT " + column->get("default").toString());
     }
 
     if (column->has("compression_codec"))
     {
-        column_def += " CODEC(" + column->get("compression_codec").toString() + ")";
+        create_segments.push_back(" CODEC(" + column->get("compression_codec").toString() + ")");
     }
 
     if (column->has("ttl_expression"))
     {
-        column_def += " TTL " + column->get("ttl_expression").toString();
+        create_segments.push_back(" TTL " + column->get("ttl_expression").toString());
     }
 
     if (column->has("skipping_index_expression"))
     {
-        column_def += ", " + column->get("skipping_index_expression").toString();
+        create_segments.push_back(", " + column->get("skipping_index_expression").toString());
     }
 
-    return column_def;
+    return boost::algorithm::join(create_segments, " ");
 }
 
 }

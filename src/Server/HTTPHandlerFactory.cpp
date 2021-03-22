@@ -181,7 +181,6 @@ void addDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IServer 
     /// Daisy: start. Add rest request process handler
     auto rest_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<RestHTTPRequestHandler>>(server, "dae");
     rest_handler->attachNonStrictPath("/dae");
-    rest_handler->allowPostAndGetAndPATCHAndDELETEParamsRequest();
     factory.addHandler(rest_handler);
     /// Daisy: end.
 
