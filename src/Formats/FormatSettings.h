@@ -165,6 +165,15 @@ struct FormatSettings
         bool deduce_templates_of_expressions = true;
         bool accurate_types_of_literals = true;
     } values;
+
+    /// Daisy starts
+    struct
+    {
+        String rawstore_time_extraction_type;
+        String rawstore_time_extraction_rule;
+
+    } rawstore;
+    /// Daisy Ends
 };
 
 }

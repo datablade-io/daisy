@@ -1,0 +1,194 @@
+Index: docker/test/integration/runner/compose/docker_compose_kafka.yml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/docker/test/integration/runner/compose/docker_compose_kafka.yml b/docker/test/integration/runner/compose/docker_compose_kafka.yml
+--- a/docker/test/integration/runner/compose/docker_compose_kafka.yml	(revision e6ecb1f16452e1fe4ce39de51fac5ed54cf8e373)
++++ b/docker/test/integration/runner/compose/docker_compose_kafka.yml	(revision 4069d6cea1d9ea6a619ffbd9f12dbdfaaa493ea5)
+@@ -17,7 +17,7 @@
+     ports:
+       - "9092:9092"
+     environment:
+-      KAFKA_ADVERTISED_LISTENERS: INSIDE://localhost:9092,OUTSIDE://kafka1:19092
++      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka1:9092,OUTSIDE://kafka1:19092
+       KAFKA_LISTENERS: INSIDE://:9092,OUTSIDE://:19092
+       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+       KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+Index: tests/integration/README.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/tests/integration/README.md b/tests/integration/README.md
+--- a/tests/integration/README.md	(revision e6ecb1f16452e1fe4ce39de51fac5ed54cf8e373)
++++ b/tests/integration/README.md	(revision 4069d6cea1d9ea6a619ffbd9f12dbdfaaa493ea5)
+@@ -24,6 +24,7 @@
+     cassandra-driver \
+     confluent-kafka \
+     dicttoxml \
++    dict2xml \
+     docker \
+     docker-compose==1.22.0 \
+     grpcio \
+@@ -31,8 +32,9 @@
+     kafka-python \
+     kazoo \
+     minio \
++    pika \
+     protobuf \
+-    psycopg2-binary==2.7.5 \
++    psycopg2-binary==2.8.6 \
+     pymongo \
+     pytest \
+     pytest-timeout \
+Index: tests/integration/test_rest_ingest_api/configs/kafka.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/tests/integration/test_rest_ingest_api/configs/kafka.xml b/tests/integration/test_rest_ingest_api/configs/kafka.xml
+new file mode 100644
+--- /dev/null	(revision 4069d6cea1d9ea6a619ffbd9f12dbdfaaa493ea5)
++++ b/tests/integration/test_rest_ingest_api/configs/kafka.xml	(revision 4069d6cea1d9ea6a619ffbd9f12dbdfaaa493ea5)
+@@ -0,0 +1,12 @@
++<yandex>
++    <system_settings>
++        <system_dwals>
++            <system_kafka>
++                <system_default>true</system_default>
++                <cluster_name>kafka-test-1</cluster_name>
++                <cluster_id>kafka-cluster-test-1</cluster_id>
++                <brokers>kafka1:9092</brokers>
++            </system_kafka>
++        </system_dwals>
++    </system_settings>
++</yandex>
+Index: tests/integration/test_rest_ingest_api/test.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/tests/integration/test_rest_ingest_api/test.py b/tests/integration/test_rest_ingest_api/test.py
+new file mode 100644
+--- /dev/null	(revision 4069d6cea1d9ea6a619ffbd9f12dbdfaaa493ea5)
++++ b/tests/integration/test_rest_ingest_api/test.py	(revision 4069d6cea1d9ea6a619ffbd9f12dbdfaaa493ea5)
+@@ -0,0 +1,116 @@
++import json
++
++import pytest
++from helpers.cluster import ClickHouseCluster
++
++cluster = ClickHouseCluster(__file__)
++instance = cluster.add_instance('instance',
++                                main_configs=['configs/kafka.xml'],
++                                with_kafka=True,
++                                with_zookeeper=True,
++                                )
++
++
++def prepare_data():
++    print("prepare data")
++    instance.query("""
++CREATE TABLE default.test
++(
++    `a` UInt64,
++    `b` String,
++    `t` DateTime64(3) DEFAULT now(),
++    `n.a` Array(UInt64),
++    `n.b` Array(String),
++    `ip` IPv6 DEFAULT toIPv6('::127.0.0.1'),
++    INDEX idx_b b TYPE minmax GRANULARITY 1
++)
++ENGINE = MergeTree
++ORDER BY t
++    """
++                   )
++    instance.query("""
++CREATE TABLE default.test2
++(
++    `i` Int32
++)
++ENGINE = DistributedMergeTree(1, 1, rand())
++ORDER BY i
++SETTINGS index_granularity = 8192, shard = 0
++    """
++                   )
++
++
++@pytest.fixture(scope="module", autouse=True)
++def setup_nodes():
++    print("setup node")
++    try:
++        cluster.start()
++        prepare_data()
++        yield cluster
++
++    finally:
++        cluster.shutdown()
++
++@pytest.mark.parametrize("table, query, status", [
++    (
++        "test",
++        {
++            "columns": ["a", "b", "t", "n.a", "n.b", "ip"],
++            "data": [[21, "a", "2021-01-01 23:23:00", [30, 31], ["aa", "ab"], "::10.1.1.1"],
++                     [22, "b", "2021-01-01 00:00:00", [31, 32], ["aa", "ab"], "::10.1.1.2"],
++                     [23, "c", "2021-01-02 00:00:00.000", [33, 34], ["aa", "ab"], "::10.1.1.3"]]
++
++        }, {
++            "status": 400,
++            "result": "table: default.test is not a DistributedMergeTreeTable"
++        }
++    ),
++    (
++        "test2",
++        {
++            "columns": ["i"],
++            "data": [[21], [30]]
++        }, {
++            "status": 500,
++            "result": """"progress" :"""
++        }
++    )
++])
++def test_ingest_api_baisc_case(table, query, status):
++    instance.ip_address = "localhost"
++    # insert data
++    resp = instance.http_request(method="POST", url="dae/v1/ingest/default/tables/" + table, data=json.dumps(query))
++    result = json.loads(resp.content)
++    # assert resp.status == 200
++    assert 'poll_id' in result
++    assert 'query_id' in result
++    # get status
++    poll_id = result['poll_id']
++    resp = instance.http_request(method="GET", url="dae/v1/ingest/statuses/" + poll_id)
++    assert resp.status_code == status['status']
++    assert status['result'] in resp.text
++
++
++@pytest.mark.parametrize("poll_id, status", [
++    (
++        "poll_id_invalid",
++        {
++            "status": 500,
++            "result": "Invalid poll ID"
++        }
++    ),
++    (
++        "",
++        {
++            "status": 500,
++            "result": "Empty poll id"
++        }
++    )
++])
++def test_status_exception(poll_id, status):
++    instance.ip_address = "localhost"
++    # get status
++    resp = instance.http_request(method="GET", url="dae/v1/ingest/statuses/" + poll_id)
++    assert resp.status_code == status['status']
++    assert status['result'] in resp.text
++
+diff --git a/tests/integration/test_rest_ingest_api/__init__.py b/tests/integration/test_rest_ingest_api/__init__.py
+new file mode 100644
