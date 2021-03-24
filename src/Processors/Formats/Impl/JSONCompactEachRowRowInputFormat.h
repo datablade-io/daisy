@@ -61,10 +61,10 @@ private:
     bool with_names;
     /// For JSONCompactString* formats.
     bool yield_strings;
-    /// Daisy: starts
+    /// Daisy : starts
     /// Wrapped with square brackets
     bool with_bracket;
-    /// Daisy: ends
+    /// Daisy : ends
 };
 
 }

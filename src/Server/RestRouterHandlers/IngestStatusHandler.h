@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Server/RestRouterHandlers/RestRouterHandler.h>
+#include "RestRouterHandler.h"
 
 namespace DB
 {
@@ -18,9 +18,9 @@ private:
     void prepare();
 
     /// send http request
-    String sendGetRequest(const Poco::URI & uri) const;
+    String sendGetRequest(const Poco::URI & uri, Int32 & http_status) const;
 
-    static String makeResponse(Int32 progress);
+    static String makeResponse(const std::pair<String, Int32> progress);
 };
 
 }

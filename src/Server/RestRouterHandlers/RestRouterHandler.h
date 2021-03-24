@@ -83,7 +83,7 @@ private:
     virtual bool streaming() { return false; }
 
     /// Streaming `execute`, so far Ingest API probably needs override this function
-    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /*r esponse */, Int32 & http_status)
+    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /*response */, Int32 & http_status)
     {
         http_status = 404;
         String result = "Streaming executer not implemented";
@@ -92,7 +92,6 @@ private:
         return result;
     }
 
-private:
     /// Admin APIs like DDL overrides this function
     String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
     {   
@@ -155,7 +154,6 @@ private:
         return result;
     }
 
-private:
     bool validate(const String & http_method, const Poco::JSON::Object::Ptr & payload) const
     {
         if (http_method == Poco::Net::HTTPRequest::HTTP_GET)
@@ -189,6 +187,20 @@ protected:
     Poco::Logger * log;
 
     std::unordered_map<String, String> path_parameters;
+
+    /// use to convert error_msg to JSON string
+    String jsonException(String & error_msg, const int error_code) const
+    {
+        std::stringstream error_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        Poco::JSON::Object error_resp;
+
+        error_resp.set("error_message", error_msg);
+        error_resp.set("code", error_code);
+        error_resp.set("request_id", query_context.getClientInfo().current_query_id);
+        error_resp.stringify(error_str_stream, 0);
+
+        return error_str_stream.str();
+    }
 };
 
 using RestRouterHandlerPtr = std::shared_ptr<RestRouterHandler>;

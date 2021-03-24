@@ -1,70 +1,74 @@
-#include <IO/JSON2QueryReadBuffer.h>
-#include <IO/ReadHelpers.h>
-#include <IO/ReadBufferFromString.h>
-#include <IO/copyData.h>
+#include "JSON2QueryReadBuffer.h"
+
+#include "ReadBufferFromString.h"
+#include "ReadHelpers.h"
+#include "copyData.h"
+
 #include <common/find_symbols.h>
 
 namespace DB
 {
-JSON2QueryReadBuffer::JSON2QueryReadBuffer(std::unique_ptr<ReadBuffer> in_, const std::string table_name_)
-    : in(std::move(in_))
-    , table_name(table_name_)
-    , columns_read(false)
-    , data_in_square_brackets(false)
+namespace
 {
+    inline void skipToChar(char c, ReadBuffer & buf)
+    {
+        skipWhitespaceIfAny(buf);
+        assertChar(c, buf);
+        skipWhitespaceIfAny(buf);
+    }
 }
 
-static inline void skipToChar(char c, ReadBuffer & buf)
+JSON2QueryReadBuffer::JSON2QueryReadBuffer(std::unique_ptr<ReadBuffer> in_, const String & table_name_)
+    : in(std::move(in_)), table_name(table_name_), columns_read(false), data_in_square_brackets(false)
 {
-    skipWhitespaceIfAny(buf);
-    assertChar(c, buf);
-    skipWhitespaceIfAny(buf);
 }
 
 bool JSON2QueryReadBuffer::nextImpl()
 {
-    if(!columns_read)
+    if (!columns_read)
     {
         skipToChar('{', *in);
     }
 
-    /// read columns at first read
+    /// Read columns at first read
     if (!columns_read && !in->eof())
     {
         String name;
         readJSONString(name, *in);
         if (name == "columns")
         {
-            String cols;
-            readColumns(cols, *in);
+            auto cols = readColumns( *in);
 
-            if(cols.length()>0)
+            if (cols.length() > 0)
             {
                 String query = "INSERT INTO " + table_name + " " + cols + " FORMAT JSONCompactEachRow ";
                 size_t query_size = query.size();
                 memory.resize(query.size());
                 ::memcpy(memory.data(), query.data(), query.size());
-                working_buffer = Buffer(memory.data(), memory.data()+query_size);
+                working_buffer = Buffer(memory.data(), memory.data() + query_size);
                 columns_read = true;
                 return true;
-            } else {
+            }
+            else
+            {
                 working_buffer = Buffer(in->position(), in->position());
                 return false;
             }
         }
     }
 
-    /// read data fields
+    /// Read data fields
     if (columns_read && !in->eof())
     {
-        if (!data_in_square_brackets) {
+        if (!data_in_square_brackets)
+        {
             String name;
             readJSONString(name, *in);
 
             if (name == "data")
             {
                 skipToChar(':', *in);
-                if(*in->position() != '[')
+                if (*in->position() != '[')
                 {
                     char err[2] = {'[', '\0'};
                     throwAtAssertionFailed(err, *in);
@@ -73,7 +77,7 @@ bool JSON2QueryReadBuffer::nextImpl()
             }
         }
 
-        if(data_in_square_brackets)
+        if (data_in_square_brackets)
         {
             working_buffer = Buffer(in->position(), in->buffer().end());
             in->position() = in->buffer().end();
@@ -84,44 +88,45 @@ bool JSON2QueryReadBuffer::nextImpl()
     return false;
 }
 
-void JSON2QueryReadBuffer::readColumns(String & s, ReadBuffer & buf)
+String JSON2QueryReadBuffer::readColumns(ReadBuffer & buf)
 {
-    s.clear();
+    String s;
     skipToChar(':', buf);
     bool in_bracket = false;
-    while(!buf.eof())
+    while (!buf.eof())
     {
-        if(!in_bracket) {
-            if(*buf.position() != '[') {
+        if (!in_bracket)
+        {
+            if (*buf.position() != '[')
+            {
                 char err[2] = {'[', '\0'};
                 throwAtAssertionFailed(err, *in);
             }
             in_bracket = true;
         }
 
-        if (in_bracket)
+
+        char * next_pos = find_first_symbols<'}', ']'>(buf.position() + 1, buf.buffer().end());
+
+        s.append(buf.position(), next_pos - buf.position());
+        buf.position() = next_pos;
+        if (*next_pos == '}')
         {
-            char * next_pos = find_first_symbols<'}', ']'>(buf.position() + 1, buf.buffer().end());
+            s.clear();
+        }
 
-            s.append(buf.position(), next_pos - buf.position());
-            buf.position() = next_pos;
-            if (*next_pos == '}')
+        if (buf.hasPendingData())
+        {
+            if (*buf.position() == ']')
             {
-                s.clear();
+                ++buf.position();
+                s.append(1, ')');
             }
-
-            if (buf.hasPendingData())
-            {
-                if (*buf.position() == ']')
-                {
-                    ++buf.position();
-                    s.append(1, ')');
-                }
-                s[0] = '(';
-                skipToChar(',', buf);
-                return;
-            }
+            s[0] = '(';
+            skipToChar(',', buf);
+            return s;
         }
     }
+    return s;
 }
 }

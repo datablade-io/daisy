@@ -155,7 +155,7 @@ public:
 
     size_t getRandomShardIndex();
     Int32 currentShard() const { return shard; }
-    Int32 getProgress(String poll_id) const { return ingesting_blocks.progress(poll_id); }
+    std::pair<String, Int32> getProgress(String poll_id) const { return ingesting_blocks.progress(poll_id); }
 
     IDistributedWriteAheadLog::RecordSequenceNumber lastSequenceNumber() const;
 

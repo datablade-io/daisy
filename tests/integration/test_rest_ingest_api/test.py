@@ -61,7 +61,7 @@ def setup_nodes():
                      [23, "c", "2021-01-02 00:00:00.000", [33, 34], ["aa", "ab"], "::10.1.1.3"]]
 
         }, {
-            "status": 400,
+            "status": 406,
             "result": "table: default.test is not a DistributedMergeTreeTable"
         }
     ),
@@ -71,8 +71,8 @@ def setup_nodes():
             "columns": ["i"],
             "data": [[21], [30]]
         }, {
-            "status": 500,
-            "result": """"progress" :"""
+            "status": 200,
+            "result": """"progress":"""
         }
     )
 ])
@@ -102,8 +102,8 @@ def test_ingest_api_baisc_case(table, query, status):
     (
         "",
         {
-            "status": 500,
-            "result": "Empty poll id"
+            "status": 404,
+            "result": "Cannot find the handler"
         }
     )
 ])

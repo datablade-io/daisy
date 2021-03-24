@@ -114,6 +114,9 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int NOT_IMPLEMENTED;
     extern const int ACCESS_DENIED;
+    /// Daisy : starts
+    extern const int INVALID_POLL_ID;
+    /// Daisy : ends
 }
 
 
@@ -2686,13 +2689,25 @@ std::vector<String> Context::parseQueryStatusPollId(const String & poll_id) cons
         throw Exception("Invalid poll ID", ErrorCodes::BAD_ARGUMENTS);
     }
 
+    std::vector<String> names;
+    sep = ".";
+    boost::algorithm::split(names, components[1], boost::is_any_of(sep));
+    if (names.size() != 2)
+    {
+        throw Exception("Invalid poll ID: " + poll_id, ErrorCodes::INVALID_POLL_ID);
+    }
+    const String database_name = names[0];
+    const String table_name = names[1];
+
+    std::vector<String> result = { components[0], names[0], names[1], components[2], components[3], components[4]};
+
 //    if (getUserName() != components[1])
 //    {
 //        throw Exception("User doesn't own this poll ID", ErrorCodes::ACCESS_DENIED);
 //    }
 
     /// FIXME, check timestamp etc
-    return components;
+    return result;
 }
 /// Daisy ends.
 
