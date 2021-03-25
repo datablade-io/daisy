@@ -1,8 +1,8 @@
 #include "StorageDistributedMergeTree.h"
 
+#include <DistributedMetadata/CatalogService.h>
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
-#include <DistributedMetadata/CatalogService.h>
 #include <Functions/IFunction.h>
 #include <Interpreters/ClusterProxy/DistributedSelectStreamFactory.h>
 #include <Interpreters/ClusterProxy/executeQuery.h>
@@ -13,6 +13,8 @@
 #include <Interpreters/createBlockSelector.h>
 #include <Interpreters/evaluateConstantExpression.h>
 #include <Processors/Pipe.h>
+#include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
+#include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
 #include <Storages/MergeTree/DistributedMergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
 #include <Common/randomSeed.h>
@@ -299,7 +301,7 @@ Pipe StorageDistributedMergeTree::read(
 {
     QueryPlan plan;
     read(plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
-    return plan.convertToPipe();
+    return plan.convertToPipe(QueryPlanOptimizationSettings::fromContext(context), BuildQueryPipelineSettings::fromContext(context));
 }
 
 void StorageDistributedMergeTree::startup()
