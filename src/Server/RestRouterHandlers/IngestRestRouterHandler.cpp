@@ -21,17 +21,18 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
     if(database_name.empty() || table_name.empty())
     {
         http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
-        error = "Database or Table is empty";
-        return jsonException(error, ErrorCodes::INVALID_CONFIG_PARAMETER);
+        return jsonException("Database or Table is empty", ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
     std::unique_ptr<ReadBuffer> in = std::make_unique<JSON2QueryReadBuffer>(wrapReadBufferReference(input), database_name + "." + table_name);
-    std::shared_ptr<WriteBuffer> used_output = nullptr;
+    std::shared_ptr<WriteBuffer> null_out = nullptr;
 
     std::optional<CurrentThread::QueryScope> query_scope;
 
     query_scope.emplace(query_context);
-    executeQuery(*in, *used_output, /* allow_into_outfile = */ false, query_context, {});
+    query_context.setSetting("output_format_parallel_formatting", false);
+
+    executeQuery(*in, *null_out, /* allow_into_outfile = */ false, query_context, {});
 
     Poco::JSON::Object resp;
     resp.set("query_id", query_context.getClientInfo().initial_query_id);
@@ -41,7 +42,7 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
         resp.set("poll_id", poll_id);
     }
     std::stringstream  resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    resp.stringify( resp_str_stream, 0);
+    resp.stringify(resp_str_stream, 0);
 
     return resp_str_stream.str();
 }

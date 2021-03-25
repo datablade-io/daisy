@@ -163,13 +163,15 @@ bool JSONCompactEachRowRowInputFormat::readRow(DB::MutableColumns &columns, DB::
     {
         ++in.position();
         skipWhitespaceIfAny(in);
-        if(*in.position() == '[' && !with_bracket) {
+        if(*in.position() == '[' && !with_bracket)
+        {
             with_bracket = true;
             ++in.position();
             skipWhitespaceIfAny(in);
         }
     }
-    else {
+    else
+    {
         if (*in.position() == ']' && with_bracket)
         {
             return false;

@@ -2701,10 +2701,10 @@ std::vector<String> Context::parseQueryStatusPollId(const String & poll_id) cons
 
     std::vector<String> result = { components[0], names[0], names[1], components[2], components[3], components[4]};
 
-//    if (getUserName() != components[1])
-//    {
-//        throw Exception("User doesn't own this poll ID", ErrorCodes::ACCESS_DENIED);
-//    }
+    if (getUserName() != components[2])
+    {
+        throw Exception("User doesn't own this poll ID", ErrorCodes::ACCESS_DENIED);
+    }
 
     /// FIXME, check timestamp etc
     return result;

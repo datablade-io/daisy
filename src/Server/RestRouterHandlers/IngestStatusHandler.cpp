@@ -26,14 +26,12 @@ void IngestStatusHandler::prepare()
 String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
 {
     std::pair<String, Int32> progress;
-    String error;
 
     String poll_id = getPathParameter("poll_id", "");
     if (poll_id.empty())
     {
         http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
-        error = "Empty poll id";
-        return jsonException(error, ErrorCodes::INVALID_POLL_ID);
+        return jsonException("Empty poll id", ErrorCodes::INVALID_POLL_ID);
     }
 
     /// components: 0: query_id, 1: database, 2:table,  3: user, 4: node_identity, 5: timestamp
@@ -48,38 +46,34 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
         if (!storage)
         {
             http_status = Poco::Net::HTTPResponse::HTTP_NOT_ACCEPTABLE;
-            error = "table: " + database_name + "." + table_name + " does not exist";
-            return jsonException(error, ErrorCodes::UNKNOWN_TABLE);
+            return jsonException("table: " + database_name + "." + table_name + " does not exist", ErrorCodes::UNKNOWN_TABLE);
         }
 
-        /// it is not a DistributedMergeTreeTable
         if (storage->getName() != "DistributedMergeTree")
         {
 
             http_status = Poco::Net::HTTPResponse::HTTP_NOT_ACCEPTABLE;
-            error = "table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable";
-            return jsonException(error, ErrorCodes::TYPE_MISMATCH);
+            return jsonException("table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable", ErrorCodes::TYPE_MISMATCH);
         }
 
-        const auto* distributed = dynamic_cast<const StorageDistributedMergeTree *>(storage.get());
+        const auto* distributed = static_cast<const StorageDistributedMergeTree *>(storage.get());
         progress = distributed->getProgress(poll_id);
         if (progress.second < 0)
         {
             http_status = Poco::Net::HTTPResponse::HTTP_NOT_FOUND;
-            error = "poll_id does not exists";
-            return jsonException(error, ErrorCodes::POLL_ID_NOT_EXIST);
+            return jsonException("poll_id does not exists", ErrorCodes::POLL_ID_NOT_EXIST);
         }
         return makeResponse(progress);
     }
     else
     {
-        Poco::URI uri{"http://" + target_node + query_context.getConfigRef().getString("http_port") + ":8123/dae/ingest/statuses/" + poll_id};
-        String resp = sendGetRequest(uri, http_status);
+        Poco::URI uri{"http://" + target_node + query_context.getConfigRef().getString("http_port") + "/dae/ingest/statuses/" + poll_id};
+        String resp = forwardRequest(uri, http_status);
         return resp;
     }
 }
 
-String IngestStatusHandler::sendGetRequest(const Poco::URI & uri, Int32 & http_status ) const
+String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_status ) const
 {
     LOG_DEBUG(log, "Send GET request to on uri={}", uri.toString());
 
@@ -132,7 +126,7 @@ String IngestStatusHandler::sendGetRequest(const Poco::URI & uri, Int32 & http_s
     return jsonException(error, ErrorCodes::SEND_POLL_REQ_ERROR);
 }
 
-String IngestStatusHandler::makeResponse(const std::pair<String, Int32> progress)
+String IngestStatusHandler::makeResponse(const std::pair<String, Int32> & progress)
 {
     Poco::JSON::Object resp;
     resp.set("status", progress.first);

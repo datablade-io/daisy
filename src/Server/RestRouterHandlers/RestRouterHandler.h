@@ -189,7 +189,7 @@ protected:
     std::unordered_map<String, String> path_parameters;
 
     /// use to convert error_msg to JSON string
-    String jsonException(String & error_msg, const int error_code) const
+    String jsonException(const String error_msg, const int error_code) const
     {
         std::stringstream error_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         Poco::JSON::Object error_resp;

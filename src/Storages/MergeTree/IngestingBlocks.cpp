@@ -120,12 +120,16 @@ std::pair<String, Int32> IngestingBlocks::progress(const String & id) const
     if (iter != blockIds.end())
     {
         Int32 progress = (iter->second.total - iter->second.ids.size()) * 100 / iter->second.total;
+
+        if(iter->second.err != 0)
+            return std::make_pair("Fail", progress);
+
         if (progress < 100)
             return std::make_pair("Processing", progress);
         else
-            return std::make_pair("Succeed", progress);
+            return std::make_pair("Success", progress);
     }
-    return std::make_pair("NotFound", -1);
+    return std::make_pair("Unknown", -1);
 }
 
 size_t IngestingBlocks::outstandingBlocks() const

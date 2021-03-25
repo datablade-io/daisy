@@ -18,9 +18,9 @@ private:
     void prepare();
 
     /// send http request
-    String sendGetRequest(const Poco::URI & uri, Int32 & http_status) const;
+    String forwardRequest(const Poco::URI & uri, Int32 & http_status) const;
 
-    static String makeResponse(const std::pair<String, Int32> progress);
+    static String makeResponse(const std::pair<String, Int32> & progress);
 };
 
 }
