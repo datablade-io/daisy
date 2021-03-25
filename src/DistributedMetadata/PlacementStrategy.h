@@ -1,6 +1,8 @@
 #pragma once
+
 #include <unordered_map>
 #include <vector>
+#include <boost/noncopyable.hpp>
 #include <common/types.h>
 
 namespace DB
@@ -10,9 +12,9 @@ struct HostState
 {
     /// `host` is network reachable like hostname, FQDN or IP
     String host;
-    /// host_identity can be unique uuid
+    /// `host_identity` can be unique uuid
     String host_identity;
-    /// (policy name, free disk space)
+    /// `(policy name, free disk space)`
     DiskSpace disk_space;
 
     explicit HostState(const String & host_) : host(host_) { }
@@ -20,7 +22,7 @@ struct HostState
 using HostStatePtr = std::shared_ptr<HostState>;
 using StateContainer = std::unordered_map<String, HostStatePtr>;
 
-class PlacementStrategy
+class PlacementStrategy : private boost::noncopyable
 {
 public:
     struct PlacementQuery

@@ -1,11 +1,14 @@
 #include "PlacementService.h"
+
+#include "CatalogService.h"
+
 #include <algorithm>
 #include <random>
 #include <Interpreters/Context.h>
 #include <Storages/System/StorageSystemStoragePolicies.h>
-#include <common/logger_useful.h>
 #include <common/getFQDNOrHostName.h>
-#include "CatalogService.h"
+#include <common/logger_useful.h>
+
 
 
 namespace DB
@@ -57,7 +60,7 @@ std::vector<String> PlacementService::place(
 
     size_t total_replicas = static_cast<size_t>(shards * replication_factor);
     PlacementStrategy::PlacementQuery query{total_replicas, storage_policy};
-    return strategy->qualifiedHosts(hostStates, query);
+    return strategy->qualifiedHosts(host_states, query);
 }
 
 std::vector<String> PlacementService::placed(const String & database, const String & table) const
@@ -76,7 +79,7 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
 
 void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
-    /// node metrics schema: host, disk_free, tables, location, timestamp
+    /// Node metrics schema: host, disk_free
     for (const auto & record : records)
     {
         assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
@@ -87,25 +90,23 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
         {
             const auto & policy_name = record->block.getByName("policy_name").column->getDataAt(row);
             const auto & space = record->block.getByName("disk_space").column->get64(row);
-            LOG_INFO(log, "Get disk space data. Host:{}, Policy:{}, Size:{}", idempotent_key, policy_name, space);
             disk_space.emplace(policy_name, space);
         }
         mergeStates(idempotent_key, disk_space);
     }
-    /// checkpoint.
 }
 
 void PlacementService::mergeStates(const String & host, DiskSpace & disk)
 {
     std::unique_lock guard(rwlock);
 
-    auto iter = hostStates.find(host);
-    if (iter == hostStates.end())
+    auto iter = host_states.find(host);
+    if (iter == host_states.end())
     {
         /// New host metrics.
         HostStatePtr state = std::make_shared<HostState>(host);
         state->disk_space = disk;
-        hostStates.emplace(host, state);
+        host_states.emplace(host, state);
         return;
     }
     /// Update host metrics.
@@ -152,11 +153,11 @@ void PlacementService::broadcastTask()
     const auto & result = dwal->append(record, dwal_append_ctx);
     if (result.err == ErrorCodes::OK)
     {
-        LOG_INFO(log, "Appended {} disk space records in one block", record.block.rows());
+        LOG_INFO(log, "Appended {} disk space records in one host state block", record.block.rows());
     }
     else
     {
-        LOG_ERROR(log, "Failed to append Host State block, error={}", result.err);
+        LOG_ERROR(log, "Failed to append host state block, error={}", result.err);
     }
 
     (*broadcast_task)->scheduleAfter(reschedule_time_ms);

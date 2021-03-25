@@ -1,9 +1,9 @@
 #pragma once
 
-#include <Core/BackgroundSchedulePool.h>
 #include "MetadataService.h"
 #include "PlacementStrategy.h"
 
+#include <Core/BackgroundSchedulePool.h>
 
 namespace DB
 {
@@ -48,7 +48,7 @@ private:
 private:
     mutable std::shared_mutex rwlock;
     CatalogService & catalog;
-    StateContainer hostStates;
+    StateContainer host_states;
     PlacementStrategyPtr strategy;
     std::unique_ptr<BackgroundSchedulePoolTaskHolder> broadcast_task;
     static constexpr size_t reschedule_time_ms = 5000;
