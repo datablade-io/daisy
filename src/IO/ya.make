@@ -29,6 +29,7 @@ SRCS(
     HTTPChunkedReadBuffer.cpp
     HTTPCommon.cpp
     HashingWriteBuffer.cpp
+    JSON2QueryReadBuffer.cpp
     LZMADeflatingWriteBuffer.cpp
     LZMAInflatingReadBuffer.cpp
     LimitReadBuffer.cpp

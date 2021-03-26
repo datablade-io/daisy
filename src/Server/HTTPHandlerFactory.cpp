@@ -91,6 +91,8 @@ static inline auto createHandlersFactoryFromConfig(
                 main_handler_factory->addHandler(createPrometheusHandlerFactory(server, async_metrics, prefix + "." + key));
             else if (handler_type == "replicas_status")
                 main_handler_factory->addHandler(createReplicasStatusHandlerFactory(server, prefix + "." + key));
+            else if (handler_type == "sqlanalyze")
+                main_handler_factory->addHandler(createSQLAnalyzeHandlerFactory(server, prefix + "." + key));
             else
                 throw Exception("Unknown handler type '" + handler_type + "' in config here: " + prefix + "." + key + ".handler.type",
                     ErrorCodes::INVALID_CONFIG_PARAMETER);

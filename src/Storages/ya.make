@@ -18,7 +18,6 @@ SRCS(
     Distributed/DirectoryMonitor.cpp
     Distributed/DistributedBlockOutputStream.cpp
     Distributed/DistributedSettings.cpp
-    DistributedWriteAheadLog/IDistributedWriteAheadLog.cpp
     IStorage.cpp
     IndicesDescription.cpp
     JoinSettings.cpp

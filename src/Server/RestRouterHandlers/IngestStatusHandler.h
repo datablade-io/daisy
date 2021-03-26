@@ -2,6 +2,7 @@
 
 #include "RestRouterHandler.h"
 
+
 namespace DB
 {
 class IngestStatusHandler final : public RestRouterHandler
@@ -13,13 +14,12 @@ public:
     String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
 
 private:
-    bool streaming() override { return false; }
-    void prepare();
+    bool streaming() const override { return false; }
 
     /// send http request
     String forwardRequest(const Poco::URI & uri, Int32 & http_status) const;
 
-    static String makeResponse(const std::pair<String, Int32> & progress);
+    static String makeResponse(const std::pair<String, Int32> & status);
 };
 
 }

@@ -1157,7 +1157,7 @@ int Server::main(const std::vector<std::string> & /*args*/)
         /// Daisy : start. Register Rest api route handlers
         RestRouterFactory::registerRestRouterHandlers();
         /// Daisy : end.
-        
+
         for (const auto & listen_host : listen_hosts)
         {
             /// HTTP

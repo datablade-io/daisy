@@ -14,11 +14,14 @@
 #include <Poco/Net/HTTPStream.h>
 #include <Poco/Net/NetException.h>
 
+
 namespace DB
 {
+
 namespace ErrorCodes
 {
-    extern const int INCORRECT_DATA;
+    extern const int BAD_REQUEST_PARAMETER;
+    extern const int UNKNOWN_TYPE_OF_QUERY;
 }
 
 class RestRouterHandler : private boost::noncopyable
@@ -36,6 +39,8 @@ public:
     /// and sends back HTTP `500` to clients
     String execute(HTTPServerRequest & request, HTTPServerResponse & response, Int32 & http_status)
     {
+        http_status = HTTPResponse::HTTP_OK;
+
         if (streaming())
         {
             return execute(request.getStream(), response, http_status);
@@ -53,13 +58,6 @@ public:
 
             Poco::JSON::Parser parser;
             auto payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
-
-            if (!validate(request.getMethod(), payload))
-            {
-                http_status = 500;
-                return "Parameter verification failed, please check the parameter information that must be carried";
-            }
-
             return execute(payload, http_status);
         }
     }
@@ -79,128 +77,108 @@ public:
 
     void setPathParameter(const String & name, const String & value) { path_parameters[name] = value; }
 
-private:
-    virtual bool streaming() { return false; }
-
-    /// Streaming `execute`, so far Ingest API probably needs override this function
-    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /*response */, Int32 & http_status)
+public:
+    static String jsonErrorResponse(const String & error_msg, int error_code, const String & query_id)
     {
-        http_status = 404;
-        String result = "Streaming executer not implemented";
+        std::stringstream error_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        Poco::JSON::Object error_resp;
 
-        LOG_DEBUG(log, result);
-        return result;
+        error_resp.set("error_msg", error_msg);
+        error_resp.set("code", error_code);
+        error_resp.set("request_id", query_id);
+        error_resp.stringify(error_str_stream, 0);
+
+        return error_str_stream.str();
     }
 
-    /// Admin APIs like DDL overrides this function
+protected:
+    String jsonErrorResponse(const String & error_msg, int error_code) const
+    {
+        return jsonErrorResponse(error_msg, error_code, query_context.getCurrentQueryId());
+    }
+
+private:
+    /// Override this function if derived handler need read data in a streaming way from http input
+    virtual bool streaming() const { return false; }
+
+    /// Streaming `execute`, so far Ingest API probably needs override this function
+    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /* response */, Int32 & http_status) const
+    {
+        return handleNotImplemented(http_status);
+    }
+
+    String handleNotImplemented(Int32 & http_status) const
+    {
+        http_status = HTTPResponse::HTTP_NOT_IMPLEMENTED;
+        return jsonErrorResponse("HTTP method requested is not supported", ErrorCodes::UNKNOWN_TYPE_OF_QUERY);
+    }
+
     String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
-    {   
+    {
         const auto & client_info = query_context.getClientInfo();
-        
+
         if (client_info.http_method == ClientInfo::HTTPMethod::GET)
         {
-            return executeGet(payload, http_status);
+            return doExecute(&RestRouterHandler::validateGet, &RestRouterHandler::executeGet, payload, http_status);
         }
         else if (client_info.http_method == ClientInfo::HTTPMethod::POST)
         {
-            return executePost(payload, http_status);
+            return doExecute(&RestRouterHandler::validatePost, &RestRouterHandler::executePost, payload, http_status);
         }
         else if (client_info.http_method == ClientInfo::HTTPMethod::PATCH)
         {
-            return executePatch(payload, http_status);
+            return doExecute(&RestRouterHandler::validatePatch, &RestRouterHandler::executePatch, payload, http_status);
         }
         else if (client_info.http_method == ClientInfo::HTTPMethod::DELETE)
         {
-            return executeDelete(payload, http_status);
+            return doExecute(&RestRouterHandler::validateDelete, &RestRouterHandler::executeDelete, payload, http_status);
         }
-        http_status = 404;
 
-        return "";
+        return handleNotImplemented(http_status);
+    }
+
+    template <typename Validate, typename Execute>
+    String doExecute(Validate validate, Execute exec, const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+    {
+        String error_msg;
+        if (!(this->*validate)(payload, error_msg))
+        {
+            http_status = HTTPResponse::HTTP_BAD_REQUEST;
+            return jsonErrorResponse(error_msg, ErrorCodes::BAD_REQUEST_PARAMETER);
+        }
+        return (this->*exec)(payload, http_status);
     }
 
     virtual String executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
     {
-        http_status = 404;
-        String result = "DDL GET executer not implemented";
-
-        LOG_DEBUG(log, result);
-        return result;
+        return handleNotImplemented(http_status);
     }
 
     virtual String executePost(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
     {
-        http_status = 404;
-        String result = "DDL POST executer not implemented";
-
-        LOG_DEBUG(log, result);
-        return result;
+        return handleNotImplemented(http_status);
     }
 
     virtual String executeDelete(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
     {
-        http_status = 404;
-        String result = "DDL DELETE executer not implemented";
-
-        LOG_DEBUG(log, result);
-        return result;
+        return handleNotImplemented(http_status);
     }
 
     virtual String executePatch(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
     {
-        http_status = 404;
-        String result = "DDL PATCH executer not implemented";
-
-        LOG_DEBUG(log, result);
-        return result;
+        return handleNotImplemented(http_status);
     }
 
-    bool validate(const String & http_method, const Poco::JSON::Object::Ptr & payload) const
-    {
-        if (http_method == Poco::Net::HTTPRequest::HTTP_GET)
-        {
-            return validateGet(payload);
-        }
-        else if (http_method == Poco::Net::HTTPRequest::HTTP_POST)
-        {
-            return validatePost(payload);
-        }
-        else if (http_method == Poco::Net::HTTPRequest::HTTP_DELETE)
-        {
-            return validateDelete(payload);
-        }
-        else if (http_method == Poco::Net::HTTPRequest::HTTP_PATCH)
-        {
-            return validatePatch(payload);
-        }
-
-        /// Method we don't support
-        return false;
-    }
-
-    virtual bool validateGet(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
-    virtual bool validatePost(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
-    virtual bool validateDelete(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
-    virtual bool validatePatch(const Poco::JSON::Object::Ptr & /* payload */) const { return true; }
+    virtual bool validateGet(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
+    virtual bool validatePost(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
+    virtual bool validateDelete(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
+    virtual bool validatePatch(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
 
 protected:
     Context & query_context;
     Poco::Logger * log;
 
     std::unordered_map<String, String> path_parameters;
-
-    /// use to convert error_msg to JSON string
-    String jsonException(const String error_msg, const int error_code) const
-    {
-        std::stringstream error_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        Poco::JSON::Object error_resp;
-
-        error_resp.set("error_message", error_msg);
-        error_resp.set("code", error_code);
-        error_resp.set("request_id", query_context.getClientInfo().current_query_id);
-        error_resp.stringify(error_str_stream, 0);
-
-        return error_str_stream.str();
-    }
 };
 
 using RestRouterHandlerPtr = std::shared_ptr<RestRouterHandler>;
