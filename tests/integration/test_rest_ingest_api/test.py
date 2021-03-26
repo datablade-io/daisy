@@ -1,0 +1,116 @@
+import json
+
+import pytest
+from helpers.cluster import ClickHouseCluster
+
+cluster = ClickHouseCluster(__file__)
+instance = cluster.add_instance('instance',
+                                main_configs=['configs/kafka.xml'],
+                                with_kafka=True,
+                                with_zookeeper=True,
+                                )
+
+
+def prepare_data():
+    print("prepare data")
+    instance.query("""
+CREATE TABLE default.test
+(
+    `a` UInt64,
+    `b` String,
+    `t` DateTime64(3) DEFAULT now(),
+    `n.a` Array(UInt64),
+    `n.b` Array(String),
+    `ip` IPv6 DEFAULT toIPv6('::127.0.0.1'),
+    INDEX idx_b b TYPE minmax GRANULARITY 1
+)
+ENGINE = MergeTree
+ORDER BY t
+    """
+                   )
+    instance.query("""
+CREATE TABLE default.test2
+(
+    `i` Int32
+)
+ENGINE = DistributedMergeTree(1, 1, rand())
+ORDER BY i
+SETTINGS index_granularity = 8192, shard = 0
+    """
+                   )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def setup_nodes():
+    print("setup node")
+    try:
+        cluster.start()
+        prepare_data()
+        yield cluster
+
+    finally:
+        cluster.shutdown()
+
+@pytest.mark.parametrize("table, query, status", [
+    (
+        "test",
+        {
+            "columns": ["a", "b", "t", "n.a", "n.b", "ip"],
+            "data": [[21, "a", "2021-01-01 23:23:00", [30, 31], ["aa", "ab"], "::10.1.1.1"],
+                     [22, "b", "2021-01-01 00:00:00", [31, 32], ["aa", "ab"], "::10.1.1.2"],
+                     [23, "c", "2021-01-02 00:00:00.000", [33, 34], ["aa", "ab"], "::10.1.1.3"]]
+
+        }, {
+            "status": 406,
+            "result": "table: default.test is not a DistributedMergeTreeTable"
+        }
+    ),
+    (
+        "test2",
+        {
+            "columns": ["i"],
+            "data": [[21], [30]]
+        }, {
+            "status": 200,
+            "result": """"progress":"""
+        }
+    )
+])
+def test_ingest_api_baisc_case(table, query, status):
+    instance.ip_address = "localhost"
+    # insert data
+    resp = instance.http_request(method="POST", url="dae/v1/ingest/default/tables/" + table, data=json.dumps(query))
+    result = json.loads(resp.content)
+    # assert resp.status == 200
+    assert 'poll_id' in result
+    assert 'query_id' in result
+    # get status
+    poll_id = result['poll_id']
+    resp = instance.http_request(method="GET", url="dae/v1/ingest/statuses/" + poll_id)
+    assert resp.status_code == status['status']
+    assert status['result'] in resp.text
+
+
+@pytest.mark.parametrize("poll_id, status", [
+    (
+        "poll_id_invalid",
+        {
+            "status": 500,
+            "result": "Invalid poll ID"
+        }
+    ),
+    (
+        "",
+        {
+            "status": 404,
+            "result": "Cannot find the handler"
+        }
+    )
+])
+def test_status_exception(poll_id, status):
+    instance.ip_address = "localhost"
+    # get status
+    resp = instance.http_request(method="GET", url="dae/v1/ingest/statuses/" + poll_id)
+    assert resp.status_code == status['status']
+    assert status['result'] in resp.text
+

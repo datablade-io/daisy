@@ -33,7 +33,7 @@ public:
 
     /// ingest procgress calculation in percentage (0..100)
     /// return -1 if query `id` doesn't exist
-    Int32 progress(const String & id) const;
+    std::pair<String, Int32> progress(const String & id) const;
 
     /// number of outstanding blocks
     size_t outstandingBlocks() const;

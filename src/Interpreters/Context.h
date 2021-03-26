@@ -476,7 +476,7 @@ public:
     /// Daisy : starts
     String getQueryStatusPollId() const { return query_status_poll_id; }
     /// Parse poll id and return `host` in ID, throws if poll_id is invalid or validations didn't pass
-    String parseQueryStatusPollId(const String & poll_id) const;
+    std::vector<String> parseQueryStatusPollId(const String & poll_id) const;
     String getNodeIdentity() const { return node_identity; }
     const String & getIdempotentKey() const { return idempotent_key; }
     const String & getIngestMode() const { return ingest_mode; }

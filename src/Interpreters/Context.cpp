@@ -79,6 +79,7 @@
 #include <Storages/MergeTree/MergeTreeDataPartUUID.h>
 
 #include <boost/algorithm/string/join.hpp>
+#include <boost/algorithm/string/regex.hpp>
 #include <boost/algorithm/string/split.hpp>
 
 
@@ -118,6 +119,9 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int NOT_IMPLEMENTED;
     extern const int ACCESS_DENIED;
+    /// Daisy : starts
+    extern const int INVALID_POLL_ID;
+    /// Daisy : ends
 }
 
 
@@ -2723,10 +2727,11 @@ void Context::setupQueryStatusPollId()
         return;
     }
 
-    /// Poll ID is composed by : (query_id, user, host, timestamp)
+    /// Poll ID is composed by : (query_id, database.table (fullName), user, host, timestamp)
     String sep = "!`$";
     std::vector<String> components;
     components.push_back(getCurrentQueryId());
+    components.push_back(getInsertionTable().getFullNameNotQuoted());
     components.push_back(getUserName());
     components.push_back(getNodeIdentity());
 
@@ -2744,7 +2749,7 @@ void Context::setupQueryStatusPollId()
     query_status_poll_id = ostr.str();
 }
 
-String Context::parseQueryStatusPollId(const String & poll_id) const
+std::vector<String> Context::parseQueryStatusPollId(const String & poll_id) const
 {
     if (poll_id.size() > 512)
     {
@@ -2754,27 +2759,39 @@ String Context::parseQueryStatusPollId(const String & poll_id) const
     std::istringstream istr(poll_id); /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     Poco::Base64Decoder decoder(istr);
     char buf[512] = {'\0'};
-    istr.read(buf, sizeof(buf));
+    decoder.read(buf, sizeof(buf));
 
-    String decoded{buf, static_cast<size_t>(istr.gcount())};
+    String decoded{buf, static_cast<size_t>(decoder.gcount())};
 
-    String sep = "!`$";
+    String sep = "!`\\$";
     std::vector<String> components;
-    boost::algorithm::split(components, decoded, boost::is_any_of(sep));
+    boost::algorithm::split_regex(components, decoded, boost::regex(sep));
 
     /// FIXME, more check for future extension
-    if (components.size() != 4)
+    if (components.size() != 5)
     {
         throw Exception("Invalid poll ID", ErrorCodes::BAD_ARGUMENTS);
     }
 
-    if (getUserName() != components[1])
+    std::vector<String> names;
+    sep = ".";
+    boost::algorithm::split(names, components[1], boost::is_any_of(sep));
+    if (names.size() != 2)
+    {
+        throw Exception("Invalid poll ID: " + poll_id, ErrorCodes::INVALID_POLL_ID);
+    }
+    const String database_name = names[0];
+    const String table_name = names[1];
+
+    std::vector<String> result = { components[0], names[0], names[1], components[2], components[3], components[4]};
+
+    if (getUserName() != components[2])
     {
         throw Exception("User doesn't own this poll ID", ErrorCodes::ACCESS_DENIED);
     }
 
     /// FIXME, check timestamp etc
-    return components[2];
+    return result;
 }
 /// Daisy ends.
 
