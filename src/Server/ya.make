@@ -38,7 +38,6 @@ SRCS(
     RestRouterHandlers/SQLAnalyzerRestRouterHandler.cpp
     RestRouterHandlers/SchemaValidator.cpp
     RestRouterHandlers/TableRestRouterHandler.cpp
-    SQLAnalyzeHTTPHandler.cpp
     StaticRequestHandler.cpp
     TCPHandler.cpp
     WebUIRequestHandler.cpp

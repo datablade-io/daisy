@@ -61,16 +61,16 @@ String buildResponse(
 {
     /// {
     ///    "required_columns": [
-    ///        {"database": <database>, "table": <table>, "is_view": false, "column": <column>, "column_type": <type>},
+    ///        {"database": database, "table": table, "is_view": false, "column": column, "column_type": type},
     ///        ...
     ///    ],
     ///    "result_columns": {
-    ///        {"column": <column>, "column_type": <type>},
+    ///        {"column": column, "column_type": type},
     ///        ...
     ///    },
-    ///    "rewritten_query": <query>,
-    ///    "original_query": <query>,
-    ///    "query_type": CREATE | SELECT | INSERT INTO | ...
+    ///    "rewritten_query": query,
+    ///    "original_query": query,
+    ///    "query_type": CREATE , SELECT , INSERT INTO , ...
     ///    "has_aggr": true,
     ///    "has_table_join": true,
     ///    "has_union": true,
