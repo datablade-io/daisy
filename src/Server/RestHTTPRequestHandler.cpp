@@ -13,7 +13,6 @@ namespace DB
 {
 namespace ErrorCodes
 {
-    extern const int LOGICAL_ERROR;
     extern const int CANNOT_PARSE_TEXT;
     extern const int CANNOT_PARSE_ESCAPE_SEQUENCE;
     extern const int CANNOT_PARSE_QUOTED_STRING;
@@ -22,7 +21,6 @@ namespace ErrorCodes
     extern const int CANNOT_PARSE_NUMBER;
     extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
     extern const int CANNOT_OPEN_FILE;
-    extern const int CANNOT_COMPILE_REGEXP;
 
     extern const int UNKNOWN_ELEMENT_IN_AST;
     extern const int UNKNOWN_TYPE_OF_AST_NODE;
@@ -47,7 +45,6 @@ namespace ErrorCodes
     extern const int UNKNOWN_FORMAT;
     extern const int UNKNOWN_DATABASE_ENGINE;
     extern const int UNKNOWN_TYPE_OF_QUERY;
-    extern const int NO_ELEMENTS_IN_CONFIG;
 
     extern const int QUERY_IS_TOO_LARGE;
 
@@ -58,10 +55,7 @@ namespace ErrorCodes
     extern const int WRONG_PASSWORD;
     extern const int REQUIRED_PASSWORD;
 
-    extern const int BAD_REQUEST_PARAMETER;
-    extern const int INVALID_SESSION_TIMEOUT;
     extern const int HTTP_LENGTH_REQUIRED;
-    extern const int UNACCEPTABLE_URL;
 }
 
 namespace
@@ -203,23 +197,22 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     client_info.initial_query_id = client_info.current_query_id;
     CurrentThread::QueryScope query_scope{context};
 
+    /// Setup common response headers etc
+    response.setContentType("application/json; charset=UTF-8");
+    response.add("X-ClickHouse-Query-Id", context.getCurrentQueryId());
+    Int32 http_status = HTTPResponse::HTTP_OK;
+
     try
     {
         auto router_handler = RestRouterFactory::instance().get(request.getURI(), request.getMethod(), context);
         if (router_handler == nullptr)
         {
-            trySendExceptionToClient(
-                "Cannot find the handler corresponding to the route :  " + request.getURI()
-                    + " and the request method  is : " + request.getMethod(),
-                ErrorCodes::UNKNOWN_FUNCTION,
-                request,
-                response);
+            response.setStatusAndReason(HTTPResponse::HTTP_NOT_FOUND);
+            const auto & resp
+                = RestRouterHandler::jsonErrorResponse("Unknown URI", ErrorCodes::UNKNOWN_TYPE_OF_QUERY, client_info.current_query_id);
+            *response.send() << resp << std::endl;
             return;
         }
-
-        /// Setup common reponse headers etc
-        response.setContentType("application/json; charset=UTF-8");
-        Int32 http_status = HTTPResponse::HTTP_OK;
 
         LOG_DEBUG(log, "Start processing query_id={} user={}", client_info.current_query_id, user);
         auto response_payload{router_handler->execute(request, response, http_status)};
@@ -239,28 +232,23 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
           */
         int exception_code = getCurrentExceptionCode();
 
-        std::stringstream error_str_stream;
-        Poco::JSON::Object error_resp;
+        const auto & resp
+            = RestRouterHandler::jsonErrorResponse(getCurrentExceptionMessage(false, true), exception_code, client_info.current_query_id);
 
-        error_resp.set("error_messgae", getCurrentExceptionMessage(false, true));
-        error_resp.set("request_id", client_info.current_query_id);
-        error_resp.stringify(error_str_stream, 4);
-
-        std::string exception_message = error_str_stream.str();
-        trySendExceptionToClient(exception_message, exception_code, request, response);
+        trySendExceptionToClient(resp, exception_code, request, response);
     }
 }
 
-RestHTTPRequestHandler::RestHTTPRequestHandler(IServer & server_, const std::string & name) : server(server_), log(&Poco::Logger::get(name))
+RestHTTPRequestHandler::RestHTTPRequestHandler(IServer & server_, const String & name) : server(server_), log(&Poco::Logger::get(name))
 {
 }
 
 void RestHTTPRequestHandler::trySendExceptionToClient(
-    const std::string & s, int exception_code, HTTPServerRequest & request, HTTPServerResponse & response)
+    const String & s, int exception_code, HTTPServerRequest & request, HTTPServerResponse & response)
 {
     try
     {
-        response.set("X-ClickHouse-Exception-Code", toString<int>(exception_code));
+        response.set("X-ClickHouse-Exception-Code", std::to_string(exception_code));
 
         /// FIXME: make sure that no one else is reading from the same stream at the moment.
 

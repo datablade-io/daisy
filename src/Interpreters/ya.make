@@ -34,6 +34,7 @@ SRCS(
     CatBoostModel.cpp
     ClientInfo.cpp
     Cluster.cpp
+    ClusterProxy/DistributedSelectStreamFactory.cpp
     ClusterProxy/SelectStreamFactory.cpp
     ClusterProxy/executeQuery.cpp
     CollectJoinOnKeysVisitor.cpp
@@ -126,6 +127,7 @@ SRCS(
     QueryLog.cpp
     QueryNormalizer.cpp
     QueryParameterVisitor.cpp
+    QueryProfileVisitor.cpp
     QueryThreadLog.cpp
     RemoveInjectiveFunctionsVisitor.cpp
     RenameColumnVisitor.cpp

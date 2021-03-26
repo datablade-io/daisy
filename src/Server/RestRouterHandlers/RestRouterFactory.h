@@ -3,6 +3,7 @@
 #include "IngestRestRouterHandler.h"
 #include "IngestStatusHandler.h"
 #include "RestRouterHandler.h"
+#include "SQLAnalyzerRestRouterHandler.h"
 #include "TableRestRouterHandler.h"
 
 #include <re2/re2.h>
@@ -29,23 +30,41 @@ public:
 
     static void registerRestRouterHandlers()
     {
-        auto & factory = DB::RestRouterFactory::instance();
-
-        factory.registerRouterHandler("/dae/v1/ingest/(?P<database>\\w+)/tables/(?P<table>\\w+)", "POST", [](DB::Context & query_context) {
-            return std::make_shared<DB::IngestRestRouterHandler>(query_context);
-        });
-
-        factory.registerRouterHandler("/dae/v1/ingest/statuses/(?P<poll_id>.+)", "GET", [](DB::Context & query_context) {
-            return std::make_shared<DB::IngestStatusHandler>(query_context);
-        });
-
-        factory.registerRouterHandler("/dae/v1/ddl/(?P<database>\\w+)/tables", "GET/POST", [](DB::Context & query_context) {
-            return std::make_shared<DB::TableRestRouterHandler>(query_context);
-        });
+        auto & factory = RestRouterFactory::instance();
 
         factory.registerRouterHandler(
-            "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)", "PATCH/DELETE", [](DB::Context & query_context) {
-                return std::make_shared<DB::TableRestRouterHandler>(query_context);
+            "/dae/v1/ingest/(?P<database>\\w+)/tables/(?P<table>\\w+)",
+            "POST",
+            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<IngestRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ingest/statuses/(?P<poll_id>.+)",
+            "GET",
+            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<IngestStatusHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/(?P<database>\\w+)/tables",
+            "GET/POST",
+            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<TableRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)",
+            "PATCH/DELETE",
+            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<TableRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/sqlanalyzer",
+            "POST",
+            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<SQLAnalyzerRestRouterHandler>(query_context);
             });
     }
 

@@ -12,14 +12,9 @@
 
 namespace DB
 {
-namespace ErrorCodes
-{
-    extern const int OK;
-}
-
 namespace
 {
-/// globals
+/// Globals
 String PLACEMENT_KEY_PREFIX = "system_settings.system_node_metrics_dwal.";
 String PLACEMENT_NAME_KEY = PLACEMENT_KEY_PREFIX + "name";
 String PLACEMENT_REPLICATION_FACTOR_KEY = PLACEMENT_KEY_PREFIX + "replication_factor";

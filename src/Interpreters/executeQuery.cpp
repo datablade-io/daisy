@@ -33,6 +33,9 @@
 #endif
 
 #include <Parsers/parseQuery.h>
+/// Daisy : starts
+#include <Parsers/parseQueryPipe.h>
+/// Daisy : ends
 #include <Parsers/ParserQuery.h>
 #include <Parsers/queryNormalization.h>
 #include <Parsers/queryToString.h>
@@ -405,13 +408,23 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
             ParserQuery parser(end);
 
             /// TODO: parser should fail early when max_query_size limit is reached.
-            ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+            /// Daisy : starts
+            if (settings.enable_query_pipe)
+                ast = parseQueryPipe(parser, begin, end, max_query_size, settings.max_parser_depth);
+            else
+                ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+            /// Daisy : ends
         }
 #else
         ParserQuery parser(end);
 
         /// TODO: parser should fail early when max_query_size limit is reached.
-        ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+        /// Daisy : starts
+        if (settings.enable_query_pipe)
+            ast = parseQueryPipe(parser, begin, end, max_query_size, settings.max_parser_depth);
+        else
+            ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+        /// Daisy : ends
 #endif
 
         /// Interpret SETTINGS clauses as early as possible (before invoking the corresponding interpreter),
