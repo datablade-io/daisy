@@ -43,6 +43,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern int INCORRECT_QUERY;
+}
+
 namespace
 {
 
@@ -240,18 +245,21 @@ String SQLAnalyzerRestRouterHandler::executePost(const Poco::JSON::Object::Ptr &
         LOG_ERROR(log, "Query rewrite, query_id={} error_message={}", query_context.getCurrentQueryId(), error_message);
 
         http_status = Poco::Net::HTTPResponse::HTTPResponse::HTTP_BAD_REQUEST;
-        /// return jsonException("Invalid query", INCORRECT_QUERY);
-        return "";
+        return jsonErrorResponse("Invalid query", ErrorCodes::INCORRECT_QUERY);
     }
 }
 
-bool SQLAnalyzerRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload) const
+bool SQLAnalyzerRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    validateSchema(post_schema, payload);
+    if (!validateSchema(post_schema, payload, error_msg))
+    {
+        return false;
+    }
+
     const auto & query = payload->get("query").toString();
     if (query.empty())
     {
-        LOG_ERROR(log, "Empty query");
+        error_msg = "Empty query";
         return false;
     }
     return true;

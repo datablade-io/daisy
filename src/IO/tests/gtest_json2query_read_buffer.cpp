@@ -24,7 +24,7 @@ TEST(JSON2QueryReadBuffer, ReadTest)
     std::unique_ptr<ReadBuffer> in = std::make_unique<ReadBufferFromString>(req);
     std::unique_ptr<JSON2QueryReadBuffer> buf = std::make_unique<JSON2QueryReadBuffer>(
         std::move(in), "test");
-    if(!buf->hasPendingData())
+    if (!buf->hasPendingData())
         buf->next();
     StringRef prefix = StringRef(buf->position(), buf->buffer().end() - buf->position());
     ASSERT_EQ(prefix.toString(), "INSERT INTO test (\"a\") FORMAT JSONCompactEachRow ");
@@ -43,7 +43,7 @@ TEST(JSON2QueryReadBuffer, WorkWithOtherBuffer)
     std::unique_ptr<ReadBuffer> in = std::make_unique<ReadBufferFromString>(req);
     std::unique_ptr<JSON2QueryReadBuffer> buf = std::make_unique<JSON2QueryReadBuffer>(
         std::move(in), "test");
-    if(!buf->hasPendingData())
+    if (!buf->hasPendingData())
         buf->next();
     std::cout << "available: " << buf->available() << ", pos: " << buf->position() << ", end: " << buf->buffer().end() << std::endl;
     PODArray<char> parse_buf;
@@ -72,12 +72,12 @@ TEST(JSON2QueryReadBuffer, ConcatedBuffer)
 
     std::unique_ptr<JSON2QueryReadBuffer> buf = std::make_unique<JSON2QueryReadBuffer>(
         std::move(in), "test");
-    if(!buf->hasPendingData())
+    if (!buf->hasPendingData())
         buf->next();
     std::cout << "available: " << buf->available() << ", pos: " << buf->position() << ", end: " << buf->buffer().end() << std::endl;
     PODArray<char> parse_buf;
     WriteBufferFromVector<PODArray<char>> out(parse_buf);
-    // 31: (; 32: 2, 33:20, 34: ], 35: , 36: \s, 37:[, 40 ], 41], 42:\n, 43: ]
+    /// 31: (; 32: 2, 33:20, 34: ], 35: , 36: \s, 37:[, 40 ], 41], 42:\n, 43: ]
     LimitReadBuffer limit(*buf, 100, false);
     copyData(limit, out);
     out.finalize();

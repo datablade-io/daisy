@@ -57,27 +57,32 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::update_schem
     }
 };
 
-bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload) const
+bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    validateSchema(create_schema, payload);
+    if (!validateSchema(create_schema, payload, error_msg))
+    {
+        return false;
+    }
+
     Poco::JSON::Array::Ptr columns = payload->getArray("columns");
     for (auto & col : *columns)
     {
-        validateSchema(column_schema, col.extract<Poco::JSON::Object::Ptr>());
+        if (!validateSchema(column_schema, col.extract<Poco::JSON::Object::Ptr>(), error_msg))
+        {
+            return false;
+        }
     }
     return true;
 }
 
-bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & payload) const
+bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const
 {
-    payload.isNull();
     return true;
 }
 
-bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload) const
+bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    validateSchema(update_schema, payload);
-    return true;
+    return validateSchema(update_schema, payload, error_msg);
 }
 
 String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const

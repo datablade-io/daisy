@@ -13,7 +13,7 @@ public:
     String execute(ReadBuffer & /* input */, HTTPServerResponse & /* response */, Int32 & http_status) override;
 
 private:
-    bool streaming() override { return true; }
+    bool streaming() const override { return true; }
 };
 
 }

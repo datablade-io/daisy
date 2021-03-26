@@ -113,7 +113,7 @@ bool IngestingBlocks::remove(const String & id, UInt16 block_id)
     return false;
 }
 
-std::pair<String, Int32> IngestingBlocks::progress(const String & id) const
+std::pair<String, Int32> IngestingBlocks::status(const String & id) const
 {
     std::shared_lock guard(rwlock);
     auto iter = blockIds.find(id);

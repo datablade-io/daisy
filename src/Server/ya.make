@@ -34,6 +34,8 @@ SRCS(
     ReplicasStatusHandler.cpp
     RestHTTPRequestHandler.cpp
     RestRouterHandlers/IngestRestRouterHandler.cpp
+    RestRouterHandlers/IngestStatusHandler.cpp
+    RestRouterHandlers/SQLAnalyzerRestRouterHandler.cpp
     RestRouterHandlers/SchemaValidator.cpp
     RestRouterHandlers/TableRestRouterHandler.cpp
     SQLAnalyzeHTTPHandler.cpp

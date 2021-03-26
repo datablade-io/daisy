@@ -16,7 +16,7 @@ private:
     static std::map<String, std::map<String, String>> post_schema;
 
 private:
-    bool validatePost(const Poco::JSON::Object::Ptr & payload) const override;
+    bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
 };
 
 }
