@@ -166,14 +166,13 @@ struct FormatSettings
         bool accurate_types_of_literals = true;
     } values;
 
-    /// Daisy starts
+    /// Daisy : starts
     struct
     {
         String rawstore_time_extraction_type;
         String rawstore_time_extraction_rule;
-
     } rawstore;
-    /// Daisy Ends
+    /// Daisy : ends
 };
 
 }

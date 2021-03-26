@@ -86,16 +86,15 @@ RawStoreInputFormat::RawStoreInputFormat(
         else
             throw Exception(
                 "No '_time' group defined in 'time_extraction_rule': " + time_extraction_rule, ErrorCodes::UNRECOGNIZED_ARGUMENTS);
-    } else if (time_extraction_type == "json" && time_extraction_rule.empty())
-        throw Exception(
-            "'time_extraction_rule' is empty", ErrorCodes::UNRECOGNIZED_ARGUMENTS);
+    }
+    else if (time_extraction_type == "json" && time_extraction_rule.empty())
+        throw Exception("'time_extraction_rule' is empty", ErrorCodes::UNRECOGNIZED_ARGUMENTS);
 
     prev_positions.resize(num_columns);
     raw_col_idx = columnIndex(StringRef("_raw"), 0);
     time_col_idx = columnIndex(StringRef("_time"), 0);
-    if(raw_col_idx == UNKNOWN_FIELD || time_col_idx == UNKNOWN_FIELD)
-        throw Exception(
-            "It is suitable for RawStoreFormat, either '_raw' or '_time' is missing", ErrorCodes::UNRECOGNIZED_ARGUMENTS);
+    if (raw_col_idx == UNKNOWN_FIELD || time_col_idx == UNKNOWN_FIELD)
+        throw Exception("It is suitable for RawStoreFormat, either '_raw' or '_time' is missing", ErrorCodes::UNRECOGNIZED_ARGUMENTS);
 }
 
 const String & RawStoreInputFormat::columnName(size_t i) const
@@ -278,7 +277,6 @@ void RawStoreInputFormat::readJSONObject(MutableColumns & columns)
 
 void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn & raw_col)
 {
-    /// Preallocate memory in parser if necessary.
     Poco::JSON::Parser parser;
     Poco::DynamicAny result;
 
@@ -445,11 +443,11 @@ void RawStoreInputFormat::readSuffix()
         ++in.position();
         skipWhitespaceIfAny(in);
     }
-    assertEOF(in);
+    //    assertEOF(in);
 }
 
 
-void registerInputFormatProcessorJSONEachRow(FormatFactory & factory)
+void registerInputFormatProcessorRawStoreEachRow(FormatFactory & factory)
 {
     factory.registerInputFormatProcessor(
         "RawStoreEachRow", [](ReadBuffer & buf, const Block & sample, IRowInputFormat::Params params, const FormatSettings & settings) {
@@ -457,7 +455,7 @@ void registerInputFormatProcessorJSONEachRow(FormatFactory & factory)
         });
 }
 
-void registerFileSegmentationEngineJSONEachRow(FormatFactory & factory)
+void registerFileSegmentationEngineRawStoreEachRow(FormatFactory & factory)
 {
     factory.registerFileSegmentationEngine("RawStoreEachRow", &fileSegmentationEngineJSONEachRowImpl);
 }
