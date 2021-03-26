@@ -66,55 +66,55 @@ namespace ErrorCodes
 
 namespace
 {
-Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int exception_code)
-{
-    using namespace Poco::Net;
+    Poco::Net::HTTPResponse::HTTPStatus exceptionCodeToHTTPStatus(int exception_code)
+    {
+        using namespace Poco::Net;
 
-    if (exception_code == ErrorCodes::REQUIRED_PASSWORD)
-    {
-        return HTTPResponse::HTTP_UNAUTHORIZED;
-    }
-    else if (
-        exception_code == ErrorCodes::CANNOT_PARSE_TEXT || exception_code == ErrorCodes::CANNOT_PARSE_ESCAPE_SEQUENCE
-        || exception_code == ErrorCodes::CANNOT_PARSE_QUOTED_STRING || exception_code == ErrorCodes::CANNOT_PARSE_DATE
-        || exception_code == ErrorCodes::CANNOT_PARSE_DATETIME || exception_code == ErrorCodes::CANNOT_PARSE_NUMBER
-        || exception_code == ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED || exception_code == ErrorCodes::UNKNOWN_ELEMENT_IN_AST
-        || exception_code == ErrorCodes::UNKNOWN_TYPE_OF_AST_NODE || exception_code == ErrorCodes::TOO_DEEP_AST
-        || exception_code == ErrorCodes::TOO_BIG_AST || exception_code == ErrorCodes::UNEXPECTED_AST_STRUCTURE
-        || exception_code == ErrorCodes::SYNTAX_ERROR || exception_code == ErrorCodes::INCORRECT_DATA
-        || exception_code == ErrorCodes::TYPE_MISMATCH)
-    {
-        return HTTPResponse::HTTP_BAD_REQUEST;
-    }
-    else if (
-        exception_code == ErrorCodes::UNKNOWN_TABLE || exception_code == ErrorCodes::UNKNOWN_FUNCTION
-        || exception_code == ErrorCodes::UNKNOWN_IDENTIFIER || exception_code == ErrorCodes::UNKNOWN_TYPE
-        || exception_code == ErrorCodes::UNKNOWN_STORAGE || exception_code == ErrorCodes::UNKNOWN_DATABASE
-        || exception_code == ErrorCodes::UNKNOWN_SETTING || exception_code == ErrorCodes::UNKNOWN_DIRECTION_OF_SORTING
-        || exception_code == ErrorCodes::UNKNOWN_AGGREGATE_FUNCTION || exception_code == ErrorCodes::UNKNOWN_FORMAT
-        || exception_code == ErrorCodes::UNKNOWN_DATABASE_ENGINE || exception_code == ErrorCodes::UNKNOWN_TYPE_OF_QUERY)
-    {
-        return HTTPResponse::HTTP_NOT_FOUND;
-    }
-    else if (exception_code == ErrorCodes::QUERY_IS_TOO_LARGE)
-    {
-        return HTTPResponse::HTTP_REQUESTENTITYTOOLARGE;
-    }
-    else if (exception_code == ErrorCodes::NOT_IMPLEMENTED)
-    {
-        return HTTPResponse::HTTP_NOT_IMPLEMENTED;
-    }
-    else if (exception_code == ErrorCodes::SOCKET_TIMEOUT || exception_code == ErrorCodes::CANNOT_OPEN_FILE)
-    {
-        return HTTPResponse::HTTP_SERVICE_UNAVAILABLE;
-    }
-    else if (exception_code == ErrorCodes::HTTP_LENGTH_REQUIRED)
-    {
-        return HTTPResponse::HTTP_LENGTH_REQUIRED;
-    }
+        if (exception_code == ErrorCodes::REQUIRED_PASSWORD)
+        {
+            return HTTPResponse::HTTP_UNAUTHORIZED;
+        }
+        else if (
+            exception_code == ErrorCodes::CANNOT_PARSE_TEXT || exception_code == ErrorCodes::CANNOT_PARSE_ESCAPE_SEQUENCE
+            || exception_code == ErrorCodes::CANNOT_PARSE_QUOTED_STRING || exception_code == ErrorCodes::CANNOT_PARSE_DATE
+            || exception_code == ErrorCodes::CANNOT_PARSE_DATETIME || exception_code == ErrorCodes::CANNOT_PARSE_NUMBER
+            || exception_code == ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED || exception_code == ErrorCodes::UNKNOWN_ELEMENT_IN_AST
+            || exception_code == ErrorCodes::UNKNOWN_TYPE_OF_AST_NODE || exception_code == ErrorCodes::TOO_DEEP_AST
+            || exception_code == ErrorCodes::TOO_BIG_AST || exception_code == ErrorCodes::UNEXPECTED_AST_STRUCTURE
+            || exception_code == ErrorCodes::SYNTAX_ERROR || exception_code == ErrorCodes::INCORRECT_DATA
+            || exception_code == ErrorCodes::TYPE_MISMATCH)
+        {
+            return HTTPResponse::HTTP_BAD_REQUEST;
+        }
+        else if (
+            exception_code == ErrorCodes::UNKNOWN_TABLE || exception_code == ErrorCodes::UNKNOWN_FUNCTION
+            || exception_code == ErrorCodes::UNKNOWN_IDENTIFIER || exception_code == ErrorCodes::UNKNOWN_TYPE
+            || exception_code == ErrorCodes::UNKNOWN_STORAGE || exception_code == ErrorCodes::UNKNOWN_DATABASE
+            || exception_code == ErrorCodes::UNKNOWN_SETTING || exception_code == ErrorCodes::UNKNOWN_DIRECTION_OF_SORTING
+            || exception_code == ErrorCodes::UNKNOWN_AGGREGATE_FUNCTION || exception_code == ErrorCodes::UNKNOWN_FORMAT
+            || exception_code == ErrorCodes::UNKNOWN_DATABASE_ENGINE || exception_code == ErrorCodes::UNKNOWN_TYPE_OF_QUERY)
+        {
+            return HTTPResponse::HTTP_NOT_FOUND;
+        }
+        else if (exception_code == ErrorCodes::QUERY_IS_TOO_LARGE)
+        {
+            return HTTPResponse::HTTP_REQUESTENTITYTOOLARGE;
+        }
+        else if (exception_code == ErrorCodes::NOT_IMPLEMENTED)
+        {
+            return HTTPResponse::HTTP_NOT_IMPLEMENTED;
+        }
+        else if (exception_code == ErrorCodes::SOCKET_TIMEOUT || exception_code == ErrorCodes::CANNOT_OPEN_FILE)
+        {
+            return HTTPResponse::HTTP_SERVICE_UNAVAILABLE;
+        }
+        else if (exception_code == ErrorCodes::HTTP_LENGTH_REQUIRED)
+        {
+            return HTTPResponse::HTTP_LENGTH_REQUIRED;
+        }
 
-    return HTTPResponse::HTTP_INTERNAL_SERVER_ERROR;
-}
+        return HTTPResponse::HTTP_INTERNAL_SERVER_ERROR;
+    }
 }
 
 
@@ -201,6 +201,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     // Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
     context.setCurrentQueryId(params.get("query_id", request.get("X-ClickHouse-Query-Id", "")));
     client_info.initial_query_id = client_info.current_query_id;
+    std::optional<CurrentThread::QueryScope> query_scope{context};
 
     try
     {

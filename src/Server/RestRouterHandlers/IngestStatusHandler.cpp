@@ -51,12 +51,12 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
 
         if (storage->getName() != "DistributedMergeTree")
         {
-
             http_status = Poco::Net::HTTPResponse::HTTP_NOT_ACCEPTABLE;
-            return jsonException("table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable", ErrorCodes::TYPE_MISMATCH);
+            return jsonException(
+                "table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable", ErrorCodes::TYPE_MISMATCH);
         }
 
-        const auto* distributed = static_cast<const StorageDistributedMergeTree *>(storage.get());
+        const auto * distributed = static_cast<const StorageDistributedMergeTree *>(storage.get());
         progress = distributed->getProgress(poll_id);
         if (progress.second < 0)
         {
@@ -73,7 +73,7 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
     }
 }
 
-String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_status ) const
+String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_status) const
 {
     LOG_DEBUG(log, "Send GET request to on uri={}", uri.toString());
 
@@ -114,12 +114,12 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_s
         {
             session->attachSessionData(e.message());
         }
-        error = "Failed on uri=" + uri.toString() +  " error=" + e.message() + " exception=" + getCurrentExceptionMessage(false, true);
+        error = "Failed on uri=" + uri.toString() + " error=" + e.message() + " exception=" + getCurrentExceptionMessage(false, true);
         LOG_ERROR(log, error);
     }
     catch (...)
     {
-        error = "Failed on uri=" + uri.toString() +  " exception=" + getCurrentExceptionMessage(false, true);
+        error = "Failed on uri=" + uri.toString() + " exception=" + getCurrentExceptionMessage(false, true);
         LOG_ERROR(log, error);
     }
     http_status = Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR;
@@ -131,7 +131,7 @@ String IngestStatusHandler::makeResponse(const std::pair<String, Int32> & progre
     Poco::JSON::Object resp;
     resp.set("status", progress.first);
     resp.set("progress", progress.second);
-    std::stringstream resp_str_stream;  /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     resp.stringify(resp_str_stream, 0);
     return resp_str_stream.str();
 }

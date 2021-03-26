@@ -37,7 +37,7 @@ bool JSON2QueryReadBuffer::nextImpl()
         readJSONString(name, *in);
         if (name == "columns")
         {
-            auto cols = readColumns( *in);
+            auto cols = readColumns(*in);
 
             if (cols.length() > 0)
             {

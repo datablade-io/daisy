@@ -121,13 +121,13 @@ std::pair<String, Int32> IngestingBlocks::progress(const String & id) const
     {
         Int32 progress = (iter->second.total - iter->second.ids.size()) * 100 / iter->second.total;
 
-        if(iter->second.err != 0)
-            return std::make_pair("Fail", progress);
+        if (iter->second.err != 0)
+            return std::make_pair("Failed", progress);
 
         if (progress < 100)
             return std::make_pair("Processing", progress);
         else
-            return std::make_pair("Success", progress);
+            return std::make_pair("Succeeded", progress);
     }
     return std::make_pair("Unknown", -1);
 }

@@ -1,20 +1,18 @@
 #pragma once
 
-#include <common/StringRef.h>
 #include <IO/BufferWithOwnMemory.h>
 #include <IO/ReadBuffer.h>
+#include <common/StringRef.h>
 
 
 namespace DB
 {
-
 /** Reads from input buffer which is request body of REST Api call
  */
-class JSON2QueryReadBuffer final: public BufferWithOwnMemory<ReadBuffer>
+class JSON2QueryReadBuffer final : public BufferWithOwnMemory<ReadBuffer>
 {
 public:
-    explicit JSON2QueryReadBuffer(
-        std::unique_ptr<ReadBuffer> in_, const String & table_name_);
+    explicit JSON2QueryReadBuffer(std::unique_ptr<ReadBuffer> in_, const String & table_name_);
 
 private:
     String readColumns(ReadBuffer & buf);

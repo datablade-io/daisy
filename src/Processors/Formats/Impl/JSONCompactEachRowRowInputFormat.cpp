@@ -159,11 +159,11 @@ bool JSONCompactEachRowRowInputFormat::readRow(DB::MutableColumns &columns, DB::
     read_columns.assign(num_columns, false);
 
     /// Daisy : starts
-    if(*in.position() == '[')
+    if (*in.position() == '[')
     {
         ++in.position();
         skipWhitespaceIfAny(in);
-        if(*in.position() == '[' && !with_bracket)
+        if (*in.position() == '[' && !with_bracket)
         {
             with_bracket = true;
             ++in.position();
