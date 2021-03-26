@@ -174,7 +174,7 @@ int parseSelect(
     String & error_message,
     std::vector<std::tuple<String, PipeType, ASTPtr>> & queries)
 {
-    /// SELECT query but without `FROM <table | subquery>`. E.g.
+    /// SELECT query but without `FROM table | subquery`. E.g.
     /// SELECT a ORDER BY b
     /// SELECT avg(c) GROUP BY d ORDER BY e LIMIT 2
     ParserSelectQuery selectQuery;
@@ -265,7 +265,7 @@ int parseInsert(
     String & error_message,
     std::vector<std::tuple<String, PipeType, ASTPtr>> & queries)
 {
-    /// INSERT INTO [TABLE] <database>.<table_name> (<c1>, <c2>, ...)
+    /// INSERT INTO [TABLE] database.table_name (c1, c2, ...)
     ParserKeyword s_insert_into("INSERT INTO");
     ParserKeyword s_table("TABLE");
     ParserToken s_dot(TokenType::Dot);
@@ -316,7 +316,7 @@ int parseCreate(
     String & error_message,
     std::vector<std::tuple<String, PipeType, ASTPtr>> & queries)
 {
-    /// CREATE TABLE IF NOT EXISTS <database>.<table> ON CLUSTER <cluster> ENGINE=<MergeTree>
+    /// CREATE TABLE IF NOT EXISTS database.table ON CLUSTER cluster ENGINE=MergeTree
     ParserKeyword s_create("CREATE");
     ParserKeyword s_temporary("TEMPORARY");
     ParserKeyword s_table("TABLE");
@@ -492,8 +492,8 @@ std::pair<String, ASTPtr> rewriteQueryPipeAndParse(
     if ((res->as<ASTSelectWithUnionQuery>() == nullptr) && (res->as<ASTSelectQuery>() == nullptr))
         return std::make_pair("", nullptr);
 
-    /// SELECT ... | WHERE ... | SELECT ... | INSERT INTO <table> (col1, col2, ...)
-    /// SELECT ... | WHERE ... | SELECT ... | CREATE TABLE <table>
+    /// SELECT ... -> WHERE ... -> SELECT ... -> INSERT INTO table (col1, col2, ...)
+    /// SELECT ... -> WHERE ... -> SELECT ... -> CREATE TABLE table
 
     std::vector<std::tuple<String, PipeType, ASTPtr>> queries;
     auto r = handleErrors(token_iterator.max(), pos, end, expected, res, error_message, queries, PipeType::select);
