@@ -113,15 +113,23 @@ bool IngestingBlocks::remove(const String & id, UInt16 block_id)
     return false;
 }
 
-Int32 IngestingBlocks::progress(const String & id) const
+std::pair<String, Int32> IngestingBlocks::progress(const String & id) const
 {
     std::shared_lock guard(rwlock);
     auto iter = blockIds.find(id);
     if (iter != blockIds.end())
     {
-        return (iter->second.total - iter->second.ids.size()) * 100 / iter->second.total;
+        Int32 progress = (iter->second.total - iter->second.ids.size()) * 100 / iter->second.total;
+
+        if (iter->second.err != 0)
+            return std::make_pair("Failed", progress);
+
+        if (progress < 100)
+            return std::make_pair("Processing", progress);
+        else
+            return std::make_pair("Succeeded", progress);
     }
-    return -1;
+    return std::make_pair("Unknown", -1);
 }
 
 size_t IngestingBlocks::outstandingBlocks() const

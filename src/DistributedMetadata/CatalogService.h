@@ -148,7 +148,7 @@ private:
     using TableContainerPerNode = std::unordered_map<DatabaseTableShard, TablePtr, boost::hash<DatabaseTableShard>>;
 
     TableContainerPerNode buildCatalog(const NodePtr & node, const Block & bock);
-    void mergeCatalog(NodePtr node, TableContainerPerNode snapshot);
+    void mergeCatalog(const NodePtr & node, TableContainerPerNode snapshot);
 
 private:
     using TableContainerByNodeShard = std::unordered_map<NodeShard, TablePtr, boost::hash<NodeShard>>;
