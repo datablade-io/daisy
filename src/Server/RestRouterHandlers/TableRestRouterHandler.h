@@ -16,13 +16,13 @@ public:
     ~TableRestRouterHandler() override { }
 
 private:
-    bool validateGet(const Poco::JSON::Object::Ptr & payload) const override;
-    bool validatePost(const Poco::JSON::Object::Ptr & payload) const override;
-    bool validatePatch(const Poco::JSON::Object::Ptr & payload) const override;
+    bool validateGet(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
+    bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
+    bool validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
 
     String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     String executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
-    String executeDelete(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const override;
+    String executeDelete(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
 
 private:
@@ -33,7 +33,7 @@ private:
     String getColumnsDefination(const Poco::JSON::Array::Ptr & columns, const String & time_column) const;
     String getColumnDefination(const Poco::JSON::Object::Ptr & column) const;
 
-    String processQuery(const String & query, Int32 & /* http_status */) const;
+    String processQuery(const String & query, Int32 & http_status) const;
 };
 
 }

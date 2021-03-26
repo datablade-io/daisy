@@ -1,6 +1,5 @@
 #include "SchemaValidator.h"
 
-#include <Common/Exception.h>
 
 namespace DB
 {
@@ -9,7 +8,7 @@ namespace ErrorCodes
     extern const int POCO_EXCEPTION;
 }
 
-void validateSchema(const std::map<String, std::map<String, String>> & schema, const Poco::JSON::Object::Ptr & payload)
+bool validateSchema(const std::map<String, std::map<String, String>> & schema, const Poco::JSON::Object::Ptr & payload, String & error_msg)
 {
     auto iter = schema.find("required");
     if (iter != schema.end())
@@ -18,7 +17,8 @@ void validateSchema(const std::map<String, std::map<String, String>> & schema, c
         {
             if (!payload->has(required.first))
             {
-                throw Exception("Required param '" + required.first + "' is missing.", ErrorCodes::POCO_EXCEPTION);
+                error_msg = "Required param '" + required.first + "' is missing.";
+                return false;
             }
 
             if ((required.second == "int" && !payload->get(required.first).isInteger())
@@ -27,7 +27,8 @@ void validateSchema(const std::map<String, std::map<String, String>> & schema, c
                 || (required.second == "double" && !payload->get(required.first).isNumeric())
                 || (required.second == "array" && !payload->get(required.first).isArray()))
             {
-                throw Exception("Invalid type of param '" + required.first + "'", ErrorCodes::POCO_EXCEPTION);
+                error_msg = "Invalid type of param '" + required.first + "'";
+                return false;
             }
         }
     }
@@ -43,9 +44,12 @@ void validateSchema(const std::map<String, std::map<String, String>> & schema, c
                     || (optional.second == "bool" && !payload->get(optional.first).isBoolean())
                     || (optional.second == "double" && !payload->get(optional.first).isNumeric())))
             {
-                throw Exception("Invalid type of param '" + optional.first + "'", ErrorCodes::POCO_EXCEPTION);
+                error_msg = "Invalid type of param '" + optional.first + "'";
+                return false;
             }
         }
     }
+
+    return true;
 }
 }

@@ -263,6 +263,15 @@ private:
     StoragePtr view_source;                 /// Temporary StorageValues used to generate alias columns for materialized views
     Tables table_function_results;          /// Temporary tables obtained by execution of table functions. Keyed by AST tree id.
 
+    /// Daisy: begin
+    /// (database, table, is_view, column name, column type) tuple
+    using RequiredColumnTuple = std::tuple<std::string, std::string, bool, std::string, std::string>;
+    /// We don't need hold a lock to access required_columns as the required column
+    /// is collected in a single thread
+    std::set<RequiredColumnTuple> required_columns;
+    mutable bool collect_required_columns = false;
+    /// Daisy: end
+
     Context * query_context = nullptr;
     Context * session_context = nullptr;    /// Session context or nullptr. Could be equal to this.
     Context * global_context = nullptr;     /// Global context. Could be equal to this.
@@ -309,12 +318,21 @@ public:
     Context & operator=(const Context &);
     ~Context();
 
+    /// Daisy: start
+    bool collectRequiredColumns() const { return collect_required_columns; }
+    void setCollectRequiredColumns(bool collect) { collect_required_columns = collect; }
+
+    const std::set<RequiredColumnTuple> & requiredColumns() const { return required_columns; }
+    void addRequiredColumns(RequiredColumnTuple && columnTuple) { required_columns.insert(std::move(columnTuple)); }
+    /// Daisy: end
+
     String getPath() const;
     String getFlagsPath() const;
     String getUserFilesPath() const;
     String getDictionariesLibPath() const;
 
     VolumePtr getTemporaryVolume() const;
+
 
     void setPath(const String & path);
     void setFlagsPath(const String & path);

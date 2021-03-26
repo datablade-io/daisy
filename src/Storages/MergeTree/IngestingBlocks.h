@@ -31,9 +31,8 @@ public:
     /// return true if remove successfully; otherwise return false;
     bool remove(const String & id, UInt16 block_id);
 
-    /// ingest procgress calculation in percentage (0..100)
-    /// return -1 if query `id` doesn't exist
-    std::pair<String, Int32> progress(const String & id) const;
+    /// Ingest status calculation
+    std::pair<String, Int32> status(const String & id) const;
 
     /// number of outstanding blocks
     size_t outstandingBlocks() const;
