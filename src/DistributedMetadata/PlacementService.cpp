@@ -48,7 +48,7 @@ MetadataService::ConfigSettings PlacementService::configSettings() const
         .replication_factor_key = PLACEMENT_REPLICATION_FACTOR_KEY,
         .request_required_acks = 1,
         .request_timeout_ms = 10000,
-        .auto_offset_reset = "latest",
+        .auto_offset_reset = "earliest",
     };
 }
 

@@ -32,6 +32,7 @@ private:
     }
     void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
     String role() const override { return "placement"; }
+    String cleanupPolicy() const override { return "compact"; }
     ConfigSettings configSettings() const override;
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(100, 500); }
 
