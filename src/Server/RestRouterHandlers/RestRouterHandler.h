@@ -102,13 +102,9 @@ private:
     virtual bool streaming() const { return false; }
 
     /// Streaming `execute`, so far Ingest API probably needs override this function
-    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /*response */, Int32 & http_status)
+    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /* response */, Int32 & http_status) const
     {
-        http_status = HTTPResponse::HTTP_NOT_IMPLEMENTED;
-        String result = "Streaming executer not implemented";
-
-        LOG_DEBUG(log, result);
-        return result;
+        return handleNotImplemented(http_status);
     }
 
     String handleNotImplemented(Int32 & http_status) const
@@ -117,7 +113,6 @@ private:
         return jsonErrorResponse("HTTP method requested is not supported", ErrorCodes::UNKNOWN_TYPE_OF_QUERY);
     }
 
-    /// Admin APIs like DDL overrides this function
     String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
     {
         const auto & client_info = query_context.getClientInfo();
@@ -128,15 +123,15 @@ private:
         }
         else if (client_info.http_method == ClientInfo::HTTPMethod::POST)
         {
-            return executePost(payload, http_status);
+            return doExecute(&RestRouterHandler::validatePost, &RestRouterHandler::executePost, payload, http_status);
         }
         else if (client_info.http_method == ClientInfo::HTTPMethod::PATCH)
         {
-            return executePatch(payload, http_status);
+            return doExecute(&RestRouterHandler::validatePatch, &RestRouterHandler::executePatch, payload, http_status);
         }
         else if (client_info.http_method == ClientInfo::HTTPMethod::DELETE)
         {
-            return executeDelete(payload, http_status);
+            return doExecute(&RestRouterHandler::validateDelete, &RestRouterHandler::executeDelete, payload, http_status);
         }
 
         return handleNotImplemented(http_status);

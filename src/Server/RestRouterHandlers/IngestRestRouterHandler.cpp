@@ -12,7 +12,7 @@ namespace ErrorCodes
     extern const int BAD_REQUEST_PARAMETER;
 }
 
-String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse & /* response */, Int32 & http_status)
+String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse & /* response */, Int32 & http_status) const
 {
     String database_name = getPathParameter("database", "");
     String table_name = getPathParameter("table", "");
