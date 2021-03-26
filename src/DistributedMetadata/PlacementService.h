@@ -13,9 +13,6 @@ class CatalogService;
 class PlacementService final : public MetadataService
 {
 public:
-    using PlacementStrategyPtr = std::shared_ptr<PlacementStrategy>;
-
-public:
     static PlacementService & instance(Context & global_context);
 
     explicit PlacementService(Context & global_context_);
@@ -39,7 +36,7 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(100, 500); }
 
 private:
-    void mergeStates(const String & host, DiskSpace & metrics);
+    void mergeStates(const String & node, DiskSpace & metrics);
 
     /// `broadcast` broadcasts the metrics of this node
     void broadcast();
@@ -48,10 +45,10 @@ private:
 private:
     mutable std::shared_mutex rwlock;
     CatalogService & catalog;
-    StateContainer host_states;
+    NodeMetricsContainer nodes_metrics;
     PlacementStrategyPtr strategy;
     std::unique_ptr<BackgroundSchedulePoolTaskHolder> broadcast_task;
-    static constexpr size_t reschedule_time_ms = 5000;
+    static constexpr size_t reschedule_internal_ms = 5000;
 };
 
 }

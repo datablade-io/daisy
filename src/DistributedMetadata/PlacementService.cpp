@@ -2,13 +2,11 @@
 
 #include "CatalogService.h"
 
-#include <algorithm>
-#include <random>
+#include <DataTypes/DataTypeFactory.h>
 #include <Interpreters/Context.h>
 #include <Storages/System/StorageSystemStoragePolicies.h>
 #include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
-
 
 
 namespace DB
@@ -16,11 +14,13 @@ namespace DB
 namespace
 {
 /// Globals
-String PLACEMENT_KEY_PREFIX = "system_settings.system_node_metrics_dwal.";
-String PLACEMENT_NAME_KEY = PLACEMENT_KEY_PREFIX + "name";
-String PLACEMENT_REPLICATION_FACTOR_KEY = PLACEMENT_KEY_PREFIX + "replication_factor";
-String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retention";
-String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
+const String PLACEMENT_KEY_PREFIX = "system_settings.system_node_metrics_dwal.";
+const String PLACEMENT_NAME_KEY = PLACEMENT_KEY_PREFIX + "name";
+const String PLACEMENT_REPLICATION_FACTOR_KEY = PLACEMENT_KEY_PREFIX + "replication_factor";
+const String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retention";
+const String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
+
+const String THIS_HOST = getFQDNOrHostName();
 }
 
 PlacementService & PlacementService::instance(Context & context)
@@ -29,8 +29,7 @@ PlacementService & PlacementService::instance(Context & context)
     return placement;
 }
 
-PlacementService::PlacementService(Context & global_context_)
-    : PlacementService(global_context_, std::dynamic_pointer_cast<PlacementStrategy>(std::make_shared<DiskStrategy>()))
+PlacementService::PlacementService(Context & global_context_) : PlacementService(global_context_, std::make_shared<DiskStrategy>())
 {
 }
 
@@ -56,11 +55,19 @@ MetadataService::ConfigSettings PlacementService::configSettings() const
 std::vector<String> PlacementService::place(
     Int32 shards, Int32 replication_factor, const String & storage_policy /*= "default"*/, const String & /* colocated_table */) const
 {
-    std::unique_lock guard(rwlock);
-
     size_t total_replicas = static_cast<size_t>(shards * replication_factor);
-    PlacementStrategy::PlacementQuery query{total_replicas, storage_policy};
-    return strategy->qualifiedHosts(host_states, query);
+    PlacementStrategy::PlacementRequest request{total_replicas, storage_policy};
+
+    std::shared_lock guard{rwlock};
+    auto nodes = strategy->qualifiedNodes(nodes_metrics, request);
+
+    std::vector<String> res;
+    res.reserve(nodes.size());
+    for (auto & node : nodes)
+    {
+        res.emplace_back(node->node);
+    }
+    return res;
 }
 
 std::vector<String> PlacementService::placed(const String & database, const String & table) const
@@ -79,42 +86,52 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
 
 void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
-    /// Node metrics schema: host, disk_free
+    /// Node metrics schema: node, disk_free
     for (const auto & record : records)
     {
         assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
-        String & idempotent_key = record->headers["_idem"];
-
-        DiskSpace disk_space;
-        for (size_t row = 0; row < record->block.rows(); ++row)
+        if (record->headers["_version"] == "1")
         {
-            const auto & policy_name = record->block.getByName("policy_name").column->getDataAt(row);
-            const auto & space = record->block.getByName("disk_space").column->get64(row);
-            disk_space.emplace(policy_name, space);
+            DiskSpace disk_space;
+            for (size_t row = 0; row < record->block.rows(); ++row)
+            {
+                const auto & policy_name = record->block.getByName("policy_name").column->getDataAt(row);
+                const auto & space = record->block.getByName("disk_space").column->get64(row);
+                disk_space.emplace(policy_name, space);
+            }
+            mergeStates(record->headers["_idem"], disk_space);
         }
-        mergeStates(idempotent_key, disk_space);
+        else
+        {
+            LOG_ERROR(log, "Cannot handle version={}", record->headers["_version"]);
+        }
     }
 }
 
-void PlacementService::mergeStates(const String & host, DiskSpace & disk)
+void PlacementService::mergeStates(const String & node, DiskSpace & disk)
 {
     std::unique_lock guard(rwlock);
 
-    auto iter = host_states.find(host);
-    if (iter == host_states.end())
+    auto iter = nodes_metrics.find(node);
+    if (iter == nodes_metrics.end())
     {
-        /// New host metrics.
-        HostStatePtr state = std::make_shared<HostState>(host);
-        state->disk_space = disk;
-        host_states.emplace(host, state);
+        /// New node metrics.
+        NodeMetricsPtr state = std::make_shared<NodeMetrics>(node);
+        state->disk_space.swap(disk);
+        nodes_metrics.emplace(node, state);
         return;
     }
-    /// Update host metrics.
-    iter->second->disk_space = disk;
+    /// Update existing node metrics.
+    iter->second->disk_space.swap(disk);
 }
 
 void PlacementService::broadcast()
 {
+    if (!global_context.isDistributed())
+    {
+        return;
+    }
+
     auto task_holder = global_context.getSchedulePool().createTask("PlacementBroadcast", [this]() { this->broadcastTask(); });
     broadcast_task = std::make_unique<BackgroundSchedulePoolTaskHolder>(std::move(task_holder));
     (*broadcast_task)->activate();
@@ -123,18 +140,19 @@ void PlacementService::broadcast()
 
 void PlacementService::broadcastTask()
 {
-    auto string_type = std::make_shared<DataTypeString>();
-    auto uint64_type = std::make_shared<DataTypeUInt64>();
+    const DataTypeFactory & data_type_factory = DataTypeFactory::instance();
+    auto string_type = data_type_factory.get("String");
+    auto uint64_type = data_type_factory.get("UInt64");
     auto policy_name_col = string_type->createColumn();
     auto disk_space_col = uint64_type->createColumn();
     auto * disk_space_col_inner = typeid_cast<ColumnUInt64 *>(disk_space_col.get());
 
     for (const auto & [policy_name, policy_ptr] : global_context.getPoliciesMap())
     {
-        const auto & disk_space = policy_ptr->getMaxUnreservedFreeSpace();
+        const auto & disk_space = policy_ptr->getMaxUnreservedFreeSpace() / (1024 * 1024 * 1024);
         policy_name_col->insertData(policy_name.data(), policy_name.size());
         disk_space_col_inner->insertValue(disk_space);
-        LOG_INFO(log, "Append disk metrics {} {} {}", global_context.getNodeIdentity(), policy_name, disk_space);
+        LOG_TRACE(log, "Append disk metrics {}, {}, {} GB.", global_context.getNodeIdentity(), policy_name, disk_space);
     }
 
     Block block;
@@ -146,21 +164,22 @@ void PlacementService::broadcastTask()
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
     record.partition_key = 0;
     record.headers["_idem"] = global_context.getNodeIdentity();
-    record.headers["_host"] = getFQDNOrHostName();
+    record.headers["_host"] = THIS_HOST;
     record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
+    record.headers["_version"] = "1";
 
     const auto & result = dwal->append(record, dwal_append_ctx);
     if (result.err == ErrorCodes::OK)
     {
-        LOG_INFO(log, "Appended {} disk space records in one host state block", record.block.rows());
+        LOG_INFO(log, "Appended {} disk space records in one node metrics block", record.block.rows());
     }
     else
     {
-        LOG_ERROR(log, "Failed to append host state block, error={}", result.err);
+        LOG_ERROR(log, "Failed to append node metrics block, error={}", result.err);
     }
 
-    (*broadcast_task)->scheduleAfter(reschedule_time_ms);
+    (*broadcast_task)->scheduleAfter(reschedule_internal_ms);
 }
 
 }

@@ -3,39 +3,37 @@
 
 namespace DB
 {
-std::vector<String> DiskStrategy::qualifiedHosts(const StateContainer & host_states, const PlacementQuery & query)
+std::vector<NodeMetricsPtr> DiskStrategy::qualifiedNodes(const NodeMetricsContainer & nodes_metrics, const PlacementRequest & request)
 {
-    if (query.required <= 0)
+    if (request.requested_nodes <= 0)
     {
         return {};
     }
 
-    using Disk = std::pair<String, UInt64>;
-    std::vector<Disk> disks;
-    disks.reserve(host_states.size());
+    std::vector<NodeMetricsPtr> qualified_nodes;
+    qualified_nodes.reserve(nodes_metrics.size());
 
-    for (const auto & [host, metrics] : host_states)
+    for (const auto & [node, metrics] : nodes_metrics)
     {
-        auto iter = metrics->disk_space.find(query.storage_policy);
+        auto iter = metrics->disk_space.find(request.storage_policy);
         if (iter != metrics->disk_space.end() && iter->second > 0)
         {
-            disks.emplace_back(host, iter->second); //stack or heap?
+            qualified_nodes.emplace_back(metrics);
         }
     }
 
-    if (disks.size() < query.required)
+    if (qualified_nodes.size() < request.requested_nodes)
     {
         return {};
     }
 
-    std::sort(std::begin(disks), std::end(disks), [&](Disk a, Disk b) { return a.second > b.second; });
-    std::vector<String> res;
-    res.reserve(disks.size());
-    for (size_t i = 0; i < query.required; i++)
-    {
-        res.push_back(disks[i].first);
-    }
-    return res;
+    std::sort(std::begin(qualified_nodes), std::end(qualified_nodes), [&](const auto & a, const auto & b) {
+        auto a_disk_size = a->disk_space.find(request.storage_policy)->second;
+        auto b_disk_size = b->disk_space.find(request.storage_policy)->second;
+        return a_disk_size > b_disk_size;
+    });
+
+    return {qualified_nodes.begin(), qualified_nodes.begin() + request.requested_nodes};
 }
 
 }

@@ -1,45 +1,49 @@
 #pragma once
 
+#include <common/types.h>
+
+#include <boost/noncopyable.hpp>
+
 #include <unordered_map>
 #include <vector>
-#include <boost/noncopyable.hpp>
-#include <common/types.h>
 
 namespace DB
 {
 using DiskSpace = std::unordered_map<String, UInt64>; /// (policy name, free disk space)
-struct HostState
+struct NodeMetrics
 {
-    /// `host` is network reachable like hostname, FQDN or IP
-    String host;
-    /// `host_identity` can be unique uuid
-    String host_identity;
+    /// `node` is network reachable like hostname, FQDN or IP of the node
+    String node;
+    /// `node_identity` can be unique uuid
+    String node_identity;
     /// `(policy name, free disk space)`
     DiskSpace disk_space;
 
-    explicit HostState(const String & host_) : host(host_) { }
+    explicit NodeMetrics(const String & node_) : node(node_) { }
 };
-using HostStatePtr = std::shared_ptr<HostState>;
-using StateContainer = std::unordered_map<String, HostStatePtr>;
+using NodeMetricsPtr = std::shared_ptr<NodeMetrics>;
+using NodeMetricsContainer = std::unordered_map<String, NodeMetricsPtr>;
 
 class PlacementStrategy : private boost::noncopyable
 {
 public:
-    struct PlacementQuery
+    struct PlacementRequest
     {
-        size_t required;
+        size_t requested_nodes;
         String storage_policy;
     };
 
     PlacementStrategy() = default;
     virtual ~PlacementStrategy() = default;
-    virtual std::vector<String> qualifiedHosts(const StateContainer & host_states, const PlacementQuery & query) = 0;
+    virtual std::vector<NodeMetricsPtr> qualifiedNodes(const NodeMetricsContainer & nodes_metrics, const PlacementRequest & request) = 0;
 };
 
 class DiskStrategy final : public PlacementStrategy
 {
 public:
-    virtual std::vector<String> qualifiedHosts(const StateContainer & host_states, const PlacementQuery & query) override;
+    virtual std::vector<NodeMetricsPtr> qualifiedNodes(const NodeMetricsContainer & nodes_metrics, const PlacementRequest & request) override;
 };
+
+using PlacementStrategyPtr = std::shared_ptr<PlacementStrategy>;
 
 }

@@ -45,7 +45,7 @@ void MetadataService::shutdown()
     }
 
     LOG_INFO(log, "Stopping");
-    /// Call subclass's shutdownService
+
     shutdownService();
 
     if (pool)
@@ -203,7 +203,6 @@ void MetadataService::startup()
         }
     }
 
-    /// Call subclass's startupService
     startupService();
 }
 }
