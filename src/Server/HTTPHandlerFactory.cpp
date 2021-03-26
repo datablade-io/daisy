@@ -15,7 +15,6 @@
 #include "PrometheusRequestHandler.h"
 #include "RestHTTPRequestHandler.h"
 #include "WebUIRequestHandler.h"
-#include "SQLAnalyzeHTTPHandler.h"
 
 
 namespace DB
@@ -177,13 +176,6 @@ void addCommonDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IS
     web_ui_handler->attachNonStrictPath("/play");
     web_ui_handler->allowGetAndHeadRequest();
     factory.addHandler(web_ui_handler);
-
-    /// Daisy : starts
-    /*auto analyze_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<SQLAnalyzeHTTPHandler>>(server, "sqlanalyze");
-    analyze_handler->attachNonStrictPath("/sqlanalyze");
-    analyze_handler->allowPostAndGetParamsRequest();
-    factory.addHandler(analyze_handler);*/
-    /// Daisy : ends.
 }
 
 void addDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IServer & server, AsynchronousMetrics & async_metrics)

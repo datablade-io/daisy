@@ -209,13 +209,14 @@ String SQLAnalyzerRestRouterHandler::executePost(const Poco::JSON::Object::Ptr &
     const auto & query = payload->get("query").toString();
     ParserQuery parser(query.c_str() + query.size());
 
+    query_context.setCollectRequiredColumns(true);
     auto & settings = query_context.getSettingsRef();
 
-    String error_message;
+    String error_msg;
     auto res = rewriteQueryPipeAndParse(
-        parser, query.c_str(), query.c_str() + query.size(), error_message, false, settings.max_query_size, settings.max_parser_depth);
+        parser, query.c_str(), query.c_str() + query.size(), error_msg, false, settings.max_query_size, settings.max_parser_depth);
 
-    if (error_message.empty())
+    if (error_msg.empty())
     {
         auto & [rewritten_query, ast] = res;
 
@@ -242,7 +243,7 @@ String SQLAnalyzerRestRouterHandler::executePost(const Poco::JSON::Object::Ptr &
     }
     else
     {
-        LOG_ERROR(log, "Query rewrite, query_id={} error_message={}", query_context.getCurrentQueryId(), error_message);
+        LOG_ERROR(log, "Query rewrite, query_id={} error_msg={}", query_context.getCurrentQueryId(), error_msg);
 
         http_status = Poco::Net::HTTPResponse::HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse("Invalid query", ErrorCodes::INCORRECT_QUERY);

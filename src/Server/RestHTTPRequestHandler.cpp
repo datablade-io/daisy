@@ -199,6 +199,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
 
     /// Setup common response headers etc
     response.setContentType("application/json; charset=UTF-8");
+    response.add("X-ClickHouse-Query-Id", context.getCurrentQueryId());
     Int32 http_status = HTTPResponse::HTTP_OK;
 
     try
