@@ -201,7 +201,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     // Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
     context.setCurrentQueryId(params.get("query_id", request.get("X-ClickHouse-Query-Id", "")));
     client_info.initial_query_id = client_info.current_query_id;
-    std::optional<CurrentThread::QueryScope> query_scope{context};
+    CurrentThread::QueryScope query_scope{context};
 
     try
     {

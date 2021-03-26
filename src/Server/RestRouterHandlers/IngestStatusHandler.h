@@ -7,7 +7,7 @@ namespace DB
 class IngestStatusHandler final : public RestRouterHandler
 {
 public:
-    explicit IngestStatusHandler(Context & query_context_) : RestRouterHandler(query_context_, "Table") { }
+    explicit IngestStatusHandler(Context & query_context_) : RestRouterHandler(query_context_, "IngestStatus") { }
     ~IngestStatusHandler() override = default;
 
     String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
