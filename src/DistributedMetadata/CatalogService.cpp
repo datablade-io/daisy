@@ -571,7 +571,7 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
 }
 
 /// Merge a snapshot of tables from one host
-void CatalogService::mergeCatalog(NodePtr node, TableContainerPerNode snapshot)
+void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode snapshot)
 {
     std::unique_lock guard{catalog_rwlock};
 
@@ -678,7 +678,7 @@ void CatalogService::processRecords(const IDistributedWriteAheadLog::RecordPtrs 
             continue;
         }
 
-        mergeCatalog(std::move(node), buildCatalog(node, record->block));
+        mergeCatalog(node, buildCatalog(node, record->block));
     }
 }
 }
