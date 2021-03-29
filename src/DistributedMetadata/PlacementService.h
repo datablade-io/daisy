@@ -37,7 +37,7 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(100, 500); }
 
 private:
-    void mergeStates(const String & node, DiskSpace & metrics);
+    void mergeMetrics(const String & host, const String & http_port, const String & tcp_port, DiskSpace & disk_space);
 
     /// `broadcast` broadcasts the metrics of this node
     void broadcast();

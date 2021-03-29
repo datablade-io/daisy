@@ -65,7 +65,7 @@ std::vector<String> PlacementService::place(
     res.reserve(nodes.size());
     for (auto & node : nodes)
     {
-        res.emplace_back(node->node);
+        res.emplace_back(node->host);
     }
     return res;
 }
@@ -96,10 +96,10 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
             for (size_t row = 0; row < record->block.rows(); ++row)
             {
                 const auto & policy_name = record->block.getByName("policy_name").column->getDataAt(row);
-                const auto & space = record->block.getByName("disk_space").column->get64(row);
+                const auto space = record->block.getByName("disk_space").column->get64(row);
                 disk_space.emplace(policy_name, space);
             }
-            mergeStates(record->headers["_idem"], disk_space);
+            mergeMetrics(record->headers["_idem"], record->headers["_http_port"], record->headers["_tcp_port"], disk_space);
         }
         else
         {
@@ -108,21 +108,25 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
     }
 }
 
-void PlacementService::mergeStates(const String & node, DiskSpace & disk)
+void PlacementService::mergeMetrics(const String & host, const String & http_port, const String & tcp_port, DiskSpace & disk_space)
 {
     std::unique_lock guard(rwlock);
 
-    auto iter = nodes_metrics.find(node);
+    auto iter = nodes_metrics.find(host);
     if (iter == nodes_metrics.end())
     {
         /// New node metrics.
-        NodeMetricsPtr state = std::make_shared<NodeMetrics>(node);
-        state->disk_space.swap(disk);
-        nodes_metrics.emplace(node, state);
+        NodeMetricsPtr node_metrics = std::make_shared<NodeMetrics>(host);
+        node_metrics->http_port = http_port;
+        node_metrics->tcp_port = tcp_port;
+        node_metrics->disk_space.swap(disk_space);
+        nodes_metrics.emplace(host, node_metrics);
         return;
     }
     /// Update existing node metrics.
-    iter->second->disk_space.swap(disk);
+    iter->second->http_port = http_port;
+    iter->second->tcp_port = tcp_port;
+    iter->second->disk_space.swap(disk_space);
 }
 
 void PlacementService::broadcast()
@@ -149,7 +153,7 @@ void PlacementService::broadcastTask()
 
     for (const auto & [policy_name, policy_ptr] : global_context.getPoliciesMap())
     {
-        const auto & disk_space = policy_ptr->getMaxUnreservedFreeSpace() / (1024 * 1024 * 1024);
+        const auto disk_space = policy_ptr->getMaxUnreservedFreeSpace() / (1024 * 1024 * 1024);
         policy_name_col->insertData(policy_name.data(), policy_name.size());
         disk_space_col_inner->insertValue(disk_space);
         LOG_TRACE(log, "Append disk metrics {}, {}, {} GB.", global_context.getNodeIdentity(), policy_name, disk_space);

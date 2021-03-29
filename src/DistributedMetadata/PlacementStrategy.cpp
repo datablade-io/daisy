@@ -27,11 +27,14 @@ std::vector<NodeMetricsPtr> DiskStrategy::qualifiedNodes(const NodeMetricsContai
         return {};
     }
 
-    std::sort(std::begin(qualified_nodes), std::end(qualified_nodes), [&](const auto & a, const auto & b) {
-        auto a_disk_size = a->disk_space.find(request.storage_policy)->second;
-        auto b_disk_size = b->disk_space.find(request.storage_policy)->second;
-        return a_disk_size > b_disk_size;
-    });
+    std::sort(
+        std::begin(qualified_nodes),
+        std::end(qualified_nodes),
+        [&](const auto & lhs, const auto & rhs) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            auto l_disk_size = lhs->disk_space[request.storage_policy].second;
+            auto r_disk_size = rhs->disk_space[request.storage_policy].second;
+            return l_disk_size > r_disk_size;
+        });
 
     return {qualified_nodes.begin(), qualified_nodes.begin() + request.requested_nodes};
 }

@@ -50,7 +50,6 @@ TEST(PlacementService, PlaceNodes)
         EXPECT_EQ(strategy.qualifiedNodes(container, big_request).size(), 0);
     }
 
-
     std::uniform_int_distribution<size_t> required_number(0, 100);
     /// Case3: get nodes for default policy
     {

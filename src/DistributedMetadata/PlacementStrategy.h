@@ -12,14 +12,17 @@ namespace DB
 using DiskSpace = std::unordered_map<String, UInt64>; /// (policy name, free disk space)
 struct NodeMetrics
 {
-    /// `node` is network reachable like hostname, FQDN or IP of the node
-    String node;
+    /// `host` is network reachable like hostname, FQDN or IP of the node
+    String host;
     /// `node_identity` can be unique uuid
     String node_identity;
     /// `(policy name, free disk space)`
     DiskSpace disk_space;
 
-    explicit NodeMetrics(const String & node_) : node(node_) { }
+    String http_port;
+    String tcp_port;
+
+    explicit NodeMetrics(const String & host_) : host(host_) { }
 };
 using NodeMetricsPtr = std::shared_ptr<NodeMetrics>;
 using NodeMetricsContainer = std::unordered_map<String, NodeMetricsPtr>;
