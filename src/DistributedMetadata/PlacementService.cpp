@@ -57,22 +57,14 @@ MetadataService::ConfigSettings PlacementService::configSettings() const
     };
 }
 
-std::vector<String> PlacementService::place(
+std::vector<NodeMetricsPtr> PlacementService::place(
     Int32 shards, Int32 replication_factor, const String & storage_policy /*= "default"*/, const String & /* colocated_table */) const
 {
     size_t total_replicas = static_cast<size_t>(shards * replication_factor);
     PlacementStrategy::PlacementRequest request{total_replicas, storage_policy};
 
     std::shared_lock guard{rwlock};
-    auto nodes = strategy->qualifiedNodes(nodes_metrics, request);
-
-    std::vector<String> res;
-    res.reserve(nodes.size());
-    for (auto & node : nodes)
-    {
-        res.emplace_back(node->host);
-    }
-    return res;
+    return strategy->qualifiedNodes(nodes_metrics, request);
 }
 
 std::vector<String> PlacementService::placed(const String & database, const String & table) const

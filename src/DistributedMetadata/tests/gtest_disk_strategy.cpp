@@ -29,10 +29,10 @@ TEST(PlacementService, PlaceNodes)
     for (int i = 0; i < 100; i++)
     {
         String node = std::to_string(i);
-        NodeMetricsPtr nodeMetrics = std::make_shared<NodeMetrics>(node);
-        nodeMetrics->disk_space.emplace(default_policy, default_disks[i]);
-        nodeMetrics->disk_space.emplace(cold_policy, cold_disks[i]);
-        container.emplace(node, nodeMetrics);
+        NodeMetricsPtr node_metrics = std::make_shared<NodeMetrics>(node);
+        node_metrics->disk_space.emplace(default_policy, default_disks[i]);
+        node_metrics->disk_space.emplace(cold_policy, cold_disks[i]);
+        container.emplace(node, node_metrics);
     }
 
     DiskStrategy strategy;

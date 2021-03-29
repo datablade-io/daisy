@@ -19,13 +19,13 @@ public:
     explicit PlacementService(Context & global_context_, PlacementStrategyPtr strategy_);
     virtual ~PlacementService() override = default;
 
-    std::vector<String>
+    std::vector<NodeMetricsPtr>
     place(Int32 shards, Int32 replication_factor, const String & storage_policy = "default", const String & colocated_table = "") const;
     std::vector<String> placed(const String & database, const String & table) const;
 
 private:
-    void startupService() override { broadcast(); }
-    void shutdownService() override
+    void postStartup() override { broadcast(); }
+    void preShutdown() override
     {
         if (broadcast_task)
             (*broadcast_task)->deactivate();

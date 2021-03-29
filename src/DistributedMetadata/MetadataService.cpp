@@ -46,7 +46,7 @@ void MetadataService::shutdown()
 
     LOG_INFO(log, "Stopping");
 
-    shutdownService();
+    preShutdown();
 
     if (pool)
     {
@@ -203,6 +203,6 @@ void MetadataService::startup()
         }
     }
 
-    startupService();
+    postStartup();
 }
 }
