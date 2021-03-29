@@ -55,7 +55,9 @@ Int32 parseShard(const String & engine_full)
 
     std::smatch shard_match;
 
-    assert(std::regex_search(engine_full, shard_match, shard_regex));
+    auto m = std::regex_search(engine_full, shard_match, shard_regex);
+    assert(m);
+    (void)m;
 
     return std::stoi(shard_match.str(1));
 }
