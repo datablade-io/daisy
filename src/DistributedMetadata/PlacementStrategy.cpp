@@ -31,8 +31,8 @@ std::vector<NodeMetricsPtr> DiskStrategy::qualifiedNodes(const NodeMetricsContai
         std::begin(qualified_nodes),
         std::end(qualified_nodes),
         [&](const auto & lhs, const auto & rhs) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-            auto l_disk_size = lhs->disk_space[request.storage_policy].second;
-            auto r_disk_size = rhs->disk_space[request.storage_policy].second;
+            auto l_disk_size = lhs->disk_space[request.storage_policy];
+            auto r_disk_size = rhs->disk_space[request.storage_policy];
             return l_disk_size > r_disk_size;
         });
 

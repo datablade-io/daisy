@@ -11,6 +11,11 @@
 
 namespace DB
 {
+namespace ErrorCodes
+{
+    extern const int OK;
+}
+
 namespace
 {
 /// Globals
