@@ -678,7 +678,7 @@ void CatalogService::processRecords(const IDistributedWriteAheadLog::RecordPtrs 
             continue;
         }
 
-        mergeCatalog(std::move(node), buildCatalog(node, record->block));
+        mergeCatalog(node, buildCatalog(node, record->block));
     }
 }
 }

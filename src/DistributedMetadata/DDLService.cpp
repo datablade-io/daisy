@@ -317,6 +317,10 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         /// Ask placement service to do shard placement
         std::vector<String> target_hosts{placement.place(shards, replication_factor, "")};
 
+        /// Daisy: start. For debugging task service
+        target_hosts.push_back("127.0.0.1:8123");
+        /// Daisy: end.
+
         if (target_hosts.empty())
         {
             LOG_ERROR(

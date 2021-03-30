@@ -338,7 +338,7 @@ void TaskStatusService::insertTask(const TaskStatusPtr & task)
 
     /// TODO:
     String query_template = "INSERT INTO default.task \
-                    (id, status, progress, reason, user, context, created, last_modified`) \
+                    (id, status, progress, reason, user, context, created, last_modified) \
                     VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}')";
     String query = fmt::format(query_template, 
                     task->id,
@@ -352,12 +352,17 @@ void TaskStatusService::insertTask(const TaskStatusPtr & task)
 
     Context context = global_context;
     context.makeQueryContext();
-    context.setCurrentQueryId("test-task-create-query-id");
+    context.setCurrentQueryId(task->id);
+
+    CurrentThread::get().attachQueryContext(context);
+
+    ReadBufferFromString in(query);
+    String dummy_string;
+    WriteBufferFromString out(dummy_string);
 
     try
     {
-        auto stream = executeQuery(query, context, true, QueryProcessingStage::Enum::WithMergeableStateAfterAggregation, false);
-        stream.onFinish();
+        executeQuery(in, out, /* allow_into_outfile = */ false, context, {});
     }
     catch(const DB::Exception & e)
     {
