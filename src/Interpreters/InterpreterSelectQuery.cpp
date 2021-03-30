@@ -311,7 +311,7 @@ InterpreterSelectQuery::InterpreterSelectQuery(
     }
 
     /// Daisy : starts. Try to eliminate subquery
-    if (settings.optimize_subqueries)
+    if (settings.unnest_subqueries)
     {
         EliminateSubqueryVisitorData data;
         EliminateSubqueryVisitor(data).visit(query_ptr);
