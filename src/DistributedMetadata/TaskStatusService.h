@@ -2,8 +2,15 @@
 
 #include "MetadataService.h"
 
+#include <Core/BackgroundSchedulePool.h>
+#include <DataStreams/IBlockStream_fwd.h>
+
 namespace DB
 {
+
+class QueryPipeline;
+
+
 class TaskStatusService final : public MetadataService
 {
 public:
@@ -42,14 +49,39 @@ public:
     /// Append
     Int32 append(TaskStatusPtr task);
 
-    TaskStatusPtr findById(const String & id) const;
-    std::vector<TaskStatusPtr> findByUser(const String & user) const;
+    TaskStatusPtr findById(const String & id);
+    std::vector<TaskStatusPtr> findByUser(const String & user);
     std::vector<TaskStatusPtr> taskStatuses() const;
 
 private:
     void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) override;
+
+    void startupService() override;
+    void shutdownService() override;
+
     String role() const override { return "task"; }
     ConfigSettings configSettings() const override;
+    
+    TaskStatusPtr findByIdInMemory(const String & id);
+    TaskStatusPtr findByIdInTable(const String & id);
+
+    std::vector<TaskStatusPtr> findByUserInMemory(const String & user);
+    std::vector<TaskStatusPtr> findByUserInTable(const String & user);
+
+    IDistributedWriteAheadLog::RecordPtr getRecordFromTaskStatus(const TaskStatusPtr & task) const;
+    TaskStatusPtr getTaskStatusFromRecord(const IDistributedWriteAheadLog::RecordPtr & record) const;
+
+    void processQuery(BlockInputStreamPtr & in, const std::function<void(Block &&)> & callback = std::function<void(Block &&)>());
+
+    void processQueryWithProcessors(QueryPipeline & pipeline, const std::function<void(Block &&)> & callback = std::function<void(Block &&)>());
+
+    void createTaskTable();
+    void insertTask(const TaskStatusPtr & task);
+    void dumpFinishedTask();
+
+/// Need to setup a cron job which will check:
+/// 1. Task is finish: put them into table
+/// 2. Task is hang: warning customer (once or periodically ? what frequency)
 
 private:
     std::shared_mutex rwlock;
@@ -58,5 +90,7 @@ private:
 
     std::mutex lock;
     std::deque<std::pair<SteadyClock, String>> timedTasks;
+    std::unique_ptr<BackgroundSchedulePoolTaskHolder> dump_task;
+    static constexpr size_t reschedule_time_ms = 60000;
 };
 }

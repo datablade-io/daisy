@@ -3,6 +3,7 @@
 #include "IngestRestRouterHandler.h"
 #include "RestRouterHandler.h"
 #include "TableRestRouterHandler.h"
+#include "TaskRestRouterHandler.h"
 
 #include <re2/re2.h>
 
@@ -45,7 +46,12 @@ public:
         factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)", "PATCH/DELETE", [](DB::Context & query_context) {
                 return std::make_shared<DB::TableRestRouterHandler>(query_context);
-            });
+        });
+
+        factory.registerRouterHandler(
+            "/dae/v1/task/(?P<key>id|user)/(?P<value>[-\\w]+)", "GET", [](DB::Context & query_context) {
+                return std::make_shared<DB::TaskRestRouterHandler>(query_context);
+        });
     }
 
 public:
