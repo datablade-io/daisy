@@ -96,7 +96,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
                 const auto space = record->block.getByName("disk_space").column->get64(row);
                 disk_space.emplace(policy_name, space);
             }
-            mergeMetrics(record->headers["_host"], record->headers["_http_port"], record->headers["_tcp_port"], disk_space);
+            mergeMetrics(record->headers, disk_space);
         }
         else
         {
@@ -105,11 +105,16 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
     }
 }
 
-void PlacementService::mergeMetrics(const String & host, const String & http_port, const String & tcp_port, DiskSpace & disk_space)
+void PlacementService::mergeMetrics(const std::unordered_map<String, String> & headers, DiskSpace & disk_space)
 {
+    const String & key = headers.at("_idem");
+    const String & host = headers.at("_host");
+    const String & http_port = headers.at("_http_port");
+    const String & tcp_port = headers.at("_tcp_port");
+
     std::unique_lock guard(rwlock);
 
-    auto iter = nodes_metrics.find(host);
+    auto iter = nodes_metrics.find(key);
     if (iter == nodes_metrics.end())
     {
         /// New node metrics.
@@ -117,7 +122,7 @@ void PlacementService::mergeMetrics(const String & host, const String & http_por
         node_metrics->http_port = http_port;
         node_metrics->tcp_port = tcp_port;
         node_metrics->disk_space.swap(disk_space);
-        nodes_metrics.emplace(host, node_metrics);
+        nodes_metrics.emplace(key, node_metrics);
         return;
     }
     /// Update existing node metrics.
