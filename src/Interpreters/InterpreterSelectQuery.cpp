@@ -35,6 +35,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/QueryAliasesVisitor.h>
 #include <Interpreters/replaceAliasColumnsInQuery.h>
+#include <Interpreters/EliminateSubqueryVisitor.h>
 
 #include <Processors/Pipe.h>
 #include <Processors/QueryPlan/AddingDelayedSourceStep.h>
@@ -308,6 +309,14 @@ InterpreterSelectQuery::InterpreterSelectQuery(
             ApplyWithAliasVisitor().visit(query_ptr);
         ApplyWithSubqueryVisitor().visit(query_ptr);
     }
+
+    /// Daisy : starts. Try to eliminate subquery
+    if (settings.optimize_subqueries)
+    {
+        EliminateSubqueryVisitorData data;
+        EliminateSubqueryVisitor(data).visit(query_ptr);
+    }
+    /// Daisy : ends.
 
     JoinedTables joined_tables(getSubqueryContext(*context), getSelectQuery());
 
