@@ -96,7 +96,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
                 const auto space = record->block.getByName("disk_space").column->get64(row);
                 disk_space.emplace(policy_name, space);
             }
-            mergeMetrics(record->headers["_idem"], record->headers["_http_port"], record->headers["_tcp_port"], disk_space);
+            mergeMetrics(record->headers["_host"], record->headers["_http_port"], record->headers["_tcp_port"], disk_space);
         }
         else
         {
@@ -142,8 +142,9 @@ void PlacementService::broadcast()
 void PlacementService::broadcastTask()
 {
     const DataTypeFactory & data_type_factory = DataTypeFactory::instance();
-    auto string_type = data_type_factory.get("String");
-    auto uint64_type = data_type_factory.get("UInt64");
+
+    auto string_type = data_type_factory.get(getTypeName(TypeIndex::String));
+    auto uint64_type = data_type_factory.get(getTypeName(TypeIndex::UInt64));
     auto policy_name_col = string_type->createColumn();
     auto disk_space_col = uint64_type->createColumn();
     auto * disk_space_col_inner = typeid_cast<ColumnUInt64 *>(disk_space_col.get());
