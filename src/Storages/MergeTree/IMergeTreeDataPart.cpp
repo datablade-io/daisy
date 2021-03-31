@@ -567,6 +567,9 @@ void IMergeTreeDataPart::loadColumnsChecksumsIndexes(bool require_columns_checks
         checkConsistency(require_columns_checksums);
     loadDefaultCompressionCodec();
 
+    /// Daisy : starts
+    loadSeqInfo();
+    /// Daisy : ends
 }
 
 void IMergeTreeDataPart::loadIndexGranularity()
@@ -961,6 +964,20 @@ void IMergeTreeDataPart::loadColumns(bool require)
 
     setColumns(loaded_columns);
 }
+
+/// Daisy : starts
+void IMergeTreeDataPart::loadSeqInfo()
+{
+    String path = getFullRelativePath() + "sn.txt";
+    if (volume->getDisk()->exists(path))
+    {
+        auto in = openForReading(volume->getDisk(), path);
+        String seq_data;
+        readText(seq_data, *in);
+        seq_info = std::make_shared<SequenceInfo>(seq_data);
+    }
+}
+/// Daisy : ends
 
 bool IMergeTreeDataPart::shallParticipateInMerges(const StoragePolicyPtr & storage_policy) const
 {

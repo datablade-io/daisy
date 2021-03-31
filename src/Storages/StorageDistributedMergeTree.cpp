@@ -16,6 +16,7 @@
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
 #include <Storages/MergeTree/DistributedMergeTreeBlockOutputStream.h>
+#include <Storages/MergeTree/MergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
 #include <Common/randomSeed.h>
 #include <common/logger_useful.h>
@@ -228,7 +229,7 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
 {
     if (!relative_data_path_.empty())
     {
-        /// virtual table which is for data ingestion only
+        /// Virtual table which is for data ingestion only
         storage = StorageMergeTree::create(
             table_id_,
             relative_data_path_,
@@ -240,6 +241,12 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
             std::move(settings_),
             has_force_restore_data_flag_);
         tailer.emplace(1);
+        auto sn = storage->loadSN();
+        if (sn >= 0)
+        {
+            std::lock_guard lock(sns_mutex);
+            last_sn = sn + 1;
+        }
     }
 
     initWal();
@@ -803,10 +810,12 @@ void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
     size_t local_committed_sns_size = 0;
 
     IDistributedWriteAheadLog::RecordSequenceNumber commit_sn = -1;
+    Int64 outstanding_commits = -1;
     {
         std::lock_guard lock(sns_mutex);
         if (last_sn != prev_sn)
         {
+            outstanding_commits = last_sn - prev_sn;
             commit_sn = last_sn;
             prev_sn = last_sn;
         }
@@ -814,7 +823,7 @@ void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
         local_committed_sns_size = local_committed_sns.size();
     }
 
-    LOG_TRACE(
+    LOG_DEBUG(
         log,
         "Sequence outstanding_sns_size={} local_committed_sns_size={} for topic={} partition={}",
         outstanding_sns_size,
@@ -829,19 +838,36 @@ void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
 
     try
     {
+        /// Commit sequence number to local file system
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - last_commit_ts);
+        /// Every 5 seconds or 100 blocks, flush the local file system checkpoint
+        if (outstanding_commits >= 100 || elapsed >= 5)
+        {
+            storage->commitSN(commit_sn);
+            last_commit_ts = std::chrono::steady_clock::now();
+        }
+    }
+    catch (...)
+    {
+        /// It is ok as next commit will override this commit if it makes through
+        LOG_ERROR(log, "Failed to commit offset={} for topic={} partition={} to local file system error={}", commit_sn, dwalctx.topic, dwalctx.partition, err);
+    }
+
+    try
+    {
         /// Commit sequence number to dwal
         auto err = dwal->commit(commit_sn, dwal_consume_ctx);
         if (unlikely(err != 0))
         {
-            /// it is ok as next commit will override this commit if it makes through
-            LOG_ERROR(log, "Failed to commit offset={} for topic={} partition={} error={}", commit_sn, dwalctx.topic, dwalctx.partition, err);
+            /// It is ok as next commit will override this commit if it makes through
+            LOG_ERROR(log, "Failed to commit offset={} for topic={} partition={} to dwal error={}", commit_sn, dwalctx.topic, dwalctx.partition, err);
         }
     }
     catch (...)
     {
         LOG_ERROR(
             log,
-            "Failed to commit offset={} for topic={} partition={} exception={}",
+            "Failed to commit offset={} for topic={} partition={} to dwal exception={}",
             commit_sn,
             dwalctx.topic,
             dwalctx.partition,
@@ -871,8 +897,11 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
         {
             try
             {
-                /// FIXME : write offset to file system
                 auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), global_context);
+
+                /// Setup sequence numbers to persistent them to file system
+                static_cast<MergeTreeBlockOutputStream *>(output_stream.get())->setSeqs(seq);
+
                 output_stream->writePrefix();
                 output_stream->write(moved_block);
                 output_stream->writeSuffix();
@@ -944,6 +973,8 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
         return;
     }
 
+    /// FIXME : merge blocks by partition key
+
     Block block;
 
     for (auto & rec : records)
@@ -957,7 +988,7 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
             }
             else
             {
-                /// first block
+                /// First block
                 block.swap(rec->block);
                 assert(!rec->block);
             }
@@ -980,7 +1011,6 @@ void StorageDistributedMergeTree::backgroundConsumer()
     auto topic = getStorageID().getFullTableName();
     setThreadName("DistMergeTree");
 
-    /// FIXME, load last sequence number from ckpt in local file system
     DistributedWriteAheadLogKafkaContext consume_ctx{topic, shard, lastSequenceNumber()};
     consume_ctx.auto_offset_reset = dwal_auto_offset_reset;
 
@@ -1098,7 +1128,7 @@ void StorageDistributedMergeTree::initWal()
         throw Exception("Invalid Kafka cluster id " + ssettings->dwal_cluster_id.value, ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
-    /// cached ctx, reused by append. Multiple threads are accessing append context
+    /// Cached ctx, reused by append. Multiple threads are accessing append context
     /// since librdkafka topic handle is thread safe, so we are good
     /// FIXME, take care of kafka naming restrictive
     auto topic = getStorageID().getFullTableName();

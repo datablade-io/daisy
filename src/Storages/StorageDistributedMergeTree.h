@@ -226,13 +226,16 @@ private:
     std::vector<UInt64> slot_to_shard;
     String sharding_key_column_name;
 
-    /// cached ctx for reuse
+    /// Cached ctx for reuse
     std::any dwal_append_ctx;
 
     DistributedWriteAheadLogPtr dwal;
     IngestingBlocks & ingesting_blocks;
 
-    /// forwarding storage if it is not virtual
+    /// Local checkpoint threshhold timer
+    std::chrono::time_point<std::chrono::steady_clock> last_commit_ts = std::chrono::steady_clock::now();
+
+    /// Forwarding storage if it is not virtual
     std::shared_ptr<StorageMergeTree> storage;
     std::optional<ThreadPool> tailer;
 
