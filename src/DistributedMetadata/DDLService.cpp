@@ -315,7 +315,13 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     else
     {
         /// Ask placement service to do shard placement
-        std::vector<String> target_hosts{placement.place(shards, replication_factor, "")};
+        std::vector<NodeMetricsPtr> qualified_nodes{placement.place(shards, replication_factor, "")};
+        std::vector<String> target_hosts;
+        target_hosts.reserve(qualified_nodes.size());
+        for (const auto & node : qualified_nodes)
+        {
+            target_hosts.push_back(node->host + ":" + node->http_port);
+        }
 
         if (target_hosts.empty())
         {
