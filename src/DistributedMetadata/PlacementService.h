@@ -37,7 +37,7 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(100, 500); }
 
 private:
-    void mergeMetrics(const std::unordered_map<String, String> & headers, DiskSpace & disk_space);
+    void mergeMetrics(const String & key, const std::unordered_map<String, String> & headers, DiskSpace & disk_space);
 
     /// `broadcast` broadcasts the metrics of this node
     void broadcast();

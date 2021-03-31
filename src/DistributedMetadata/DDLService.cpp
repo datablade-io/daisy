@@ -320,7 +320,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         target_hosts.reserve(qualified_nodes.size());
         for (const auto & node : qualified_nodes)
         {
-            target_hosts.emplace_back(node->host + ":" + node->http_port);
+            target_hosts.push_back(node->host + ":" + node->http_port);
         }
 
         if (target_hosts.empty())

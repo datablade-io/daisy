@@ -96,7 +96,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
                 const auto space = record->block.getByName("disk_space").column->get64(row);
                 disk_space.emplace(policy_name, space);
             }
-            mergeMetrics(record->headers, disk_space);
+            mergeMetrics(record->headers["_idem"], record->headers, disk_space);
         }
         else
         {
@@ -105,9 +105,16 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
     }
 }
 
-void PlacementService::mergeMetrics(const std::unordered_map<String, String> & headers, DiskSpace & disk_space)
+void PlacementService::mergeMetrics(const String & key, const std::unordered_map<String, String> & headers, DiskSpace & disk_space)
 {
-    const String & key = headers.at("_idem");
+    for (const auto & item : {"_host", "_http_port", "_tcp_port"})
+    {
+        if (!headers.contains(item))
+        {
+            LOG_WARNING(log, "Failed to merge metrics of '{}'. '{}' not found", key, item);
+            return;
+        }
+    }
     const String & host = headers.at("_host");
     const String & http_port = headers.at("_http_port");
     const String & tcp_port = headers.at("_tcp_port");
