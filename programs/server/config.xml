@@ -1133,11 +1133,10 @@
         </system_catalog_dwal>
 
         <!-- system_node_metrics_dwal is for distributed placement service -->
+        <!-- it is compact -->
         <system_node_metrics_dwal>
             <name>__system_node_metrics</name>
             <replication_factor>1</replication_factor>
-            <!-- 2 hours -->
-            <data_retention>2</data_retention>
         </system_node_metrics_dwal>
 
         <!-- system_task_dwal is for global task status -->

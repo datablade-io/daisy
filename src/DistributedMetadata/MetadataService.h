@@ -24,6 +24,8 @@ public:
 
 private:
     void tailingRecords();
+    virtual void postStartup() {}
+    virtual void preShutdown() {}
     virtual void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) = 0;
     virtual String role() const = 0;
     virtual String cleanupPolicy() const { return "delete"; }
