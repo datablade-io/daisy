@@ -105,7 +105,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
         record.partition_key = current_block.shard;
         if (!query_context.getIdempotentKey().empty())
         {
-            record.headers["_idem"] = query_context.getIdempotentKey();
+            record.setIdempotentKey(query_context.getIdempotentKey());
         }
 
         if (ingest_mode == "sync")

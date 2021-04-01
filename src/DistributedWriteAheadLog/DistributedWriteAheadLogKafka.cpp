@@ -833,26 +833,6 @@ inline Int32 DistributedWriteAheadLogKafka::initConsumerTopicHandleIfNecessary(D
 
             return mapErrorCode(rd_kafka_last_error());
         }
-
-        /// `seek` won't work as consumer doesn't get started yet
-        /*if (walctx.offset >= 0)
-        {
-            /// If app specified an offset, then seek to that offset. Usually app specified offset is bigger than
-            /// the offset stored in broker. We can't call `rd_kafka_consume_start` with an absolute offset
-            /// because internally librdkafka will not trigger auto commit if an absolute offset is passed in
-            auto err = rd_kafka_seek(walctx.topic_handle.get(), walctx.partition, walctx.offset, 2000);
-            if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
-            {
-                /// when seek failed, we don't actually bother returning an error. Application shall handle message duplication
-                LOG_WARNING(
-                    log,
-                    "Failed to seek topic={} partition={} offset={} error={}",
-                    walctx.topic,
-                    walctx.partition,
-                    walctx.offset,
-                    rd_kafka_err2str(err));
-            }
-        }*/
     }
 
     return ErrorCodes::OK;

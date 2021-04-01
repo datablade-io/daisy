@@ -980,6 +980,38 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
     commitSN(dwal_consume_ctx);
 }
 
+bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record)
+{
+    if (!record->hasIdempotentKey())
+    {
+        return false;
+    }
+
+    auto & idem_key = record->idempotentKey();
+    if (idem_keys_index.contains(idem_key))
+    {
+        LOG_INFO(log, "Skipping duplicate block, idempotent_key={} offset={}", idem_key, record->sn);
+        return true;
+    }
+
+    /// Cache this idempotent key
+
+    if (idem_keys.size() >= MAX_IDEM_KEYS)
+    {
+        LOG_DEBUG(log, "Idempotent key cache is full, evict idempotent_key={}", *idem_keys.front());
+
+        auto removed = idem_keys_index.erase(*idem_keys.front());
+        (void)removed;
+        assert(removed == 1);
+        idem_keys.pop_front();
+    }
+
+    idem_keys_index.insert(idem_key);
+    /// Move the key value away from rec->headers
+    idem_keys.push_back(std::make_shared<String>(std::move(idem_key)));
+    return true;
+}
+
 void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx)
 {
     if (records.empty())
@@ -989,7 +1021,7 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
 
     Block block;
 
-    for (auto & rec : records)
+    for (const auto & rec : records)
     {
         if (likely(rec->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK))
         {
@@ -1050,7 +1082,15 @@ void StorageDistributedMergeTree::backgroundConsumer()
 
     std::any dwal_consume_ctx{consume_ctx};
 
-    using CallbackData = std::tuple<StorageDistributedMergeTree *, String &, std::any &>;
+    struct CallbackData
+    {
+        StorageDistributedMergeTree * storage;
+        String & topic;
+        std::any & ctx;
+
+        CallbackData(StorageDistributedMergeTree * storage_, String & topic_, std::any & ctx_) : storage(storage_), topic(topic_), ctx(ctx_) {}
+    };
+
     CallbackData callback_data{this, topic, dwal_consume_ctx};
 
     /// The callback is happening in the same thread as the caller
@@ -1059,15 +1099,15 @@ void StorageDistributedMergeTree::backgroundConsumer()
 
         try
         {
-            std::get<0>(*cdata)->commit(records, std::get<2>(*cdata));
+            cdata->storage->commit(records, cdata->ctx);
         }
         catch (...)
         {
             LOG_ERROR(
-                std::get<0>(*cdata)->log,
+                cdata->storage->log,
                 "Failed to commit data for topic={} partition={}, exception={}",
-                std::get<1>(*cdata),
-                std::get<0>(*cdata)->shard,
+                cdata->topic,
+                cdata->storage->shard,
                 getCurrentExceptionMessage(true, true));
         }
     };

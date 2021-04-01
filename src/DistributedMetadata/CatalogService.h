@@ -61,15 +61,11 @@ public:
         Int32 http_port = 8123;
         Int32 tcp_port = 9000;
 
-        explicit Node(const std::unordered_map<String, String> & headers)
+        Node(const String & identity_, const std::unordered_map<String, String> & headers)
         {
-            auto iter = headers.find("_idem");
-            if (iter != headers.end())
-            {
-                identity = iter->second;
-            }
+            identity = identity_;
 
-            iter = headers.find("_host");
+            auto iter = headers.find("_host");
             if (iter != headers.end())
             {
                 host = iter->second;
@@ -90,7 +86,7 @@ public:
 
         bool isValid() const { return !identity.empty() && !host.empty() && http_port > 0 && tcp_port > 0; }
 
-        String string() const { return identity + "," + std::to_string(http_port) + "," + std::to_string(tcp_port); }
+        String string() const { return identity + "," + host + "," + std::to_string(http_port) + "," + std::to_string(tcp_port); }
     };
     using NodePtr = std::shared_ptr<Node>;
 

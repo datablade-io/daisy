@@ -200,6 +200,7 @@ private:
 
     void backgroundConsumer();
     void mergeBlocks(Block & lhs, Block & rhs);
+    bool dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record);
 
     void commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx);
 
@@ -245,9 +246,14 @@ private:
     mutable std::mutex sns_mutex;
     IDistributedWriteAheadLog::RecordSequenceNumber last_sn = -1; /// To be committed to DWAL
     IDistributedWriteAheadLog::RecordSequenceNumber prev_sn = -1; /// Committed to DWAL
-    IDistributedWriteAheadLog::RecordSequenceNumber local_sn = -1; /// Committed to local file system
-    std::set<SequencePair> local_committed_sns;
+    IDistributedWriteAheadLog::RecordSequenceNumber local_sn = -1; /// Committed to `committed_sn.txt`
+    std::set<SequencePair> local_committed_sns; /// Committed to `Part` folder
     std::deque<SequencePair> outstanding_sns;
+
+    /// Idempotent keys caching
+    constexpr static size_t MAX_IDEM_KEYS = 1000;
+    std::deque<std::shared_ptr<String>> idem_keys;
+    std::unordered_set<String> idem_keys_index;
 
     // For random shard index generation
     mutable std::mutex rng_mutex;

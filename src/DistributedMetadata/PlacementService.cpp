@@ -96,7 +96,15 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
                 const auto space = record->block.getByName("disk_space").column->get64(row);
                 disk_space.emplace(policy_name, space);
             }
-            mergeMetrics(record->headers["_idem"], record->headers, disk_space);
+
+            if (record->hasIdempotentKey())
+            {
+                mergeMetrics(record->idempotentKey(), record->headers, disk_space);
+            }
+            else
+            {
+                LOG_ERROR(log, "Invalid metric record, missing idempotent key");
+            }
         }
         else
         {
@@ -111,10 +119,11 @@ void PlacementService::mergeMetrics(const String & key, const std::unordered_map
     {
         if (!headers.contains(item))
         {
-            LOG_WARNING(log, "Failed to merge metrics of '{}'. '{}' not found", key, item);
+            LOG_ERROR(log, "Invalid metric record. '{}', '{}' not found", key, item);
             return;
         }
     }
+
     const String & host = headers.at("_host");
     const String & http_port = headers.at("_http_port");
     const String & tcp_port = headers.at("_tcp_port");
@@ -177,7 +186,7 @@ void PlacementService::broadcastTask()
 
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
     record.partition_key = 0;
-    record.headers["_idem"] = global_context.getNodeIdentity();
+    record.setIdempotentKey(global_context.getNodeIdentity());
     record.headers["_host"] = THIS_HOST;
     record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
