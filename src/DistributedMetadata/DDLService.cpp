@@ -40,6 +40,32 @@ namespace
 
     const String DDL_TABLE_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/tables/{}";
     const String DDL_TABLE_POST_API_PATH_FMT = "/dae/v1/ddl/{}/tables";
+
+    int toErrorCode(std::istream & istr)
+    {
+        std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        error_message << istr.rdbuf();
+        /// FIXME, revise HTTP status code for the legacy HTTP API
+        const auto & msg = error_message.str();
+        if (msg.find("Code: 57") != std::string_view::npos)
+        {
+            /// Table already exists. FIXME: enhance table creation idempotent by adding query id
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
+        /// FIXME, other un-retriable error codes
+        return ErrorCodes::UNKNOWN_EXCEPTION;
+    }
+
+    int toErrorCode(const Poco::Exception & e)
+    {
+        /// FIXME, more error code handling
+        auto code = e.code();
+        if (code == 1000 || code == 422)
+        {
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
+        return ErrorCodes::UNKNOWN_EXCEPTION;
+    }
 }
 
 DDLService & DDLService::instance(Context & global_context_)
@@ -127,8 +153,8 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
     return true;
 }
 
-/// Legacy code: keep the following lines for now to support clickhouse client interface.
-inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts) const
+/// Keep the following lines to support create DistributedMergetree table with SQL
+std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts) const
 {
     std::vector<Poco::URI> uris;
     uris.reserve(hosts.size());
@@ -261,8 +287,7 @@ Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
 
     return err;
 }
-
-/// End of legacy code.
+/// End of code for supporting creting DistributedMergeTree table with SQL
 
 std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts, const String & path) const
 {
@@ -286,7 +311,7 @@ std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts, con
     return uris;
 }
 
-Int32 DDLService::request(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method) const
+Int32 DDLService::sendRequest(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method) const
 {
     /// One second for connect/send/receive
     ConnectionTimeouts timeouts({1, 0}, {1, 0}, {5, 0});
@@ -297,22 +322,26 @@ Int32 DDLService::request(const Poco::JSON::Object & payload, const Poco::URI & 
         session = makePooledHTTPSession(uri, timeouts, 1);
         Poco::Net::HTTPRequest request{method, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
         request.setHost(uri.getHost());
-        request.setChunkedTransferEncoding(true);
 
         std::stringstream data_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        payload.stringify(data_str_stream);
+        payload.stringify(data_str_stream, 0);
         request.setContentLength(data_str_stream.str().size());
         request.setContentType("application/json");
 
         auto & ostr = session->sendRequest(request);
-        payload.stringify(ostr);
+        ostr << data_str_stream.str();
+
+        if (!ostr.good())
+        {
+            LOG_ERROR(log, "Failed to send request data {} to uri={}", data_str_stream.str(), uri.toString());
+            return ErrorCodes::UNKNOWN_EXCEPTION;
+        }
 
         Poco::Net::HTTPResponse response;
         /// FIXME: handle table exists, table not exists etc error explicitly
         auto & istr = session->receiveResponse(response);
         auto status = response.getStatus();
-        if (status == Poco::Net::HTTPResponse::HTTP_OK || status == Poco::Net::HTTPResponse::HTTP_CREATED
-            || status == Poco::Net::HTTPResponse::HTTP_ACCEPTED)
+        if (status == Poco::Net::HTTPResponse::HTTP_OK)
         {
             LOG_INFO(
                 log, "Executed DDL operation on uri={} successfully, method={}, payload={}", uri.toString(), method, data_str_stream.str());
@@ -320,18 +349,7 @@ Int32 DDLService::request(const Poco::JSON::Object & payload, const Poco::URI & 
         }
         else
         {
-            std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-            error_message << istr.rdbuf();
-            /// FIXME, revise HTTP status code for the legacy HTTP API
-            const auto & msg = error_message.str();
-            if (msg.find("Code: 57") != std::string_view::npos)
-            {
-                /// Table already exists. FIXME: enhance table creation idempotent by adding query id
-                return ErrorCodes::UNRETRIABLE_ERROR;
-            }
-
-            /// FIXME, other un-retriable error codes
-            return ErrorCodes::UNKNOWN_EXCEPTION;
+            return toErrorCode(istr);
         }
     }
     catch (const Poco::Exception & e)
@@ -349,12 +367,7 @@ Int32 DDLService::request(const Poco::JSON::Object & payload, const Poco::URI & 
             e.message(),
             getCurrentExceptionMessage(true, true));
 
-        /// FIXME, more error code handling
-        auto code = e.code();
-        if (code == 1000 || code == 422)
-        {
-            return ErrorCodes::UNRETRIABLE_ERROR;
-        }
+        return toErrorCode(e);
     }
     catch (...)
     {
@@ -378,7 +391,7 @@ Int32 DDLService::doTable(const Poco::JSON::Object & payload, const Poco::URI & 
     {
         try
         {
-            err = request(payload, uri, method);
+            err = sendRequest(payload, uri, method);
             if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
             {
                 return err;
@@ -399,9 +412,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 {
     Block & block = record->block;
     assert(block.has("query_id"));
-
-    /// Legacy code: keep the following lines for now to support clickhouse client interface.
-    if(block.has("ddl"))
+    if(block.getByName("payload").column->getDataAt(0).toString().empty())
     {
         if (!validateSchema(block, {"ddl", "database", "table", "shards", "replication_factor", "timestamp", "query_id", "user"}))
         {
@@ -456,7 +467,13 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         else
         {
             /// Ask placement service to do shard placement
-            std::vector<String> target_hosts{placement.place(shards, replication_factor, "")};
+            std::vector<NodeMetricsPtr> qualified_nodes{placement.place(shards, replication_factor, "")};
+            std::vector<String> target_hosts;
+            target_hosts.reserve(qualified_nodes.size());
+            for (const auto & node : qualified_nodes)
+            {
+                target_hosts.push_back(node->host + ":" + node->http_port);
+            }
 
             if (target_hosts.empty())
             {
@@ -494,12 +511,9 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
                 progressDDL(query_id, user, query, "shard replicas placed");
             }
         }
-
         return;
     }
-    /// End of legacy code.
-
-    if (!validateSchema(block, {"payload", "database", "query_id", "user"}))
+    if (!validateSchema(block, {"database", "query_id", "user"}))
     {
         return;
     }
@@ -542,7 +556,8 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             {
                 /// FIXME, check table engine, grammar check
                 payload->set("shard", j);
-                target_hosts[i * replication_factor + j].setQueryParameters(Poco::URI::QueryParameters{{ "_mode", "local"} });
+                target_hosts[i * replication_factor + j].setQueryParameters(
+                    Poco::URI::QueryParameters{{"_sync", "true"}, {"shard", std::to_string(j)}});
                 auto err = doTable(*payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
@@ -607,38 +622,6 @@ void DDLService::mutateTable(const Block & block, const String & method) const
 {
     assert(block.has("query_id"));
 
-    /// Legacy code: keep the following lines for now to support clickhouse client interface.
-    if (block.has("ddl"))
-    {
-        String query = block.getByName("ddl").column->getDataAt(0).toString();
-        String database = block.getByName("database").column->getDataAt(0).toString();
-        String table = block.getByName("table").column->getDataAt(0).toString();
-        String query_id = block.getByName("query_id").column->getDataAt(0).toString();
-        String user = block.getByName("user").column->getDataAt(0).toString();
-
-        std::vector<Poco::URI> target_hosts{toURIs(placement.placed(database, table))};
-
-        if (target_hosts.empty())
-        {
-            LOG_ERROR(log, "Table {} is not found, query={} query_id={} user={}", table, query, query_id, user);
-            failDDL(query_id, user, query, "Table not found");
-            return;
-        }
-
-        /// FIXME: make sure `target_hosts` is a complete list of hosts which
-        /// has this table definition (shards * replication_factor)
-
-        for (auto & uri : target_hosts)
-        {
-            doTable(query, uri);
-        }
-
-        succeedDDL(query_id, user, query);
-
-        return;
-    }
-    /// End of legacy code.
-
     if (!validateSchema(block, {"database", "table", "query_id", "user"}))
     {
         return;
@@ -673,7 +656,7 @@ void DDLService::mutateTable(const Block & block, const String & method) const
 
     for (auto & uri : target_hosts)
     {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"_mode", "local"} });
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"_sync", "true"} });
         doTable(payload, uri, method);
     }
 
@@ -698,7 +681,11 @@ void DDLService::commit(Int64 last_sn)
     }
     catch (...)
     {
-        LOG_ERROR(log, "Failed to commit offset={} exception={}", last_sn, getCurrentExceptionMessage(true, true));
+        LOG_ERROR(
+            log,
+            "Failed to commit offset={} exception={}",
+            last_sn,
+            getCurrentExceptionMessage(true, true));
     }
 }
 

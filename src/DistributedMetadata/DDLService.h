@@ -28,16 +28,13 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(10, 200); }
 
 private:
-
-    /// Legacy functions
     std::vector<Poco::URI> toURIs(const std::vector<String> & hosts) const;
     Int32 postRequest(const String & query, const Poco::URI & uri) const;
     Int32 doTable(const String & query, const Poco::URI & uri) const;
-    /// End of legacy functions
 
     std::vector<Poco::URI> toURIs(const std::vector<String> & hosts, const String & path) const;
 
-    Int32 request(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method) const;
+    Int32 sendRequest(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method) const;
     Int32 doTable(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method) const;
     void createTable(IDistributedWriteAheadLog::RecordPtr record);
     void mutateTable(const Block & bock, const String & method) const;

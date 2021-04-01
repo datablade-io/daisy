@@ -11,22 +11,14 @@
 
 #include <Core/Defines.h>
 #include <Core/Settings.h>
-#include <Core/ColumnWithTypeAndName.h>
-
-#include <Columns/ColumnString.h>
-#include <Columns/ColumnVector.h>
-#include <Columns/ColumnsNumber.h>
-#include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 
 #include <IO/WriteBufferFromFile.h>
 #include <IO/WriteHelpers.h>
-#include <IO/ReadHelpers.h>
 
 #include <Parsers/ASTColumnDeclaration.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTIdentifier.h>
-#include <Parsers/ASTIndexDeclaration.h>
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTInsertQuery.h>
 #include <Parsers/ParserCreateQuery.h>
@@ -39,11 +31,10 @@
 #include <Storages/StorageDistributedMergeTree.h>
 
 #include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
-#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 
 #include <Interpreters/Context.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>
+#include <Interpreters/BlockUtils.h>
 #include <Interpreters/Cluster.h>
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/InterpreterCreateQuery.h>
@@ -54,8 +45,6 @@
 #include <Access/AccessRightsElement.h>
 
 #include <DataTypes/DataTypeFactory.h>
-#include <DataTypes/NestedUtils.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
 
@@ -851,87 +840,32 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
     }
 
     auto query = queryToString(create);
-    auto wal = DistributedWriteAheadLogPool::instance(context.getGlobalContext()).getDefault();
-    if (!wal)
-    {
-        LOG_ERROR(
-            log,
-            "Failed to execute query={}, query_id={}. Distributed environment is not setup. Unable to create table with "
-            "DistributedMergeTree engine",
-            query,
-            context.getCurrentQueryId());
-        throw Exception(
-            "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
-    }
+    LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, context.getCurrentQueryId());
 
-    Block block;
-    /// Schema: (ddl, database, table, shards, replication_factor, timestamp, query_id, user)
-
-    std::vector<std::pair<String, String>> string_cols = {
-        std::make_pair("ddl", query),
-        std::make_pair("database", current_database),
-        std::make_pair("table", create.table),
-        std::make_pair("query_id", context.getCurrentQueryId()),
-        std::make_pair("user", context.getUserName()),
-    };
-
-    auto string_type = std::make_shared<DataTypeString>();
-    for (const auto & p : string_cols)
-    {
-        auto col = string_type->createColumn();
-        col->insertData(p.second.data(), p.second.size());
-        ColumnWithTypeAndName col_with_type(std::move(col), string_type, p.first);
-        block.insert(col_with_type);
-    }
+    std::vector<std::pair<String, String>> string_cols
+        = {{"ddl", query},
+           {"payload", context.getPayload()},
+           {"database", current_database},
+           {"table", create.table},
+           {"query_id", context.getCurrentQueryId()},
+           {"user", context.getUserName()}};
 
     Int32 shards = storage->getShards();
     Int32 replication_factor = storage->getReplicationFactor();
-
     std::vector<std::pair<String, Int32>> int32_cols = {
-        std::make_pair("shards", shards),
-        std::make_pair("replication_factor", replication_factor),
-    };
-
-    auto int32_type = std::make_shared<DataTypeInt32>();
-    for (const auto & p : int32_cols)
-    {
-        auto col = int32_type->createColumn();
-        auto int32_col = typeid_cast<ColumnInt32 *>(col.get());
-        int32_col->insertValue(p.second);
-        ColumnWithTypeAndName col_with_type(std::move(col), int32_type, p.first);
-        block.insert(col_with_type);
-    }
+        {"shards", shards},
+        {"replication_factor", replication_factor}};
 
     auto now = std::chrono::system_clock::now().time_since_epoch();
     std::vector<std::pair<String, UInt64>> uint64_cols = {
         /// Milliseconds since epoch
-        std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
+        {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()}
     };
 
-    auto uint64_type = std::make_shared<DataTypeUInt64>();
-    for (const auto & p : uint64_cols)
-    {
-        auto col = uint64_type->createColumn();
-        auto uint64_col = typeid_cast<ColumnUInt64 *>(col.get());
-        uint64_col->insertValue(p.second);
-        ColumnWithTypeAndName col_with_type(std::move(col), uint64_type, p.first);
-        block.insert(col_with_type);
-    }
+    Block  block = buildBlock(string_cols, int32_cols, uint64_cols);
+    /// Schema: (ddl, payload,  database, table, timestamp, query_id, user, shards, replication_factor)
 
-    LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, context.getCurrentQueryId());
-
-    const auto & config = context.getGlobalContext().getConfigRef();
-    auto topic = config.getString("system_settings.system_ddl_dwal.name");
-    std::any ctx{DistributedWriteAheadLogKafkaContext{topic}};
-
-    IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::CREATE_TABLE, std::move(block)};
-
-    auto result = wal->append(record, ctx);
-    if (result.err != ErrorCodes::OK)
-    {
-        LOG_ERROR(log, "Failed to create DistributedMergeTree query={} query_id={} error={}", query, context.getCurrentQueryId(), result.err);
-        throw Exception("Failed to create DistributedMergeTree", result.err);
-    }
+    append(std::move(block), context, IDistributedWriteAheadLog::OpCode::CREATE_TABLE, log);
 
     LOG_INFO(log, "Request of creating DistributedMergeTree query={} query_id={} has been accepted", query, context.getCurrentQueryId());
 

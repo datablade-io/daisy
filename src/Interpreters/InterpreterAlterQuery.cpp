@@ -1,11 +1,16 @@
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 #include <Interpreters/InterpreterAlterQuery.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>
 #include <Interpreters/MutationsInterpreter.h>
 #include <Interpreters/AddDefaultDatabaseVisitor.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/QueryLog.h>
+#include <Interpreters/BlockUtils.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Parsers/ASTAssignment.h>
+#include <Parsers/queryToString.h>
 #include <Storages/IStorage.h>
 #include <Storages/AlterCommands.h>
 #include <Storages/MutationCommands.h>
@@ -29,10 +34,14 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int INCORRECT_QUERY;
     extern const int NOT_IMPLEMENTED;
+    /// Daisy : start
+    extern const int CONFIG_ERROR;
+    extern const int OK;
+    /// Daisy : end
 }
 
 
-InterpreterAlterQuery::InterpreterAlterQuery(const ASTPtr & query_ptr_, const Context & context_)
+InterpreterAlterQuery::InterpreterAlterQuery(const ASTPtr & query_ptr_, Context & context_)
     : query_ptr(query_ptr_), context(context_)
 {
 }
@@ -138,12 +147,63 @@ BlockIO InterpreterAlterQuery::execute()
         alter_commands.validate(metadata, context);
         alter_commands.prepare(metadata);
         table->checkAlterIsPossible(alter_commands, context);
+
+        /// Daisy : start
+        bool handled = false;
+        auto res_dis = alterTableDistributed(alter, handled);
+        if (handled)
+        {
+            return res_dis;
+        }
+        /// Daisy : end
+
         table->alter(alter_commands, context, alter_lock);
     }
 
     return res;
 }
 
+BlockIO InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query, bool & handled)
+{
+    if(context.isDistributed() && !context.mutateDistributedMergeTreeTableLocally())
+    {
+        assert(!context.getCurrentQueryId().empty());
+
+        auto * log = &Poco::Logger::get("InterpreterAlterQuery");
+
+        auto query_str = queryToString(query);
+        LOG_INFO(log, "Altering DistributedMergeTree query={} query_id={}", query_str, context.getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols
+            = {{"ddl", query_str},
+               {"payload", context.getPayload()},
+               {"database", query.database},
+               {"table", query.table},
+               {"query_id", context.getCurrentQueryId()},
+               {"user", context.getUserName()}};
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        std::vector<std::pair<String, UInt64>> uint64_cols = {
+            /// Milliseconds since epoch
+            std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
+        };
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (ddl, payload,  database, table, timestamp, query_id, user)
+
+        append(std::move(block), context, IDistributedWriteAheadLog::OpCode::ALTER_TABLE, log);
+
+        LOG_INFO(
+            log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        handled = true;
+        return {};
+    }
+    return {};
+}
 
 AccessRightsElements InterpreterAlterQuery::getRequiredAccess() const
 {

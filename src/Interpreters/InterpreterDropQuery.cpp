@@ -1,18 +1,23 @@
 #include <Poco/File.h>
 
-#include <Databases/IDatabase.h>
-#include <Interpreters/Context.h>
-#include <Interpreters/executeDDLQueryOnCluster.h>
-#include <Interpreters/InterpreterDropQuery.h>
-#include <Interpreters/ExternalDictionariesLoader.h>
-#include <Interpreters/QueryLog.h>
 #include <Access/AccessRightsElement.h>
+#include <Columns/ColumnsNumber.h>
+#include <DataTypes/DataTypesNumber.h>
+#include <Databases/DatabaseReplicated.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+#include <Interpreters/BlockUtils.h>
+#include <Interpreters/Context.h>
+#include <Interpreters/ExternalDictionariesLoader.h>
+#include <Interpreters/InterpreterDropQuery.h>
+#include <Interpreters/QueryLog.h>
+#include <Interpreters/executeDDLQueryOnCluster.h>
 #include <Parsers/ASTDropQuery.h>
-#include <Storages/IStorage.h>
+#include <Parsers/queryToString.h>
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Common/typeid_cast.h>
-#include <Databases/DatabaseReplicated.h>
+
 
 #if !defined(ARCADIA_BUILD)
 #    include "config_core.h"
@@ -34,6 +39,8 @@ namespace ErrorCodes
     extern const int UNKNOWN_DICTIONARY;
     extern const int NOT_IMPLEMENTED;
     extern const int INCORRECT_QUERY;
+    extern const int CONFIG_ERROR;
+    extern const int OK;
 }
 
 
@@ -82,9 +89,61 @@ void InterpreterDropQuery::waitForTableToBeActuallyDroppedOrDetached(const ASTDr
         db->waitDetachedTableNotInUse(uuid_to_wait);
 }
 
+BlockIO InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query, bool & handled)
+{
+    if(context.isDistributed() && !context.mutateDistributedMergeTreeTableLocally())
+    {
+        assert(!context.getCurrentQueryId().empty());
+
+        auto * log = &Poco::Logger::get("InterpreterDropQuery");
+
+        auto query_str = queryToString(query);
+        LOG_INFO(log, "Drop DistributedMergeTree query={} query_id={}", query_str, context.getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols = {
+            std::make_pair("ddl", query_str),
+            std::make_pair("database", query.database),
+            std::make_pair("table", query.table),
+            std::make_pair("query_id", context.getCurrentQueryId()),
+            std::make_pair("user", context.getUserName()),
+        };
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        std::vector<std::pair<String, UInt64>> uint64_cols = {
+            /// Milliseconds since epoch
+            std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
+        };
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (ddl,  database, table, timestamp, query_id, user)
+
+        append(std::move(block), context, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
+
+        LOG_INFO(
+            log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        handled = true;
+        return {};
+    }
+    return {};
+}
+
 BlockIO InterpreterDropQuery::executeToTable(const ASTDropQuery & query)
 {
     DatabasePtr database;
+
+    /// Daisy : start
+    bool handled = false;
+    auto res_dis = deleteTableDistributed(query, handled);
+    if (handled)
+    {
+        return res_dis;
+    }
+    /// Daisy : end
+
     UUID table_to_wait_on = UUIDHelpers::Nil;
     auto res = executeToTableImpl(query, database, table_to_wait_on);
     if (query.no_delay)
@@ -201,7 +260,6 @@ BlockIO InterpreterDropQuery::executeToTableImpl(const ASTDropQuery & query, Dat
     return {};
 }
 
-
 BlockIO InterpreterDropQuery::executeToDictionary(
     const String & database_name_,
     const String & dictionary_name,
@@ -294,7 +352,6 @@ BlockIO InterpreterDropQuery::executeToTemporaryTable(const String & table_name,
 
     return {};
 }
-
 
 BlockIO InterpreterDropQuery::executeToDatabase(const ASTDropQuery & query)
 {
