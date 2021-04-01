@@ -48,6 +48,7 @@ namespace ErrorCodes
     extern const int TIMEOUT_EXCEEDED;
     extern const int UNKNOWN_POLICY;
     extern const int NO_SUCH_DATA_PART;
+    extern const int CORRUPTED_DATA;
 }
 
 namespace ActionLocks
@@ -93,6 +94,10 @@ StorageMergeTree::StorageMergeTree(
     increment.set(getMaxBlockNumber());
 
     loadMutations();
+
+    /// Daisy : starts
+    locateSNFile();
+    /// Daisy : ends
 }
 
 
@@ -1564,10 +1569,10 @@ void StorageMergeTree::commitSN(Int64 seq) const
     auto tmpfile = sn_file.first + ".tmp";
     sn_file.second->removeFileIfExists(tmpfile);
 
-    auto buf = version_file.second->writeFile(tmpfile);
-    writeText(fmt::format("1,{}", seq));
-    buf.sync();
-    version_file.second->replaceFile(tmpfile, sn_file.first);
+    auto buf = sn_file.second->writeFile(tmpfile);
+    DB::writeText(fmt::format("1,{}", seq), *buf);
+    buf->sync();
+    sn_file.second->replaceFile(tmpfile, sn_file.first);
 }
 /// Daisy : ends
 

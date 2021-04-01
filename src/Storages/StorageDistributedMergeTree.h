@@ -206,6 +206,7 @@ private:
     using SequencePair = std::pair<IDistributedWriteAheadLog::RecordSequenceNumber, IDistributedWriteAheadLog::RecordSequenceNumber>;
     void doCommit(Block && block, const SequencePair & seq_pair, std::any & dwal_consume_ctx);
     void commitSN(std::any & dwal_consume_ctx);
+    void commitSNLocal(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn);
 
 private:
     Int32 replication_factor;
@@ -242,8 +243,9 @@ private:
     ThreadPool & part_commit_pool;
 
     mutable std::mutex sns_mutex;
-    IDistributedWriteAheadLog::RecordSequenceNumber last_sn = -1;
-    IDistributedWriteAheadLog::RecordSequenceNumber prev_sn = -1;
+    IDistributedWriteAheadLog::RecordSequenceNumber last_sn = -1; /// To be committed to DWAL
+    IDistributedWriteAheadLog::RecordSequenceNumber prev_sn = -1; /// Committed to DWAL
+    IDistributedWriteAheadLog::RecordSequenceNumber local_sn = -1; /// Committed to local file system
     std::set<SequencePair> local_committed_sns;
     std::deque<SequencePair> outstanding_sns;
 
