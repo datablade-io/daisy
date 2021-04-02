@@ -889,9 +889,10 @@ void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
     }
 }
 
-void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & seq_pair, std::any & dwal_consume_ctx)
+void StorageDistributedMergeTree::doCommit(
+    Block && block, SequencePair && seq_pair, std::shared_ptr<std::vector<String>> && keys, std::any & dwal_consume_ctx)
 {
-    assert(block);
+    /// assert(block);
 
     {
         std::lock_guard lock(sns_mutex);
@@ -902,7 +903,11 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
     }
 
     /// Commit blocks to file system async
-    part_commit_pool.scheduleOrThrowOnError([&, seq = seq_pair, moved_block = std::move(block), this] {
+    part_commit_pool.scheduleOrThrowOnError([&,
+                                             moved_block = std::move(block),
+                                             moved_seq = std::move(seq_pair),
+                                             moved_keys = std::move(keys),
+                                             this] {
         const auto & dwalctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(dwal_consume_ctx);
 
         LOG_DEBUG(log, "Committing rows={} for topic={} partition={} to file system", moved_block.rows(), dwalctx.topic, dwalctx.partition);
@@ -914,7 +919,8 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
                 auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), global_context);
 
                 /// Setup sequence numbers to persistent them to file system
-                static_cast<MergeTreeBlockOutputStream *>(output_stream.get())->setSeqs(seq);
+                auto output_stream = static_cast<MergeTreeBlockOutputStream *>(output_stream.get());
+                output_stream->setSequenceInfo(std::make_shared<SequnceInfo>(moved_seq, moved_keys));
 
                 output_stream->writePrefix();
                 output_stream->write(moved_block);
@@ -938,16 +944,18 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
 
         std::lock_guard lock(sns_mutex);
 
+        addIdempotentKeys(moved_keys);
+
         assert(!outstanding_sns.empty());
 
-        if (seq != outstanding_sns.front())
+        if (moved_seq != outstanding_sns.front())
         {
             /// Out of order committed sn
-            local_committed_sns.insert(seq);
+            local_committed_sns.insert(moved_seq);
             return;
         }
 
-        last_sn = seq.second;
+        last_sn = moved_seq.second;
 
         outstanding_sns.pop_front();
 
@@ -958,7 +966,7 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
             if (*local_committed_sns.begin() == p)
             {
                 /// sn shall be consecutive
-                assert(p.first == last_sn + 1);
+                /// assert(p.first == last_sn + 1);
 
                 last_sn = p.second;
 
@@ -980,6 +988,35 @@ void StorageDistributedMergeTree::doCommit(Block && block, const SequencePair & 
     commitSN(dwal_consume_ctx);
 }
 
+void StorageDistributedMergeTree::addIdempotentKeys(const std::shared_ptr<std::vector<String>> & keys)
+{
+    auto total = idem_keys.size() + keys->size();
+    while (total >= MAX_IDEM_KEYS && !idem_keys.empty())
+    {
+        auto removed = idem_keys_index.erase(*idem_keys.front());
+        (void)removed;
+        assert(removed == 1);
+
+        idem_keys.pop_front();
+
+        --total;
+    }
+
+    for (const auto & key : *keys)
+    {
+        /// FIXME : make std::shared_ptr<String> hash able and Comparable
+        /// https://stackoverflow.com/questions/32613304/find-a-value-in-an-unordered-set-of-shared-ptr
+        auto [iter, inserted] = idem_keys_index.insert(key);
+        assert(inserted);
+        (void)inserted;
+        (void)iter;
+
+        idem_keys.push_back(std::make_shared<String>(key));
+    }
+
+    assert(idem_keys.size() == idem_keys_index.size());
+}
+
 bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record)
 {
     if (!record->hasIdempotentKey())
@@ -988,28 +1025,18 @@ bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::Re
     }
 
     auto & idem_key = record->idempotentKey();
-    if (idem_keys_index.contains(idem_key))
+    auto key_exists = false;
+    {
+        std::lock_guard lock{sns_mutex};
+        key_exists = idem_keys_index.contains(idem_key);
+    }
+
+    if (key_exists)
     {
         LOG_INFO(log, "Skipping duplicate block, idempotent_key={} offset={}", idem_key, record->sn);
         return true;
     }
-
-    /// Cache this idempotent key
-
-    if (idem_keys.size() >= MAX_IDEM_KEYS)
-    {
-        LOG_DEBUG(log, "Idempotent key cache is full, evict idempotent_key={}", *idem_keys.front());
-
-        auto removed = idem_keys_index.erase(*idem_keys.front());
-        (void)removed;
-        assert(removed == 1);
-        idem_keys.pop_front();
-    }
-
-    idem_keys_index.insert(idem_key);
-    /// Move the key value away from rec->headers
-    idem_keys.push_back(std::make_shared<String>(std::move(idem_key)));
-    return true;
+    return false;
 }
 
 void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx)
@@ -1020,11 +1047,17 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
     }
 
     Block block;
+    auto keys = std::make_shared<std::vector<String>>();
 
-    for (const auto & rec : records)
+    for (auto & rec : records)
     {
         if (likely(rec->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK))
         {
+            if (dedupBlock(rec))
+            {
+                continue;
+            }
+
             if (likely(block))
             {
                 /// Merge next block
@@ -1036,6 +1069,11 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
                 block.swap(rec->block);
                 assert(!rec->block);
             }
+
+            if (rec->hasIdempotentKey())
+            {
+                idem_keys->push_back(std::move(rec->idempotentKey()));
+            }
         }
         else if (rec->op_code == IDistributedWriteAheadLog::OpCode::ALTER_DATA_BLOCK)
         {
@@ -1044,7 +1082,13 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
         }
     }
 
-    doCommit(std::move(block), std::make_pair(records.front()->sn, records.back()->sn), dwal_consume_ctx);
+    /// After deduplication, we may end up with empty block
+    if (!block)
+    {
+        return;
+    }
+
+    doCommit(std::move(block), std::make_pair(records.front()->sn, records.back()->sn), keys, dwal_consume_ctx);
     assert(!block);
 }
 

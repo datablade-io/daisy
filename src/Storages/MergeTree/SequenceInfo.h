@@ -1,5 +1,8 @@
 #pragma once
 
+#include <IO/ReadHelpers.h>
+#include <IO/WriteBuffer.h>
+#include <IO/WriteHelpers.h>
 #include <Common/Exception.h>
 #include <common/types.h>
 
@@ -63,56 +66,39 @@ namespace DB
 ///      number during part merging and the merging behavior is exactly the same among replicas. The merging machenism is documented
 ///      elsewhere
 
-
-namespace ErrorCodes
-{
-    extern const int INVALID_CONFIG_PARAMETER;
-}
-
 struct SequenceInfo
 {
-    Int64 start;
-    Int64 end;
-    Int32 part_index;
-    Int32 parts;
+    std::shared_ptr<std::vector<std::pair<Int64, Int64>>> sequence_ranges;
+    /// Associated idempotenent keys
+    std::shared_ptr<std::vector<String>> idempotent_keys;
 
-    String serialize() const
+    Int32 part_index = -1;
+    Int32 parts = -1;
+
+    std::shared_ptr<SequenceInfo> shallowClone(Int32 part_index_, Int32 parts_)
     {
-        Int32 version = 1;
-        return fmt::format("{},{},{},{},{}", version, start, end, part_index, parts);
+        auto si = std::make_shared<SequenceInfo>(sequence_ranges, idempotent_keys);
+        si->part_index = part_index_;
+        si->parts = parts_;
+        return si;
     }
 
-    SequenceInfo(Int64 start_, Int64 end_, Int32 part_index_, Int32 parts_)
-        : start(start_), end(end_), part_index(part_index_), parts(parts_)
+    SequenceInfo(const std::pair<Int64, Int64> & seq_range, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
+        : sequence_ranges(std::make_shared<std::vector<std::pair<Int64, Int64>>>()), idempotent_keys(idempotent_keys_)
+    {
+        sequence_ranges->push_back(seq_range);
+    }
+
+    SequenceInfo(
+        const std::shared_ptr<std::vector<std::pair<Int64, Int64>>> & sequence_ranges_,
+        const std::shared_ptr<std::vector<String>> & idempotent_keys_)
+        : sequence_ranges(sequence_ranges_), idempotent_keys(idempotent_keys_)
     {
     }
 
-    explicit SequenceInfo(const String & data)
-    {
-        if (data.empty())
-        {
-            throw Exception("Empty sequence info", ErrorCodes::INVALID_CONFIG_PARAMETER);
-        }
+    void write(WriteBuffer & out) const;
 
-        std::vector<String> seqs;
-        boost::algorithm::split(seqs, data, boost::is_any_of(","));
-        if (seqs[0] != "1")
-        {
-            /// FIXME, if there is version upgrade, we need do corresponding handling
-            /// instead of throws
-            throw Exception("Invalid sequence version", ErrorCodes::INVALID_CONFIG_PARAMETER);
-        }
-
-        if (seqs.size() != 5)
-        {
-            throw Exception("Invalid sequence info", ErrorCodes::INVALID_CONFIG_PARAMETER);
-        }
-
-        start = std::stoll(seqs[1]);
-        end = std::stoll(seqs[2]);
-        part_index = std::stoi(seqs[3]);
-        parts = std::stoi(seqs[4]);
-    }
+    static std::shared_ptr<SequenceInfo> read(ReadBuffer & in);
 };
 
 using SequenceInfoPtr = std::shared_ptr<SequenceInfo>;

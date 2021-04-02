@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SequenceInfo.h"
+
 #include <DataStreams/IBlockOutputStream.h>
 #include <Storages/StorageInMemoryMetadata.h>
 
@@ -27,9 +29,7 @@ public:
     void writePrefix() override;
 
     /// Daisy : starts
-    void setSeqs(const std::pair<Int64, Int64> & seqs) { start_end_seqs = seqs; }
-
-    bool hasSeqs() const { return start_end_seqs.first != -1 && start_end_seqs.second != -1; }
+    void setSequenceInfo(const SequenceInfoPtr & seq_info_) { seq_info = seq_info_; }
     /// Daisy : ends
 
 private:
@@ -39,7 +39,7 @@ private:
     bool optimize_on_insert;
 
     /// Daisy : starts
-    std::pair<Int64, Int64> start_end_seqs = {-1, -1};
+    SequenceInfoPtr seq_info;
     /// Daisy : ends
 };
 

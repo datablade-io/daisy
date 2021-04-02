@@ -441,7 +441,7 @@ private:
     CompressionCodecPtr detectDefaultCompressionCodec() const;
 
     /// Daisy : starts
-    void loadSeqInfo();
+    void loadSequenceInfo();
     /// Daisy : ends
 
     mutable State state{State::Temporary};

@@ -201,11 +201,12 @@ private:
     void backgroundConsumer();
     void mergeBlocks(Block & lhs, Block & rhs);
     bool dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record);
+    void addIdempotentKeys(const std::shared_ptr<std::vector<String>> & keys);
 
     void commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx);
 
     using SequencePair = std::pair<IDistributedWriteAheadLog::RecordSequenceNumber, IDistributedWriteAheadLog::RecordSequenceNumber>;
-    void doCommit(Block && block, const SequencePair & seq_pair, std::any & dwal_consume_ctx);
+    void doCommit(Block && block, SequencePair && seq_pair, std::shared_ptr<std::vector<String>> && keys, std::any & dwal_consume_ctx);
     void commitSN(std::any & dwal_consume_ctx);
     void commitSNLocal(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn);
 

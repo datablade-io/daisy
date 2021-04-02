@@ -181,8 +181,7 @@ void MergedBlockOutputStream::finalizePartOnDisk(
     if (new_part->seq_info)
     {
         auto out = volume->getDisk()->writeFile(part_path + "sn.txt", 4096);
-        DB::writeText(new_part->seq_info->serialize(), *out);
-        out->finalize();
+        new_part->seq_info->write(*out);
         if (sync)
             out->sync();
     }

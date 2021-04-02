@@ -34,14 +34,15 @@ void MergeTreeBlockOutputStream::write(const Block & block)
     {
         Stopwatch watch;
 
-        SequenceInfoPtr seq_info;
+        SequenceInfoPtr part_seq;
 
-        if (hasSeqs())
+        if (seq_info)
         {
-            seq_info = std::make_shared<SequenceInfo>(start_end_seqs.first, start_end_seqs.second, part_index, parts);
+            part_seq = seq_info->shallowClone(part_index, parts);
         }
 
-        MergeTreeData::MutableDataPartPtr part = storage.writer.writeTempPart(current_block, metadata_snapshot, optimize_on_insert, seq_info);
+        MergeTreeData::MutableDataPartPtr part
+            = storage.writer.writeTempPart(current_block, metadata_snapshot, optimize_on_insert, part_seq);
         part_index++;
         /// Daisy : ends
 

@@ -568,7 +568,7 @@ void IMergeTreeDataPart::loadColumnsChecksumsIndexes(bool require_columns_checks
     loadDefaultCompressionCodec();
 
     /// Daisy : starts
-    loadSeqInfo();
+    loadSequenceInfo();
     /// Daisy : ends
 }
 
@@ -966,15 +966,13 @@ void IMergeTreeDataPart::loadColumns(bool require)
 }
 
 /// Daisy : starts
-void IMergeTreeDataPart::loadSeqInfo()
+void IMergeTreeDataPart::loadSequenceInfo()
 {
     String path = getFullRelativePath() + "sn.txt";
     if (volume->getDisk()->exists(path))
     {
         auto in = openForReading(volume->getDisk(), path);
-        String seq_data;
-        readText(seq_data, *in);
-        seq_info = std::make_shared<SequenceInfo>(seq_data);
+        seq_info = SequenceInfo::read(*in);
     }
 }
 /// Daisy : ends
