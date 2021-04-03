@@ -1,5 +1,7 @@
 #include "SequenceInfo.h"
 
+#include <Common/parseIntStrict.h>
+
 namespace DB
 {
 namespace ErrorCodes
@@ -9,15 +11,13 @@ namespace ErrorCodes
 
 namespace
 {
-Int64 parseInt(const String & s, String::size_type lpos, String::size_type rpos) { return stoll(String(s, lpos, rpos - lpos)); }
-
 std::shared_ptr<std::vector<std::pair<Int64, Int64>>> readSequenceRanges(ReadBuffer & in)
 {
     String sequences;
     DB::readText(sequences, in);
 
     /// Parse sequence
-    if (!sequences.empty())
+    if (sequences.empty())
     {
         throw Exception("Invalid sequences", ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
@@ -34,8 +34,8 @@ std::shared_ptr<std::vector<std::pair<Int64, Int64>>> readSequenceRanges(ReadBuf
             throw Exception("Invalid sequences " + s, ErrorCodes::INVALID_CONFIG_PARAMETER);
         }
 
-        auto start = parseInt(s, lpos, dash_pos);
-        auto end = parseInt(s, dash_pos + 1, rpos);
+        auto start = parseIntStrict<Int64>(s, lpos, dash_pos);
+        auto end = parseIntStrict<Int64>(s, dash_pos + 1, rpos);
         return {start, end};
     };
 
@@ -69,7 +69,7 @@ std::pair<Int32, Int32> readPartInfo(ReadBuffer & in)
 
     if (part.empty())
     {
-        throw Exception("Invalid part", ErrorCodes::INVALID_CONFIG_PARAMETER);
+        throw Exception("Empty part", ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
     Int32 part_index = 0;
@@ -77,10 +77,10 @@ std::pair<Int32, Int32> readPartInfo(ReadBuffer & in)
     auto pos = part.find(',');
     if (pos == String::npos)
     {
-        part_index = parseInt(part, 0, pos);
+        part_index = parseIntStrict<Int32>(part, 0, pos);
     }
 
-    Int32 parts = parseInt(part, pos + 1, part.size());
+    Int32 parts = parseIntStrict<Int32>(part, pos + 1, part.size());
 
     return {part_index, parts};
 }
@@ -90,6 +90,11 @@ std::shared_ptr<std::vector<String>> readIdempotentKeys(ReadBuffer & in)
     String keys;
     DB::readText(keys, in);
 
+    if (keys.empty())
+    {
+        return {};
+    }
+
     auto idempotent_keys = std::make_shared<std::vector<String>>();
     boost::algorithm::split(*idempotent_keys, keys, boost::is_any_of(","));
 
@@ -97,8 +102,18 @@ std::shared_ptr<std::vector<String>> readIdempotentKeys(ReadBuffer & in)
 }
 }
 
+bool SequenceInfo::valid() const
+{
+    return sequence_ranges && parts > 0 && part_index >= 0 && part_index < parts;
+}
+
 void SequenceInfo::write(WriteBuffer & out) const
 {
+    if (!valid())
+    {
+        return;
+    }
+
     /// Format:
     /// version
     /// sequence ranges
@@ -128,8 +143,16 @@ void SequenceInfo::write(WriteBuffer & out) const
     DB::writeText(part_index, out);
     DB::writeText(",", out);
     DB::writeText(parts, out);
+
+    if (!idempotent_keys)
+    {
+        out.finalize();
+        return;
+    }
+
     DB::writeText("\n", out);
 
+    /// Idempotent keys
     index = 0;
     siz = idempotent_keys->size();
     for (const auto & key : *idempotent_keys)
@@ -148,8 +171,16 @@ std::shared_ptr<SequenceInfo> SequenceInfo::read(ReadBuffer & in)
     assertString("1\n", in);
 
     auto sequence_ranges = readSequenceRanges(in);
+    assertString("\n", in);
+
     auto [part_index, parts] = readPartInfo(in);
-    auto idempotent_keys = readIdempotentKeys(in);
+
+    std::shared_ptr<std::vector<String>> idempotent_keys;
+    if (!in.eof())
+    {
+        assertString("\n", in);
+        idempotent_keys = readIdempotentKeys(in);
+    }
 
     auto si = std::make_shared<SequenceInfo>(sequence_ranges, idempotent_keys);
     si->part_index = part_index;

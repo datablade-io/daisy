@@ -851,7 +851,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
 
     struct WrappedData
     {
-        IDistributedWriteAheadLog::ConsumeCallback & callback;
+        IDistributedWriteAheadLog::ConsumeCallback callback;
         void * data;
 
         RecordPtrs records;
@@ -1003,6 +1003,11 @@ IDistributedWriteAheadLog::ConsumeResult DistributedWriteAheadLogKafka::consume(
             auto rkmessage = rkmessages.get()[idx];
             if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR)
             {
+                if (rkmessage->offset < walctx.offset)
+                {
+                    continue;
+                }
+
                 auto record = kafkaMsgToRecord(rkmessage);
                 if (likely(record))
                 {

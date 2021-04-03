@@ -919,8 +919,8 @@ void StorageDistributedMergeTree::doCommit(
                 auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), global_context);
 
                 /// Setup sequence numbers to persistent them to file system
-                auto output_stream = static_cast<MergeTreeBlockOutputStream *>(output_stream.get());
-                output_stream->setSequenceInfo(std::make_shared<SequnceInfo>(moved_seq, moved_keys));
+                static_cast<MergeTreeBlockOutputStream *>(output_stream.get())
+                    ->setSequenceInfo(std::make_shared<SequenceInfo>(moved_seq, moved_keys));
 
                 output_stream->writePrefix();
                 output_stream->write(moved_block);
@@ -1072,7 +1072,7 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
 
             if (rec->hasIdempotentKey())
             {
-                idem_keys->push_back(std::move(rec->idempotentKey()));
+                keys->push_back(std::move(rec->idempotentKey()));
             }
         }
         else if (rec->op_code == IDistributedWriteAheadLog::OpCode::ALTER_DATA_BLOCK)
@@ -1088,8 +1088,9 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
         return;
     }
 
-    doCommit(std::move(block), std::make_pair(records.front()->sn, records.back()->sn), keys, dwal_consume_ctx);
+    doCommit(std::move(block), std::make_pair(records.front()->sn, records.back()->sn), std::move(keys), dwal_consume_ctx);
     assert(!block);
+    assert(!keys);
 }
 
 void StorageDistributedMergeTree::backgroundConsumer()

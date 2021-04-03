@@ -111,7 +111,6 @@ namespace
     }
 }
 
-
 void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse & response)
 {
     setThreadName("RestHandler");
@@ -122,7 +121,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     Context context = server.context();
 
     HTMLForm params(request);
-    LOG_TRACE(log, "Request Router: {}", request.getURI());
+    LOG_TRACE(log, "Request uri: {}", request.getURI());
 
     /// The user and password can be passed by headers (similar to X-Auth-*),
     /// which is used by load balancers to pass authentication information.

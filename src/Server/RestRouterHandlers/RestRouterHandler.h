@@ -39,6 +39,8 @@ public:
     /// and sends back HTTP `500` to clients
     String execute(HTTPServerRequest & request, HTTPServerResponse & response, Int32 & http_status)
     {
+        setupQueryParams(request);
+
         http_status = HTTPResponse::HTTP_OK;
 
         if (streaming())
@@ -76,6 +78,13 @@ public:
     }
 
     void setPathParameter(const String & name, const String & value) { path_parameters[name] = value; }
+
+    const String & getQueryParameter(const String & name, const String & default_value = "") const
+    {
+        return query_parameters->get(name, default_value);
+    }
+
+    bool hasQueryParameter(const String & name) const { return query_parameters->has(name); }
 
 public:
     static String jsonErrorResponse(const String & error_msg, int error_code, const String & query_id)
@@ -174,11 +183,14 @@ private:
     virtual bool validateDelete(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
     virtual bool validatePatch(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
 
+    void setupQueryParams(const HTTPServerRequest & request) { query_parameters = std::move(std::make_unique<HTMLForm>(request)); }
+
 protected:
     Context & query_context;
     Poco::Logger * log;
 
     std::unordered_map<String, String> path_parameters;
+    std::unique_ptr<HTMLForm> query_parameters;
 };
 
 using RestRouterHandlerPtr = std::shared_ptr<RestRouterHandler>;

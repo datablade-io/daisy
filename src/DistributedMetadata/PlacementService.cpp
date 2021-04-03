@@ -195,7 +195,7 @@ void PlacementService::broadcastTask()
     const auto & result = dwal->append(record, dwal_append_ctx);
     if (result.err == ErrorCodes::OK)
     {
-        LOG_INFO(log, "Appended {} disk space records in one node metrics block", record.block.rows());
+        LOG_DEBUG(log, "Appended {} disk space records in one node metrics block", record.block.rows());
     }
     else
     {

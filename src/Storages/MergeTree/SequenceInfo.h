@@ -96,6 +96,8 @@ struct SequenceInfo
     {
     }
 
+    bool valid() const;
+
     void write(WriteBuffer & out) const;
 
     static std::shared_ptr<SequenceInfo> read(ReadBuffer & in);
