@@ -198,9 +198,10 @@ private:
 
     static void writeCallback(const IDistributedWriteAheadLog::AppendResult & result, void * data);
 
+    IDistributedWriteAheadLog::RecordSequenceNumber sequenceNumberLoaded() const;
     void backgroundConsumer();
     void mergeBlocks(Block & lhs, Block & rhs);
-    bool dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record);
+    bool dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record) const;
     void addIdempotentKeys(const std::shared_ptr<std::vector<String>> & keys);
 
     void commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx);
@@ -209,6 +210,7 @@ private:
     void doCommit(Block && block, SequencePair && seq_pair, std::shared_ptr<std::vector<String>> && keys, std::any & dwal_consume_ctx);
     void commitSN(std::any & dwal_consume_ctx);
     void commitSNLocal(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn);
+    void commitSNRemote(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn, std::any & dwal_consume_ctx);
 
 private:
     Int32 replication_factor;
