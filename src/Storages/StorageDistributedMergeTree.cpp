@@ -891,8 +891,53 @@ void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
     commitSNRemote(commit_sn, dwal_consume_ctx);
 }
 
+inline void StorageDistributedMergeTree::progressSequencesWithLock(const SequencePair & seq)
+{
+    assert(!outstanding_sns.empty());
+
+    if (seq != outstanding_sns.front())
+    {
+        /// Out of order committed sn
+        local_committed_sns.insert(seq);
+        return;
+    }
+
+    last_sn = seq.second;
+
+    outstanding_sns.pop_front();
+
+    /// Find out the max offset we can commit
+    while (!local_committed_sns.empty())
+    {
+        auto & p = outstanding_sns.front();
+        if (*local_committed_sns.begin() == p)
+        {
+            /// sn shall be consecutive
+            assert(p.first == last_sn + 1);
+
+            last_sn = p.second;
+
+            local_committed_sns.erase(local_committed_sns.begin());
+            outstanding_sns.pop_front();
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    assert(outstanding_sns.size() >= local_committed_sns.size());
+    assert(last_sn >= prev_sn);
+}
+
+inline void StorageDistributedMergeTree::progressSequences(const SequencePair & seq)
+{
+    std::lock_guard lock(sns_mutex);
+    progressSequencesWithLock(seq);
+}
+
 void StorageDistributedMergeTree::doCommit(
-    Block && block, SequencePair && seq_pair, std::shared_ptr<std::vector<String>> && keys, std::any & dwal_consume_ctx)
+    Block block, SequencePair seq_pair, std::shared_ptr<std::vector<String>> keys, std::any & dwal_consume_ctx)
 {
     {
         std::lock_guard lock(sns_mutex);
@@ -904,7 +949,7 @@ void StorageDistributedMergeTree::doCommit(
         /// the offset checkpointing
         if (!block)
         {
-            local_committed_sns.insert(seq_pair);
+            progressSequencesWithLock(seq_pair);
             return;
         }
 
@@ -948,82 +993,39 @@ void StorageDistributedMergeTree::doCommit(
             }
         }
 
-        std::lock_guard lock(sns_mutex);
-
-        addIdempotentKeys(moved_keys);
-
-        assert(!outstanding_sns.empty());
-
-        if (moved_seq != outstanding_sns.front())
-        {
-            /// Out of order committed sn
-            local_committed_sns.insert(moved_seq);
-            return;
-        }
-
-        last_sn = moved_seq.second;
-
-        outstanding_sns.pop_front();
-
-        /// Find out the max offset we can commit
-        while (!local_committed_sns.empty())
-        {
-            auto & p = outstanding_sns.front();
-            if (*local_committed_sns.begin() == p)
-            {
-                /// sn shall be consecutive
-                assert(p.first == last_sn + 1);
-
-                last_sn = p.second;
-
-                local_committed_sns.erase(local_committed_sns.begin());
-                outstanding_sns.pop_front();
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        assert(outstanding_sns.size() >= local_committed_sns.size());
-        assert(last_sn >= prev_sn);
+        progressSequences(moved_seq);
     });
 
     assert(!block);
+    assert(!keys);
 
     commitSN(dwal_consume_ctx);
 }
 
-void StorageDistributedMergeTree::addIdempotentKeys(const std::shared_ptr<std::vector<String>> & keys)
+/// Add with lock held
+inline void StorageDistributedMergeTree::addIdempotentKey(const String & key)
 {
-    auto total = idem_keys.size() + keys->size();
-    while (total >= MAX_IDEM_KEYS && !idem_keys.empty())
+    if (idem_keys.size() >= MAX_IDEM_KEYS)
     {
         auto removed = idem_keys_index.erase(*idem_keys.front());
         (void)removed;
         assert(removed == 1);
 
         idem_keys.pop_front();
-
-        --total;
     }
 
-    for (const auto & key : *keys)
-    {
-        /// FIXME : make std::shared_ptr<String> hash able and Comparable
-        /// https://stackoverflow.com/questions/32613304/find-a-value-in-an-unordered-set-of-shared-ptr
-        auto [iter, inserted] = idem_keys_index.insert(key);
-        assert(inserted);
-        (void)inserted;
-        (void)iter;
+    auto shared_key = std::make_shared<String>(key);
+    idem_keys.push_back(shared_key);
 
-        idem_keys.push_back(std::make_shared<String>(key));
-    }
+    auto [iter, inserted] = idem_keys_index.emplace(*shared_key);
+    assert(inserted);
+    (void)inserted;
+    (void)iter;
 
     assert(idem_keys.size() == idem_keys_index.size());
 }
 
-bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record) const
+bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record)
 {
     if (!record->hasIdempotentKey())
     {
@@ -1035,6 +1037,10 @@ bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::Re
     {
         std::lock_guard lock{sns_mutex};
         key_exists = idem_keys_index.contains(idem_key);
+        if (!key_exists)
+        {
+            addIdempotentKey(idem_key);
+        }
     }
 
     if (key_exists)

@@ -813,7 +813,6 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
         {
             throw Exception(
                     "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
-
         }
         return {};
     }
