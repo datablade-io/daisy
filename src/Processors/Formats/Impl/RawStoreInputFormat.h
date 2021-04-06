@@ -14,7 +14,7 @@ class ReadBuffer;
 
 
 /** A stream for reading data in JSON format where each row is represented by a separate JSON object.
-  * it also support to extract _time from _raw column if extract_time_rule has been configured.
+  * it also support to extract _time from _raw column.
   * Objects can be separated by line feed, other whitespace characters in any number and possibly a comma.
   * Fields can be listed in any order (including, in different lines there may be different order),
   *  and some fields may be missing.
@@ -25,7 +25,7 @@ public:
     RawStoreInputFormat(
         ReadBuffer & in_, const Block & header_, Params params_, const FormatSettings & format_settings_, bool yield_strings_);
 
-    String getName() const override { return "JSONEachRowRowInputFormat"; }
+    String getName() const override { return "RawStoreInputFormat"; }
 
     void readPrefix() override;
     void readSuffix() override;
@@ -62,11 +62,14 @@ private:
     /// the nested column names are 'n.i' and 'n.s' and the nested prefix is 'n.'
     size_t nested_prefix_length = 0;
 
-    /// Set of columns for which the values were read. The rest will be filled with default values.
+    /// Set of columns for which the values were read. The rest will be
+    /// filled with default values.
     std::vector<UInt8> read_columns;
-    /// Set of columns which already met in row. Exception is thrown if there are more than one column with the same name.
+    /// Set of columns which already met in row. Exception is thrown if
+    /// there are more than one column with the same name.
     std::vector<UInt8> seen_columns;
-    /// These sets may be different, because if null_as_default=1 read_columns[i] will be false and seen_columns[i] will be true
+    /// These sets may be different, because if null_as_default=1 read_columns[i]
+    /// will be false and seen_columns[i] will be true
     /// for row like {..., "non-nullable column name" : null, ...}
 
     /// Hash table match `field name -> position in the block`. NOTE You can use perfect hash map.
@@ -83,10 +86,8 @@ private:
 
     bool yield_strings;
 
-    String time_extraction_type;
-    String time_extraction_rule;
-    std::unique_ptr<re2::RE2> time_extraction_regex = nullptr;
-    int time_group_idx = -1;
+    std::unique_ptr<re2::RE2> time_extraction_regex;
+    size_t time_group_idx = -1;
 
     size_t raw_col_idx = -1;
     size_t time_col_idx = -1;

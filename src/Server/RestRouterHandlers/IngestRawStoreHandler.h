@@ -9,6 +9,7 @@ struct Enrichment
     String time_extraction_type;
     String time_extraction_rule;
 };
+
 class IngestRawStoreHandler final : public RestRouterHandler
 {
 public:

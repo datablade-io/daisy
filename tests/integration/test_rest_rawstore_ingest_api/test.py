@@ -44,7 +44,7 @@ def setup_nodes():
         "store1",
         {
             "enrichment": {
-                "time_extraction_type": "json",
+                "time_extraction_type": "json_path",
                 "time_extraction_rule": "log.time"
             },
             "data": [{
@@ -100,7 +100,7 @@ def setup_nodes():
         "store1",
         {
             "enrichment": {
-                "time_extraction_type": "json",
+                "time_extraction_type": "json_path",
                 "time_extraction_rule": "log.time1"
             },
             "data": [{

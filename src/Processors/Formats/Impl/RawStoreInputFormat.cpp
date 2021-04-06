@@ -7,10 +7,10 @@
 #include <Formats/JSONEachRowUtils.h>
 #include <Processors/Formats/Impl/RawStoreInputFormat.h>
 
-#include "Poco/JSON/Parser.h"
 #include <Poco/Dynamic/Var.h>
 #include <Poco/JSON/JSON.h>
 #include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
 #include <Poco/JSON/Query.h>
 
 namespace DB
@@ -47,21 +47,12 @@ RawStoreInputFormat::RawStoreInputFormat(
     {
         const String & column_name = columnName(i);
         name_map[column_name] = i;
-        if (format_settings_.import_nested_json)
-        {
-            const auto split = Nested::splitName(column_name);
-            if (!split.second.empty())
-            {
-                const StringRef table_name(column_name.data(), split.first.size());
-                name_map[table_name] = NESTED_FIELD;
-            }
-        }
     }
 
-    time_extraction_type = format_settings_.rawstore.rawstore_time_extraction_type;
-    time_extraction_rule = format_settings_.rawstore.rawstore_time_extraction_rule;
+    const auto & time_extraction_type = format_settings_.rawstore.rawstore_time_extraction_type;
+    const auto & time_extraction_rule = format_settings_.rawstore.rawstore_time_extraction_rule;
 
-    if (time_extraction_type != "json" and time_extraction_type != "regex")
+    if (time_extraction_type != "json_path" && time_extraction_type != "regex")
         throw Exception(
             "time_extraction_type should be either 'json' or 'regex' " + time_extraction_type + " is not supported.",
             ErrorCodes::UNRECOGNIZED_ARGUMENTS);
@@ -87,17 +78,17 @@ RawStoreInputFormat::RawStoreInputFormat(
             throw Exception(
                 "No '_time' group defined in 'time_extraction_rule': " + time_extraction_rule, ErrorCodes::UNRECOGNIZED_ARGUMENTS);
     }
-    else if (time_extraction_type == "json" && time_extraction_rule.empty())
+    else if (time_extraction_type == "json_path" && time_extraction_rule.empty())
         throw Exception("'time_extraction_rule' is empty", ErrorCodes::UNRECOGNIZED_ARGUMENTS);
 
     prev_positions.resize(num_columns);
-    raw_col_idx = columnIndex(StringRef("_raw"), 0);
-    time_col_idx = columnIndex(StringRef("_time"), 0);
+    raw_col_idx = columnIndex("_raw", 0);
+    time_col_idx = columnIndex("_time", 0);
     if (raw_col_idx == UNKNOWN_FIELD || time_col_idx == UNKNOWN_FIELD)
         throw Exception("It is suitable for RawStoreFormat, either '_raw' or '_time' is missing", ErrorCodes::UNRECOGNIZED_ARGUMENTS);
 }
 
-const String & RawStoreInputFormat::columnName(size_t i) const
+inline const String & RawStoreInputFormat::columnName(size_t i) const
 {
     return getPort().getHeader().getByPosition(i).name;
 }
@@ -133,8 +124,6 @@ inline size_t RawStoreInputFormat::columnIndex(const StringRef & name, size_t ke
   */
 StringRef RawStoreInputFormat::readColumnName(ReadBuffer & buf)
 {
-    // This is just an optimization: try to avoid copying the name into current_column_name
-
     if (nested_prefix_length == 0 && !buf.eof() && buf.position() + 1 < buf.buffer().end())
     {
         char * next_pos = find_first_symbols<'\\', '"'>(buf.position() + 1, buf.buffer().end());
@@ -259,7 +248,7 @@ void RawStoreInputFormat::readJSONObject(MutableColumns & columns)
         }
     }
 
-    /// read _time from _raw column
+    /// Read _time from _raw column
     if (seen_columns[time_col_idx])
         return;
 
@@ -269,9 +258,9 @@ void RawStoreInputFormat::readJSONObject(MutableColumns & columns)
     }
 
     seen_columns[time_col_idx] = read_columns[time_col_idx] = true;
-    if (time_extraction_type == "json")
+    if (format_settings.rawstore.rawstore_time_extraction_type == "json_path")
         extractTimeFromRawByJSON(*columns[time_col_idx], *columns[raw_col_idx]);
-    else if (time_extraction_type == "regex" && time_extraction_regex != nullptr)
+    else if (format_settings.rawstore.rawstore_time_extraction_type == "regex" && time_extraction_regex != nullptr)
         extractTimeFromRawByRegex(*columns[time_col_idx], *columns[raw_col_idx]);
 }
 
@@ -307,9 +296,11 @@ void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn &
 
     Poco::JSON::Query query(result);
 
-    std::string time = query.findValue(time_extraction_rule.c_str(), "");
+    std::string time = query.findValue(format_settings.rawstore.rawstore_time_extraction_rule.c_str(), "");
     if (time.empty())
-        throw Exception("extract _time from _raw failed with rule: " + time_extraction_rule, ErrorCodes::INCORRECT_DATA);
+        throw Exception(
+            "extract _time from _raw failed with rule: " + format_settings.rawstore.rawstore_time_extraction_rule,
+            ErrorCodes::INCORRECT_DATA);
 
     /// wrap the time with \" to allow deserializeAsTextJSON to get the correct value
     String s;
@@ -337,7 +328,9 @@ void RawStoreInputFormat::extractTimeFromRawByRegex(IColumn & time_col, IColumn 
 
     if (!time_extraction_regex->Match(in, 0, in.size(), re2::RE2::Anchor::UNANCHORED, matches, num_captures))
         throw Exception(
-            "Cannot extract _time from " + in.as_string() + " time_extraction_rule: " + time_extraction_rule, ErrorCodes::INCORRECT_DATA);
+            "Cannot extract _time from " + in.as_string()
+                + " time_extraction_rule: " + format_settings.rawstore.rawstore_time_extraction_rule,
+            ErrorCodes::INCORRECT_DATA);
 
     String s;
     s.append("\"");

@@ -60,8 +60,6 @@ void checkOutput(FormatSettings & format_, String & in, String exp)
 
     copyData(*(streams.first), *(streams.second));
 
-    std::cout << "Result is: " << out << std::endl << "Expect is: " << exp << std::endl;
-
     std::vector<String> rows;
     String sep = "\n";
     boost::algorithm::split(rows, out, boost::is_any_of(sep));
@@ -99,7 +97,7 @@ TEST(RawStoreFormatTest, JSONExtract)
                  "}";
 
     FormatSettings format_settings;
-    format_settings.rawstore.rawstore_time_extraction_type = "json";
+    format_settings.rawstore.rawstore_time_extraction_type = "json_path";
     format_settings.rawstore.rawstore_time_extraction_rule = "log.time";
 
     checkOutput(format_settings, str, "2021-03-21 00:10:23.000");
@@ -157,7 +155,7 @@ TEST(RawStoreFormatTest, Exceptions)
     FormatSettings format_settings;
 
     /// JSON: unable to extract _time
-    format_settings.rawstore.rawstore_time_extraction_type = "json";
+    format_settings.rawstore.rawstore_time_extraction_type = "json_path";
     format_settings.rawstore.rawstore_time_extraction_rule = "log.time1";
     checkException(sample, format_settings, json);
 
@@ -167,7 +165,7 @@ TEST(RawStoreFormatTest, Exceptions)
     checkException(sample, format_settings, str);
 
     /// Invalid time
-    format_settings.rawstore.rawstore_time_extraction_type = "json";
+    format_settings.rawstore.rawstore_time_extraction_type = "json_path";
     format_settings.rawstore.rawstore_time_extraction_rule = "log";
     checkException(sample, format_settings, json);
 
@@ -213,7 +211,7 @@ TEST(RawStoreFormatTest, ExceptionOfConstructor)
     checkCtorException(sample, format_settings, str);
 
     /// No rule of json
-    format_settings.rawstore.rawstore_time_extraction_type = "json";
+    format_settings.rawstore.rawstore_time_extraction_type = "json_path";
     checkCtorException(sample, format_settings, json);
 
     /// Invalid rawstore_time_extraction_type
@@ -270,7 +268,7 @@ TEST(RawStoreFormatTest, InvalidBlock)
     format_settings.rawstore.rawstore_time_extraction_rule = R"(^(?P<_time>.+),\s+\[\w+\])";
     checkCtorException(sample1, format_settings, str);
 
-    format_settings.rawstore.rawstore_time_extraction_type = "json";
+    format_settings.rawstore.rawstore_time_extraction_type = "json_path";
     format_settings.rawstore.rawstore_time_extraction_rule = "log.time";
     checkCtorException(sample1, format_settings, str);
 
@@ -298,7 +296,7 @@ TEST(RawStoreFormatTest, InvalidBlock)
     format_settings.rawstore.rawstore_time_extraction_rule = R"(^(?P<_time>.+),\s+\[\w+\])";
     checkCtorException(sample2, format_settings, str);
 
-    format_settings.rawstore.rawstore_time_extraction_type = "json";
+    format_settings.rawstore.rawstore_time_extraction_type = "json_path";
     format_settings.rawstore.rawstore_time_extraction_rule = "log.time";
     checkCtorException(sample2, format_settings, str);
 
@@ -326,7 +324,7 @@ TEST(RawStoreFormatTest, InvalidBlock)
                   "\"_raw\": 65"
                   "}";
 
-    format_settings.rawstore.rawstore_time_extraction_type = "json";
+    format_settings.rawstore.rawstore_time_extraction_type = "json_path";
     format_settings.rawstore.rawstore_time_extraction_rule = "log.time";
     checkException(sample3, format_settings, str);
 }

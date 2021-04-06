@@ -32,8 +32,8 @@ std::map<String, std::map<String, String>> IngestRawStoreHandler::enrichment_sch
 
 String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /* response */, Int32 & http_status) const
 {
-    String database_name = getPathParameter("database", "");
-    String table_name = getPathParameter("rawstore", "");
+    const auto & database_name = getPathParameter("database", "");
+    const auto & table_name = getPathParameter("rawstore", "");
 
     /// Read enrichment and pass the settings to context
     if (database_name.empty() || table_name.empty())
@@ -50,9 +50,16 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
     {
         handleEnrichment(input);
     }
-    catch (Exception e)
+    catch (Exception & e)
     {
         http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+        LOG_ERROR(
+            log,
+            "ingest to database {}, rawstore {} failed with invalid request, exception = {}",
+            database_name,
+            table_name,
+            e.message(),
+            e.code());
         return jsonErrorResponse(e.message(), e.code());
     }
 
@@ -64,7 +71,7 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
     executeQuery(*in, out, /* allow_into_outfile = */ false, query_context, {});
 
     Poco::JSON::Object resp;
-    resp.set("query_id", query_context.getClientInfo().initial_query_id);
+    resp.set("query_id", query_context.getClientInfo().current_query_id);
     const auto & poll_id = query_context.getQueryStatusPollId();
     if (!poll_id.empty())
     {
@@ -103,7 +110,7 @@ void IngestRawStoreHandler::handleEnrichment(ReadBuffer & buf) const
             catch (Poco::JSON::JSONException & exception)
             {
                 LOG_ERROR(log, exception.message());
-                throw Exception("parse 'enrichment' failed, inner exception is: " + exception.message(), ErrorCodes::INCORRECT_DATA);
+                throw Exception("Invalid enrichment", ErrorCodes::INCORRECT_DATA);
             }
 
             String error;
@@ -112,19 +119,25 @@ void IngestRawStoreHandler::handleEnrichment(ReadBuffer & buf) const
 
             if (result->has("time_extraction_type") && result->has("time_extraction_rule"))
             {
-                query_context.setSetting("rawstore_time_extraction_type", result->get("time_extraction_type").toString());
-                query_context.setSetting("rawstore_time_extraction_rule", result->get("time_extraction_rule").toString());
+                const auto & type = result->get("time_extraction_type").toString();
+                if (type == "json_path" || type == "regex")
+                {
+                    query_context.setSetting("rawstore_time_extraction_type", type);
+                    query_context.setSetting("rawstore_time_extraction_rule", result->get("time_extraction_rule").toString());
+                }
+                else
+                    throw Exception(
+                        "Invalid enrichment, only 'json_path' and 'regex' are supported right now",
+                        ErrorCodes::INCORRECT_DATA);
             }
             else if (result->has("time_extraction_type") || result->has("time_extraction_rule"))
-            {
-                throw std::make_pair(
+                throw Exception(
                     "Invalid enrichment, either 'rawstore_time_extraction_type' or 'rawstore_time_extraction_rule' is missing ",
                     ErrorCodes::INCORRECT_DATA);
-            }
         }
     }
 
-    /// move position to the start of data field
+    /// Move position to the start of data field
     if (!buf.eof())
     {
         String name;

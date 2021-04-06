@@ -21,6 +21,7 @@ SRCS(
     ActionLocksManager.cpp
     ActionsDAG.cpp
     ActionsVisitor.cpp
+    AddTimeParamVisitor.cpp
     AggregateDescription.cpp
     Aggregator.cpp
     ApplyWithAliasVisitor.cpp
@@ -48,6 +49,7 @@ SRCS(
     DatabaseAndTableWithAlias.cpp
     DatabaseCatalog.cpp
     DictionaryReader.cpp
+    EliminateSubqueryVisitor.cpp
     EmbeddedDictionaries.cpp
     ExecuteScalarSubqueriesVisitor.cpp
     ExpressionActions.cpp
