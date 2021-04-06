@@ -37,7 +37,7 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(100, 500); }
 
 private:
-    void mergeMetrics(const String & key, const std::unordered_map<String, String> & headers, DiskSpace & disk_space);
+    void mergeMetrics(const String & key, const IDistributedWriteAheadLog::RecordPtr & record);
 
     /// `broadcast` broadcasts the metrics of this node
     void broadcast();
@@ -50,6 +50,8 @@ private:
     PlacementStrategyPtr strategy;
     std::unique_ptr<BackgroundSchedulePoolTaskHolder> broadcast_task;
     static constexpr size_t reschedule_internal_ms = 5000;
+    static constexpr Int64 latency_threshold_ms = 5000;
+    static constexpr Int64 in_sync_threshold_ms = 10000;
 };
 
 }

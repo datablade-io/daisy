@@ -26,6 +26,19 @@ const String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retenti
 const String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
 
 const String THIS_HOST = getFQDNOrHostName();
+
+Int64 utc_now()
+{
+    /// `milliseconds` of now
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+Int64 monotonic_now()
+{
+    /// `milliseconds` of monotonic now
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 }
 
 PlacementService & PlacementService::instance(Context & context)
@@ -64,6 +77,24 @@ std::vector<NodeMetricsPtr> PlacementService::place(
     PlacementStrategy::PlacementRequest request{total_replicas, storage_policy};
 
     std::shared_lock guard{rwlock};
+
+    for (const auto & [node_identity, node_metrics] : nodes_metrics)
+    {
+        auto in_sync_gap = monotonic_now() - node_metrics->monotonic_update_time;
+        if (in_sync_gap > in_sync_threshold_ms)
+        {
+            node_metrics->in_sync = false;
+            LOG_WARNING(log, "Node {} is out of sync. The gap is {}ms", node_identity, in_sync_gap);
+        }
+        else
+        {
+            node_metrics->in_sync = true;
+        }
+        /// Update num of tables
+        auto tables = catalog.findTableByNode(node_identity);
+        node_metrics->num_of_tables = tables.size();
+    }
+
     return strategy->qualifiedNodes(nodes_metrics, request);
 }
 
@@ -89,22 +120,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
         assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
         if (record->headers["_version"] == "1")
         {
-            DiskSpace disk_space;
-            for (size_t row = 0; row < record->block.rows(); ++row)
-            {
-                const auto & policy_name = record->block.getByName("policy_name").column->getDataAt(row);
-                const auto space = record->block.getByName("disk_space").column->get64(row);
-                disk_space.emplace(policy_name, space);
-            }
-
-            if (record->hasIdempotentKey())
-            {
-                mergeMetrics(record->idempotentKey(), record->headers, disk_space);
-            }
-            else
-            {
-                LOG_ERROR(log, "Invalid metric record, missing idempotent key");
-            }
+            mergeMetrics(record->headers["_idem"], record);
         }
         else
         {
@@ -113,38 +129,57 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
     }
 }
 
-void PlacementService::mergeMetrics(const String & key, const std::unordered_map<String, String> & headers, DiskSpace & disk_space)
+void PlacementService::mergeMetrics(const String & key, const IDistributedWriteAheadLog::RecordPtr & record)
 {
     for (const auto & item : {"_host", "_http_port", "_tcp_port"})
     {
-        if (!headers.contains(item))
+        if (!record->headers.contains(item))
         {
             LOG_ERROR(log, "Invalid metric record. '{}', '{}' not found", key, item);
             return;
         }
     }
 
-    const String & host = headers.at("_host");
-    const String & http_port = headers.at("_http_port");
-    const String & tcp_port = headers.at("_tcp_port");
+    const String & host = record->headers["_host"];
+    const String & http_port = record->headers["_http_port"];
+    const String & tcp_port = record->headers["_tcp_port"];
+    const Int64 & broadcast_time = std::stoll(record->headers["_broadcast_time"]);
+
+    DiskSpace disk_space;
+    for (size_t row = 0; row < record->block.rows(); ++row)
+    {
+        const auto & policy_name = record->block.getByName("policy_name").column->getDataAt(row);
+        const auto space = record->block.getByName("disk_space").column->get64(row);
+        LOG_TRACE(log, "Receive disk space data from {}. Storage policy={}, Disk size={}GB", key, policy_name, space);
+        disk_space.emplace(policy_name, space);
+    }
 
     std::unique_lock guard(rwlock);
 
+    NodeMetricsPtr node_metrics;
     auto iter = nodes_metrics.find(key);
     if (iter == nodes_metrics.end())
     {
         /// New node metrics.
-        NodeMetricsPtr node_metrics = std::make_shared<NodeMetrics>(host);
-        node_metrics->http_port = http_port;
-        node_metrics->tcp_port = tcp_port;
-        node_metrics->disk_space.swap(disk_space);
+        node_metrics = std::make_shared<NodeMetrics>(host);
         nodes_metrics.emplace(key, node_metrics);
-        return;
     }
-    /// Update existing node metrics.
-    iter->second->http_port = http_port;
-    iter->second->tcp_port = tcp_port;
-    iter->second->disk_space.swap(disk_space);
+    else
+    {
+        /// Existing node metrics.
+        node_metrics = iter->second;
+        auto latency = utc_now() - broadcast_time;
+        if (latency > latency_threshold_ms)
+        {
+            LOG_WARNING(log, "Node {} exceeds latency threshold. latency={}ms", key, latency);
+        }
+    }
+    node_metrics->node_identity = key;
+    node_metrics->http_port = http_port;
+    node_metrics->tcp_port = tcp_port;
+    node_metrics->disk_space.swap(disk_space);
+    node_metrics->broadcast_time = broadcast_time;
+    node_metrics->monotonic_update_time = monotonic_now();
 }
 
 void PlacementService::broadcast()
@@ -166,6 +201,7 @@ void PlacementService::broadcastTask()
 
     auto string_type = data_type_factory.get(getTypeName(TypeIndex::String));
     auto uint64_type = data_type_factory.get(getTypeName(TypeIndex::UInt64));
+
     auto policy_name_col = string_type->createColumn();
     auto disk_space_col = uint64_type->createColumn();
     auto * disk_space_col_inner = typeid_cast<ColumnUInt64 *>(disk_space_col.get());
@@ -190,6 +226,7 @@ void PlacementService::broadcastTask()
     record.headers["_host"] = THIS_HOST;
     record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
+    record.headers["_broadcast_time"] = std::to_string(utc_now());
     record.headers["_version"] = "1";
 
     const auto & result = dwal->append(record, dwal_append_ctx);
