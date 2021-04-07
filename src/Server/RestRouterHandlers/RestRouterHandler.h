@@ -183,7 +183,7 @@ private:
     virtual bool validateDelete(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
     virtual bool validatePatch(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
 
-    void setupQueryParams(const HTTPServerRequest & request) { query_parameters = std::move(std::make_unique<HTMLForm>(request)); }
+    void setupQueryParams(const HTTPServerRequest & request) { query_parameters = std::make_unique<HTMLForm>(request); }
 
 protected:
     Context & query_context;

@@ -18,16 +18,16 @@ TEST(ParseIntStrict, ParseInt)
         n = DB::parseIntStrict<Int32>(s2, 1, 2);
         EXPECT_TRUE(false);
     }
-    catch (DB::Exception & e)
+    catch (DB::Exception &)
     {
     }
 
     try
     {
         n = DB::parseIntStrict<Int32>(s2, 0, 2);
-        EXPECT_TRUE(false);
+       EXPECT_TRUE(false);
     }
-    catch (DB::Exception & e)
+    catch (DB::Exception &)
     {
     }
 
@@ -36,7 +36,7 @@ TEST(ParseIntStrict, ParseInt)
         n = DB::parseIntStrict<Int32>(s2, 2, 2);
         EXPECT_TRUE(false);
     }
-    catch (DB::Exception & e)
+    catch (DB::Exception &)
     {
     }
 
@@ -45,7 +45,7 @@ TEST(ParseIntStrict, ParseInt)
         n = DB::parseIntStrict<Int32>(s2, 2, 1);
         EXPECT_TRUE(false);
     }
-    catch (DB::Exception & e)
+    catch (DB::Exception &)
     {
     }
 
@@ -54,7 +54,7 @@ TEST(ParseIntStrict, ParseInt)
         n = DB::parseIntStrict<Int32>(s2, 0, 100);
         EXPECT_TRUE(false);
     }
-    catch (DB::Exception & e)
+    catch (DB::Exception &)
     {
     }
 }
