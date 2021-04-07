@@ -48,6 +48,7 @@ namespace ErrorCodes
     extern const int TIMEOUT_EXCEEDED;
     extern const int UNKNOWN_POLICY;
     extern const int NO_SUCH_DATA_PART;
+    extern const int CORRUPTED_DATA;
 }
 
 namespace ActionLocks
@@ -93,6 +94,10 @@ StorageMergeTree::StorageMergeTree(
     increment.set(getMaxBlockNumber());
 
     loadMutations();
+
+    /// Daisy : starts
+    locateSNFile();
+    /// Daisy : ends
 }
 
 
@@ -1498,5 +1503,77 @@ void StorageMergeTree::startBackgroundMovesIfNeeded()
     if (areBackgroundMovesNeeded())
         background_moves_executor.start();
 }
+
+/// Daisy : starts
+void StorageMergeTree::locateSNFile()
+{
+    for (const auto & [path, disk] : getRelativeDataPathsWithDisks())
+    {
+        auto sn_file_path = path + MergeTreeData::COMMITTED_SN_FILE_NAME;
+        if (disk->exists(sn_file_path))
+        {
+            if (!sn_file.first.empty())
+            {
+                LOG_ERROR(log, "Duplication of committed_sn.txt file {} and {}", fullPath(sn_file.second, sn_file.first), sn_file_path);
+                throw Exception("Multiple committed_sn.txt file", ErrorCodes::CORRUPTED_DATA);
+            }
+            sn_file = {sn_file_path, disk};
+        }
+    }
+
+    /// If there is no committed_sn.txt in any disk
+    if (sn_file.first.empty())
+    {
+        sn_file = {relative_data_path + MergeTreeData::COMMITTED_SN_FILE_NAME, getStoragePolicy()->getAnyDisk()};
+    }
+}
+
+/// Return -1 if failed to load SN
+Int64 StorageMergeTree::loadSN() const
+{
+    if (!sn_file.second->exists(sn_file.first))
+    {
+        return -1;
+    }
+
+    auto buf = sn_file.second->readFile(sn_file.first);
+    String data;
+    readText(data, *buf);
+
+    if (data.empty())
+    {
+        LOG_ERROR(log, "Empty committed_sn.txt file={}", fullPath(sn_file.second, sn_file.first));
+        return -1;
+    }
+
+    std::vector<String> version_sn;
+    boost::algorithm::split(version_sn, data, boost::is_any_of(","));
+    if (version_sn.empty())
+    {
+        LOG_ERROR(log, "Corrupted committed_sn.txt file={}", fullPath(sn_file.second, sn_file.first));
+        return -1;
+    }
+
+    if (std::stoi(version_sn[0]) != 1 || version_sn.size() != 2)
+    {
+        LOG_ERROR(log, "Corrupted committed_sn.txt file={}, version={}", fullPath(sn_file.second, sn_file.first), version_sn[0]);
+        return -1;
+    }
+
+    return std::stoll(version_sn[1]);
+}
+
+void StorageMergeTree::commitSN(Int64 seq) const
+{
+    /// This funtion is always invoked by single thread
+    auto tmpfile = sn_file.first + ".tmp";
+    sn_file.second->removeFileIfExists(tmpfile);
+
+    auto buf = sn_file.second->writeFile(tmpfile);
+    DB::writeText(fmt::format("1,{}", seq), *buf);
+    buf->sync();
+    sn_file.second->replaceFile(tmpfile, sn_file.first);
+}
+/// Daisy : ends
 
 }

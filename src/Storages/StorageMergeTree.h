@@ -224,8 +224,18 @@ private:
 
     friend class MergeTreeBlockOutputStream;
     friend class MergeTreeData;
-    friend class StorageDistributedMergeTree;
 
+    /// Daisy : starts
+    friend class StorageDistributedMergeTree;
+    void commitSN(Int64 seq) const;
+    Int64 loadSN() const;
+
+private:
+    void locateSNFile();
+
+private:
+    PathWithDisk sn_file;
+    /// Daisy : ends
 
 protected:
 

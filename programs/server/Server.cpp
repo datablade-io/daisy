@@ -192,6 +192,7 @@ int waitServersToFinish(std::vector<DB::ProtocolServerAdapter> & servers, size_t
     return current_connections;
 }
 
+/// Daisy : starts
 void initDistributedMetadataServices(DB::Context & global_context)
 {
     /// Init DWAL pool
@@ -228,6 +229,7 @@ void deinitDistributedMetadataServices(DB::Context & global_context)
     auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
     pool.shutdown();
 }
+/// Daisy : ends
 
 }
 

@@ -608,7 +608,7 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
         QueryPipeline & pipeline = res.pipeline;
         bool use_processors = pipeline.initialized();
 
-        if (const auto * insert_interpreter = typeid_cast<const InterpreterInsertQuery *>(&*interpreter))
+        if (const auto * insert_interpreter = typeid_cast<const InterpreterInsertQuery *>(interpreter.get()))
         {
             /// Save insertion table (not table function). TODO: support remote() table function.
             auto table_id = insert_interpreter->getDatabaseTable();
@@ -617,7 +617,10 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
                 context.setInsertionTable(std::move(table_id));
                 /// Daisy : starts
                 /// Setup poll ID for ingestion status querying
-                context.getQueryContext().setupQueryStatusPollId();
+                if (context.getIngestMode() == "async")
+                {
+                    context.getQueryContext().setupQueryStatusPollId();
+                }
                 /// Daisy : ends
             }
         }

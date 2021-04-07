@@ -45,7 +45,7 @@ BlocksWithShard DistributedMergeTreeBlockOutputStream::doShardBlock(const Block 
 
     BlocksWithShard blocks_with_shard;
 
-    /// filter out empty blocks
+    /// Filter out empty blocks
     for (size_t shard_idx = 0; shard_idx < sharded_blocks.size(); ++shard_idx)
     {
         if (sharded_blocks[shard_idx].rows())
@@ -105,7 +105,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
         record.partition_key = current_block.shard;
         if (!query_context.getIdempotentKey().empty())
         {
-            record.headers["_idem"] = query_context.getIdempotentKey();
+            record.setIdempotentKey(query_context.getIdempotentKey());
         }
 
         if (ingest_mode == "sync")
@@ -113,7 +113,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
             auto ret = storage.dwal->append(record, &DistributedMergeTreeBlockOutputStream::writeCallback, this, storage.dwal_append_ctx);
             if (ret != 0)
             {
-                throw Exception("failed to insert data", ret);
+                throw Exception("Failed to insert data", ret);
             }
             outstanding += 1;
         }
@@ -122,7 +122,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
             auto ret = storage.dwal->append(record, storage.dwal_append_ctx);
             if (ret.err != ErrorCodes::OK)
             {
-                throw Exception("failed to insert data", ret.err);
+                throw Exception("Failed to insert data", ret.err);
             }
         }
         else
@@ -135,7 +135,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
                 storage.dwal_append_ctx);
             if (ret != 0)
             {
-                throw Exception("failed to insert data", ret);
+                throw Exception("Failed to insert data", ret);
             }
         }
     }
@@ -166,18 +166,18 @@ void DistributedMergeTreeBlockOutputStream::flush()
         return;
     }
 
-    /// 3) inplace poll append result until either all of records have been committed or error out or timed out
+    /// 3) Inplace poll append result until either all of records have been committed or error out or timed out
     auto start = std::chrono::steady_clock::now();
     while (1)
     {
         if (committed == outstanding)
         {
-            /// successfully ingest all data
+            /// Successfully ingest all data
             return;
         }
         else if (err != ErrorCodes::OK)
         {
-            throw Exception("failed to insert data", err);
+            throw Exception("Failed to insert data", err);
         }
         else
         {
@@ -187,7 +187,7 @@ void DistributedMergeTreeBlockOutputStream::flush()
         /// 30 seconds timeout
         if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() >= 30000)
         {
-            throw Exception("failed to insert data, timed out", ErrorCodes::TIMEOUT_EXCEEDED);
+            throw Exception("Failed to insert data, timed out", ErrorCodes::TIMEOUT_EXCEEDED);
         }
     }
 }

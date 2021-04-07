@@ -58,6 +58,8 @@ public:
     using RecordPtr = std::shared_ptr<Record>;
     using RecordPtrs = std::vector<RecordPtr>;
 
+    inline const static String IDEMPOTENT_KEY = "_idem";
+
     struct Record
     {
         /// fields on the wire
@@ -73,6 +75,10 @@ public:
         RecordSequenceNumber sn = -1;
 
         bool empty() const { return block.rows() == 0; }
+
+        bool hasIdempotentKey() const { return headers.contains(IDEMPOTENT_KEY) && !headers.at(IDEMPOTENT_KEY).empty(); }
+        String & idempotentKey() { return headers.at(IDEMPOTENT_KEY); }
+        void setIdempotentKey(const String & key) { headers[IDEMPOTENT_KEY] = key; }
 
         static UInt8 ALWAYS_INLINE version(UInt64 flags)
         {

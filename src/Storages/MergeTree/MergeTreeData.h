@@ -129,6 +129,10 @@ public:
     constexpr static auto FORMAT_VERSION_FILE_NAME = "format_version.txt";
     constexpr static auto DETACHED_DIR_NAME = "detached";
 
+    /// Daisy : starts
+    constexpr static auto COMMITTED_SN_FILE_NAME = "committed_sn.txt";
+    /// Daisy : ends
+
     /// Auxiliary structure for index comparison. Keep in mind lifetime of MergeTreePartInfo.
     struct DataPartStateAndInfo
     {

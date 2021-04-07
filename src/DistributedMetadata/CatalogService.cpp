@@ -175,10 +175,11 @@ void CatalogService::append(Block && block)
 {
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
     record.partition_key = 0;
-    record.headers["_idem"] = global_context.getNodeIdentity();
+    record.setIdempotentKey(global_context.getNodeIdentity());
     record.headers["_host"] = THIS_HOST;
     record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
+    record.headers["_version"] = "1";
 
     /// FIXME : reschedule
     int retries = 3;
@@ -667,13 +668,20 @@ void CatalogService::processRecords(const IDistributedWriteAheadLog::RecordPtrs 
     {
         assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
 
-        if (record->headers.empty())
+        if (!record->hasIdempotentKey())
         {
-            LOG_WARNING(log, "Invalid catalog block, missing headers");
+            LOG_ERROR(log, "Invalid catalog block, missing identity");
             continue;
         }
 
-        auto node = std::make_shared<Node>(record->headers);
+        auto iter = record->headers.find("_version");
+        if (iter == record->headers.end() || iter->second != "1")
+        {
+            LOG_ERROR(log, "Invalid version or missing version");
+            continue;
+        }
+
+        auto node = std::make_shared<Node>(record->idempotentKey(), record->headers);
         if (!node->isValid())
         {
             LOG_WARNING(log, "Invalid catalog block, invalid headers={}", node->string());
