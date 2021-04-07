@@ -97,15 +97,17 @@ void broadcastCatalogIfNecessary(const ASTPtr & ast, Context & context)
 {
     if (auto create = ast->as<ASTCreateQuery>())
     {
-        if(!create->database.empty() && create->table.empty())
+        if (!create->database.empty() && create->table.empty())
         {
             /// Database creation
-            if(create->storage == nullptr){
+            if (create->storage == nullptr)
+            {
                 /// The database already exists
                 return;
             }
         }
-        else {
+        else
+        {
             /// Table creation
             if (context.createDistributedMergeTreeTableLocally())
             {
