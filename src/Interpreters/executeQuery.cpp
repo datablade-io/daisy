@@ -100,24 +100,18 @@ void broadcastCatalogIfNecessary(const ASTPtr & ast, Context & context)
         if (!create->database.empty() && create->table.empty())
         {
             /// Database creation
-            if (create->storage == nullptr)
-            {
-                /// The database already exists
-                return;
-            }
+            return;
         }
-        else
+
+        /// Table creation
+        if (context.createDistributedMergeTreeTableLocally())
         {
-            /// Table creation
-            if (context.createDistributedMergeTreeTableLocally())
-            {
-                CatalogService::instance(context).broadcast();
-            }
-            else if (create->storage->engine->name == "DistributedMergeTree")
-            {
-                /// The table creation is just an initiator
-                return;
-            }
+            CatalogService::instance(context).broadcast();
+        }
+        else if (create->storage->engine->name == "DistributedMergeTree")
+        {
+            /// The table creation is just an initiator
+            return;
         }
     }
 
