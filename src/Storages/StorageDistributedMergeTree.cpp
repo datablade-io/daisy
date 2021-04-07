@@ -1115,7 +1115,8 @@ IDistributedWriteAheadLog::RecordSequenceNumber StorageDistributedMergeTree::seq
 
 void StorageDistributedMergeTree::backgroundConsumer()
 {
-    /// std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    /// Sleep a while to let librdkafka to populate topic / partition metadata
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
     auto topic = getStorageID().getFullTableName();
     setThreadName("DistMergeTree");

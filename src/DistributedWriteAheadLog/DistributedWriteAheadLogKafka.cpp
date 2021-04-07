@@ -43,6 +43,8 @@ Int32 mapErrorCode(rd_kafka_resp_err_t err)
         case RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS:
             return ErrorCodes::RESOURCE_ALREADY_EXISTS;
 
+        case RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION:
+            /// fallthrough
         case RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC:
             /// fallthrough
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:

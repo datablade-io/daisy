@@ -1115,6 +1115,7 @@ void IMergeTreeDataPart::remove(bool keep_s3) const
 
             volume->getDisk()->removeSharedFileIfExists(to + "/" + DEFAULT_COMPRESSION_CODEC_FILE_NAME, keep_s3);
             volume->getDisk()->removeSharedFileIfExists(to + "/" + DELETE_ON_DESTROY_MARKER_FILE_NAME, keep_s3);
+            volume->getDisk()->removeSharedFileIfExists(to + "/sn.txt", keep_s3);
 
             volume->getDisk()->removeDirectory(to);
         }
