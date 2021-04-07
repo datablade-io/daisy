@@ -49,9 +49,9 @@ private:
     NodeMetricsContainer nodes_metrics;
     PlacementStrategyPtr strategy;
     std::unique_ptr<BackgroundSchedulePoolTaskHolder> broadcast_task;
-    static constexpr size_t reschedule_internal_ms = 5000;
-    static constexpr Int64 latency_threshold_ms = 5000;
-    static constexpr Int64 in_sync_threshold_ms = 10000;
+    static constexpr size_t RESCHEDULE_INTERNAL_MS = 5000;
+    static constexpr size_t LATENCY_THRESHOLD_MS = 5000;
+    static constexpr size_t STALENESS_THRESHOLD_MS = 10000;
 };
 
 }

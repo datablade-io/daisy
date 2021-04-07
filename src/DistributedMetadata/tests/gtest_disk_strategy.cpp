@@ -10,8 +10,8 @@ using namespace DB;
 
 TEST(PlacementService, PlaceNodesByDiskSpace)
 {
-    std::vector<int> default_disks;
-    std::vector<int> cold_disks;
+    std::vector<Int32> default_disks;
+    std::vector<Int32> cold_disks;
     for (int i = 0; i < 100; i++)
     {
         default_disks.push_back(i + 1);
@@ -78,7 +78,7 @@ TEST(PlacementService, PlaceNodesByDiskSpace)
 
 TEST(PlacementService, PlaceNodesByTableCounts)
 {
-    std::vector<int> num_of_tables;
+    std::vector<Int32> num_of_tables;
     num_of_tables.reserve(100);
     for (int i = 0; i < 100; i++)
     {

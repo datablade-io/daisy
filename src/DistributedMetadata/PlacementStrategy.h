@@ -22,16 +22,14 @@ struct NodeMetrics
     String http_port;
     String tcp_port;
 
-    UInt64 broadcast_time;
-    UInt64 monotonic_update_time;
+    UInt64 broadcast_time = 0;
+    UInt64 last_update_time = 0;
 
-    size_t num_of_tables;
+    size_t num_of_tables = 0;
 
-    bool in_sync;
+    bool staled = false;
 
-    explicit NodeMetrics(const String & host_) : host(host_), broadcast_time(0), monotonic_update_time(0), num_of_tables(0), in_sync(true)
-    {
-    }
+    explicit NodeMetrics(const String & host_) : host(host_) { }
 };
 using NodeMetricsPtr = std::shared_ptr<NodeMetrics>;
 using NodeMetricsContainer = std::unordered_map<String, NodeMetricsPtr>;
@@ -53,8 +51,7 @@ public:
 class DiskStrategy final : public PlacementStrategy
 {
 public:
-    virtual std::vector<NodeMetricsPtr>
-    qualifiedNodes(const NodeMetricsContainer & nodes_metrics, const PlacementRequest & request) override;
+    std::vector<NodeMetricsPtr> qualifiedNodes(const NodeMetricsContainer & nodes_metrics, const PlacementRequest & request) override;
 };
 
 using PlacementStrategyPtr = std::shared_ptr<PlacementStrategy>;

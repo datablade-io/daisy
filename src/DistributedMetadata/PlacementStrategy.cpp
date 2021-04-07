@@ -17,7 +17,7 @@ std::vector<NodeMetricsPtr> DiskStrategy::qualifiedNodes(const NodeMetricsContai
     for (const auto & [node, metrics] : nodes_metrics)
     {
         auto iter = metrics->disk_space.find(request.storage_policy);
-        if (metrics->in_sync && iter != metrics->disk_space.end() && iter->second > 0)
+        if (!metrics->staled && iter != metrics->disk_space.end() && iter->second > 0)
         {
             qualified_nodes.emplace_back(metrics);
         }

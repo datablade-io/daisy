@@ -27,17 +27,14 @@ const String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
 
 const String THIS_HOST = getFQDNOrHostName();
 
-Int64 utc_now()
+template <typename Clock, typename TimeScale>
+inline Int64 now()
 {
-    /// `milliseconds` of now
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<TimeScale>(Clock::now().time_since_epoch()).count();
 }
 
-Int64 monotonic_now()
-{
-    /// `milliseconds` of monotonic now
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
+inline Int64 utcNowMilliseconds() { return now<std::chrono::system_clock, std::chrono::milliseconds>(); }
+inline Int64 monotonicNowMilliseconds() { return now<std::chrono::steady_clock, std::chrono::milliseconds>(); }
 
 }
 
@@ -80,15 +77,15 @@ std::vector<NodeMetricsPtr> PlacementService::place(
 
     for (const auto & [node_identity, node_metrics] : nodes_metrics)
     {
-        auto in_sync_gap = monotonic_now() - node_metrics->monotonic_update_time;
-        if (in_sync_gap > in_sync_threshold_ms)
+        auto in_sync_gap = monotonicNowMilliseconds() - node_metrics->last_update_time;
+        if (in_sync_gap > STALENESS_THRESHOLD_MS)
         {
-            node_metrics->in_sync = false;
+            node_metrics->staled = true;
             LOG_WARNING(log, "Node {} is out of sync. The gap is {}ms", node_identity, in_sync_gap);
         }
         else
         {
-            node_metrics->in_sync = true;
+            node_metrics->staled = false;
         }
         /// Update num of tables
         auto tables = catalog.findTableByNode(node_identity);
@@ -143,7 +140,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     const String & host = record->headers["_host"];
     const String & http_port = record->headers["_http_port"];
     const String & tcp_port = record->headers["_tcp_port"];
-    const Int64 & broadcast_time = std::stoll(record->headers["_broadcast_time"]);
+    const UInt64 & broadcast_time = std::stoul(record->headers["_broadcast_time"]);
 
     DiskSpace disk_space;
     for (size_t row = 0; row < record->block.rows(); ++row)
@@ -168,10 +165,24 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     {
         /// Existing node metrics.
         node_metrics = iter->second;
-        auto latency = utc_now() - broadcast_time;
-        if (latency > latency_threshold_ms)
+        auto local_now = utcNowMilliseconds();
+        if (static_cast<UInt64>(local_now) < broadcast_time)
         {
-            LOG_WARNING(log, "Node {} exceeds latency threshold. latency={}ms", key, latency);
+            LOG_WARNING(
+                log,
+                "The broadcast time from node identity={} host={} is ahead of local time. Clocks between the machines are out of sync.",
+                key,
+                host);
+        }
+        else if (auto latency = local_now - broadcast_time; latency > LATENCY_THRESHOLD_MS)
+        {
+            LOG_WARNING(
+                log,
+                "It took {}ms to broadcast node metrics from node identity={} host={}. Probably there is some perf issue or the clocks "
+                "between the machines are out of sync too much.",
+                latency,
+                key,
+                host);
         }
     }
     node_metrics->node_identity = key;
@@ -179,7 +190,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     node_metrics->tcp_port = tcp_port;
     node_metrics->disk_space.swap(disk_space);
     node_metrics->broadcast_time = broadcast_time;
-    node_metrics->monotonic_update_time = monotonic_now();
+    node_metrics->last_update_time = monotonicNowMilliseconds();
 }
 
 void PlacementService::broadcast()
@@ -226,7 +237,7 @@ void PlacementService::broadcastTask()
     record.headers["_host"] = THIS_HOST;
     record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
-    record.headers["_broadcast_time"] = std::to_string(utc_now());
+    record.headers["_broadcast_time"] = std::to_string(utcNowMilliseconds());
     record.headers["_version"] = "1";
 
     const auto & result = dwal->append(record, dwal_append_ctx);
@@ -239,7 +250,7 @@ void PlacementService::broadcastTask()
         LOG_ERROR(log, "Failed to append node metrics block, error={}", result.err);
     }
 
-    (*broadcast_task)->scheduleAfter(reschedule_internal_ms);
+    (*broadcast_task)->scheduleAfter(RESCHEDULE_INTERNAL_MS);
 }
 
 }
