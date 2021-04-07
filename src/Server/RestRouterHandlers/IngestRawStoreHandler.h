@@ -14,9 +14,9 @@ class IngestRawStoreHandler final : public RestRouterHandler
 {
 public:
     explicit IngestRawStoreHandler(Context & query_context_) : RestRouterHandler(query_context_, "IngestRawStore") { }
-    ~IngestRawStoreHandler() override { }
+    ~IngestRawStoreHandler() override = default;
 
-    String execute(ReadBuffer & /* input */, HTTPServerResponse & /* response */, Int32 & /* http_status */) const override;
+    String execute(ReadBuffer & input, HTTPServerResponse & response, Int32 & http_status) const override;
 
 private:
     static std::map<String, std::map<String, String>> enrichment_schema;

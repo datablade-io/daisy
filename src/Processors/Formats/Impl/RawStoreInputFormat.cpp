@@ -124,7 +124,7 @@ inline size_t RawStoreInputFormat::columnIndex(const StringRef & name, size_t ke
   */
 StringRef RawStoreInputFormat::readColumnName(ReadBuffer & buf)
 {
-    if (nested_prefix_length == 0 && !buf.eof() && buf.position() + 1 < buf.buffer().end())
+    if (!buf.eof() && buf.position() + 1 < buf.buffer().end())
     {
         char * next_pos = find_first_symbols<'\\', '"'>(buf.position() + 1, buf.buffer().end());
 
@@ -138,8 +138,6 @@ StringRef RawStoreInputFormat::readColumnName(ReadBuffer & buf)
         }
     }
 
-    current_column_name.resize(nested_prefix_length);
-    readJSONStringInto(current_column_name, buf);
     return current_column_name;
 }
 
@@ -275,7 +273,7 @@ void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn &
     else
         throw Exception("_raw column is not String type", ErrorCodes::LOGICAL_ERROR);
 
-    /// to avoid extra memory copy,
+    /// To avoid extra memory copy,
     struct Membuf : std::streambuf
     {
         Membuf(char * begin, char * end) { this->setg(begin, begin, end); }
@@ -302,7 +300,7 @@ void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn &
             "extract _time from _raw failed with rule: " + format_settings.rawstore.rawstore_time_extraction_rule,
             ErrorCodes::INCORRECT_DATA);
 
-    /// wrap the time with \" to allow deserializeAsTextJSON to get the correct value
+    /// Wrap the time with \" to allow deserializeAsTextJSON to get the correct value
     String s;
     s.append("\"");
     s.append(time);
@@ -381,7 +379,6 @@ bool RawStoreInputFormat::readRow(MutableColumns & columns, RowReadExtension & e
     read_columns.assign(num_columns, false);
     seen_columns.assign(num_columns, false);
 
-    nested_prefix_length = 0;
     readJSONObject(columns);
 
     const auto & header = getPort().getHeader();
@@ -390,7 +387,7 @@ bool RawStoreInputFormat::readRow(MutableColumns & columns, RowReadExtension & e
         if (!seen_columns[i])
             header.getByPosition(i).type->insertDefaultInto(*columns[i]);
 
-    /// return info about defaults set
+    /// Return info about defaults set
     ext.read_columns = read_columns;
     return true;
 }
@@ -404,7 +401,6 @@ void RawStoreInputFormat::syncAfterError()
 void RawStoreInputFormat::resetParser()
 {
     IRowInputFormat::resetParser();
-    nested_prefix_length = 0;
     read_columns.clear();
     seen_columns.clear();
     prev_positions.clear();
