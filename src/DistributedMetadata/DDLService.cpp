@@ -453,6 +453,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
                 {
                     /// FIXME, check table engine, grammar check
                     String create_query = query + ", shard=" + std::to_string(j);
+                    target_hosts[i * replication_factor + j].setQueryParameters(Poco::URI::QueryParameters{{"query_id", query_id}});
                     auto err = doTable(create_query, target_hosts[i * replication_factor + j]);
                     if (err == ErrorCodes::UNRETRIABLE_ERROR)
                     {
@@ -555,9 +556,8 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             for (Int32 j = 0; j < shards; ++j)
             {
                 /// FIXME, check table engine, grammar check
-                payload->set("shard", j);
                 target_hosts[i * replication_factor + j].setQueryParameters(
-                    Poco::URI::QueryParameters{{"_sync", "true"}, {"shard", std::to_string(j)}});
+                    Poco::URI::QueryParameters{{"_sync", "true"}, {"shard", std::to_string(j)}, {"query_id", query_id}});
                 auto err = doTable(*payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
@@ -656,7 +656,7 @@ void DDLService::mutateTable(const Block & block, const String & method) const
 
     for (auto & uri : target_hosts)
     {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"_sync", "true"} });
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"_sync", "true"}, {"query_id", query_id}});
         doTable(payload, uri, method);
     }
 

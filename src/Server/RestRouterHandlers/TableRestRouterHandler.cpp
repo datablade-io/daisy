@@ -128,6 +128,10 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 {
     const auto & params = query_context.getQueryParameters();
     const String shard = params.contains("shard") ? params.at("shard") : String();
+    if (params.contains("query_id"))
+    {
+        query_context.setCurrentQueryId(params.at("query_id"));
+    }
     const String & query = getTableCreationSQL(payload, shard);
     if (query_context.getGlobalContext().isDistributed() && (!params.contains("_sync") || params.at("_sync") != "true"))
     {
@@ -143,6 +147,10 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
 {
     const auto & params = query_context.getQueryParameters();
+    if (params.contains("query_id"))
+    {
+        query_context.setCurrentQueryId(params.at("query_id"));
+    }
 
     if (query_context.getGlobalContext().isDistributed() && (!params.contains("_sync") || params.at("_sync") != "true"))
     {
@@ -157,6 +165,10 @@ String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*p
 String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
     const auto & params = query_context.getQueryParameters();
+    if (params.contains("query_id"))
+    {
+        query_context.setCurrentQueryId(params.at("query_id"));
+    }
 
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
@@ -198,11 +210,6 @@ String TableRestRouterHandler::processQuery(const String & query) const
     if (io.pipeline.initialized())
     {
         return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
-    }
-    else if (io.in)
-    {
-        Block block = io.getInputStream()->read();
-        return block.getColumns().at(0)->getDataAt(0).data;
     }
 
     return buildResponse();
