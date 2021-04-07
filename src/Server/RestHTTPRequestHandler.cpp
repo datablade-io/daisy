@@ -111,7 +111,6 @@ namespace
     }
 }
 
-
 void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse & response)
 {
     setThreadName("RestHandler");
@@ -122,7 +121,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     Context context = server.context();
 
     HTMLForm params(request);
-    LOG_TRACE(log, "Request Router: {}", request.getURI());
+    LOG_TRACE(log, "Request uri: {}", request.getURI());
 
     /// The user and password can be passed by headers (similar to X-Auth-*),
     /// which is used by load balancers to pass authentication information.
@@ -192,9 +191,22 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     client_info.initial_user = client_info.current_user;
     client_info.initial_address = client_info.current_address;
 
-    // Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
+    /// Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
     context.setCurrentQueryId(params.get("query_id", request.get("X-ClickHouse-Query-Id", "")));
     client_info.initial_query_id = client_info.current_query_id;
+
+    /// Setup idemopotent key if it is passed by user
+    String idem_key = request.get("X-ClickHouse-Idempotent-Id", "");
+    if (idem_key.empty())
+    {
+        idem_key = request.get("x-bdg-idempotent-id", "");
+    }
+
+    if (!idem_key.empty())
+    {
+        context.setIdempotentKey(idem_key);
+    }
+
     CurrentThread::QueryScope query_scope{context};
 
     /// Setup common response headers etc

@@ -43,6 +43,8 @@ Int32 mapErrorCode(rd_kafka_resp_err_t err)
         case RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS:
             return ErrorCodes::RESOURCE_ALREADY_EXISTS;
 
+        case RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION:
+            /// fallthrough
         case RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC:
             /// fallthrough
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
@@ -820,7 +822,7 @@ inline Int32 DistributedWriteAheadLogKafka::initConsumerTopicHandleIfNecessary(D
     if (!walctx.topic_handle)
     {
         walctx.topic_handle = initConsumerTopic(walctx);
-        /// always starts from broker stored offset.
+        /// Always starts from broker stored offset.
         if (rd_kafka_consume_start(walctx.topic_handle.get(), walctx.partition, RD_KAFKA_OFFSET_STORED) == -1)
         {
             LOG_ERROR(
@@ -832,25 +834,6 @@ inline Int32 DistributedWriteAheadLogKafka::initConsumerTopicHandleIfNecessary(D
                 rd_kafka_err2str(rd_kafka_last_error()));
 
             return mapErrorCode(rd_kafka_last_error());
-        }
-
-        if (walctx.offset >= 0)
-        {
-            /// if app specified an offset, then seek to that offset. Usually app specified offset is bigger than
-            /// the offset stored in broker. We can't call `rd_kafka_consume_start` with an absolute offset
-            /// because internally librdkafka will not trigger auto commit if an absolute offset is passed in
-            auto err = rd_kafka_seek(walctx.topic_handle.get(), walctx.partition, walctx.offset, 2000);
-            if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
-            {
-                /// when seek failed, we don't actually bother returning an error. Application shall handle message duplication
-                LOG_WARNING(
-                    log,
-                    "Failed to start consuming topic={} partition={} offset={} error={}",
-                    walctx.topic,
-                    walctx.partition,
-                    walctx.offset,
-                    rd_kafka_err2str(err));
-            }
         }
     }
 
@@ -868,66 +851,79 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
         return err;
     }
 
-    RecordPtrs records;
-    records.reserve(1000);
+    struct WrappedData
+    {
+        IDistributedWriteAheadLog::ConsumeCallback callback;
+        void * data;
 
-    Int64 current_size = 0;
-    Int64 current_rows = 0;
+        RecordPtrs records;
+        DistributedWriteAheadLogKafkaContext & ctx;
+        Poco::Logger * log;
 
-    using WrappedDataType = std::tuple<
-        IDistributedWriteAheadLog::ConsumeCallback,
-        void *,
-        RecordPtrs &,
-        Poco::Logger *,
-        DistributedWriteAheadLogKafkaContext &,
-        Int64 &,
-        Int64 &>;
+        Int64 current_size = 0;
+        Int64 current_rows = 0;
 
-    WrappedDataType wrapped_data{callback, data, records, log, walctx, current_size, current_rows};
+        WrappedData(
+            IDistributedWriteAheadLog::ConsumeCallback callback_,
+            void * data_,
+            DistributedWriteAheadLogKafkaContext & ctx_,
+            Poco::Logger * log_)
+            : callback(callback_), data(data_), ctx(ctx_), log(log_)
+        {
+            records.reserve(1000);
+        }
+    };
+
+    WrappedData wrapped_data{callback, data, walctx, log};
 
     auto kcallback = [](rd_kafka_message_t * rkmessage, void * kdata) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-        auto wrapped = static_cast<WrappedDataType *>(kdata);
-        auto & wctx = std::get<4>(*wrapped);
-        auto plog = std::get<3>(*wrapped);
+        auto wrapped = static_cast<WrappedData *>(kdata);
 
         if (likely(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR))
         {
-            auto & batches = std::get<2>(*wrapped);
-            auto & csize = std::get<5>(*wrapped);
-            auto & crows = std::get<6>(*wrapped);
+            if (rkmessage->offset < wrapped->ctx.offset)
+            {
+                /// Ignore the message which has lower offset than what clients like to have
+                return;
+            }
 
             auto record = kafkaMsgToRecord(rkmessage);
             if (likely(record))
             {
-                csize += record->block.bytes();
-                crows += record->block.rows();
-                batches.push_back(std::move(record));
+                wrapped->current_size += record->block.bytes();
+                wrapped->current_rows += record->block.rows();
+                wrapped->records.push_back(std::move(record));
                 assert(!record);
             }
             else
             {
-                LOG_WARNING(plog, "Returns nullptr record when consuming topic={} partition={}", wctx.topic, wctx.partition);
+                LOG_WARNING(
+                    wrapped->log,
+                    "Returns nullptr record when consuming topic={} partition={}",
+                    wrapped->ctx.topic,
+                    wrapped->ctx.partition);
             }
 
-            if (csize >= wctx.consume_callback_max_messages_size || crows >= wctx.consume_callback_max_rows)
+            if (wrapped->current_size >= wrapped->ctx.consume_callback_max_messages_size || wrapped->current_rows >= wrapped->ctx.consume_callback_max_rows)
             {
-                auto callback_func = std::get<0>(*wrapped);
-                if (likely(callback_func))
+                if (likely(wrapped->callback))
                 {
                     try
                     {
-                        callback_func(std::move(batches), std::get<1>(*wrapped));
-                        assert(batches.empty());
-                        csize = 0;
-                        crows = 0;
+                        auto size = wrapped->records.size();
+                        wrapped->callback(std::move(wrapped->records), wrapped->data);
+                        assert(wrapped->records.empty());
+                        wrapped->records.reserve(size);
+                        wrapped->current_size = 0;
+                        wrapped->current_rows = 0;
                     }
                     catch (...)
                     {
                         LOG_ERROR(
-                            plog,
+                            wrapped->log,
                             "Failed to consume topic={} partition={} error={}",
-                            wctx.topic,
-                            wctx.partition,
+                            wrapped->ctx.topic,
+                            wrapped->ctx.partition,
                             getCurrentExceptionMessage(true, true));
                         throw;
                     }
@@ -937,7 +933,11 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
         else
         {
             LOG_ERROR(
-                plog, "Failed to consume topic={} partition={} error={}", wctx.topic, wctx.partition, rd_kafka_message_errstr(rkmessage));
+                wrapped->log,
+                "Failed to consume topic={} partition={} error={}",
+                wrapped->ctx.topic,
+                wrapped->ctx.partition,
+                rd_kafka_message_errstr(rkmessage));
         }
     };
 
@@ -955,14 +955,14 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
     }
 
     /// The last batch
-    if (!records.empty())
+    if (!wrapped_data.records.empty())
     {
         if (likely(callback))
         {
             try
             {
-                callback(std::move(records), data);
-                assert(records.empty());
+                callback(std::move(wrapped_data.records), data);
+                assert(wrapped_data.records.empty());
             }
             catch (...)
             {
@@ -1005,6 +1005,11 @@ IDistributedWriteAheadLog::ConsumeResult DistributedWriteAheadLogKafka::consume(
             auto rkmessage = rkmessages.get()[idx];
             if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR)
             {
+                if (rkmessage->offset < walctx.offset)
+                {
+                    continue;
+                }
+
                 auto record = kafkaMsgToRecord(rkmessage);
                 if (likely(record))
                 {

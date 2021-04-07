@@ -6,6 +6,7 @@
 
 #include <Core/Block.h>
 #include <Core/ColumnWithTypeAndName.h>
+#include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeString.h>
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <IO/HTTPCommon.h>
@@ -315,15 +316,8 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     else
     {
         /// Ask placement service to do shard placement
-        std::vector<NodeMetricsPtr> qualified_nodes{placement.place(shards, replication_factor, "")};
-        std::vector<String> target_hosts;
-        target_hosts.reserve(qualified_nodes.size());
-        for (const auto & node : qualified_nodes)
-        {
-            target_hosts.push_back(node->host + ":" + node->http_port);
-        }
-
-        if (target_hosts.empty())
+        const auto & qualified_nodes = placement.place(shards, replication_factor);
+        if (qualified_nodes.empty())
         {
             LOG_ERROR(
                 log,
@@ -337,9 +331,16 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             return;
         }
 
+        std::vector<String> target_hosts;
+        target_hosts.reserve(qualified_nodes.size());
+        for (const auto & node : qualified_nodes)
+        {
+            target_hosts.push_back(node->host + ":" + node->http_port);
+        }
+
         /// We got the placement, commit the placement decision
         /// Add `hosts` column to block
-        auto string_type = std::make_shared<DataTypeString>();
+        auto string_type = DataTypeFactory::instance().get(getTypeName(TypeIndex::String));
         auto host_col = string_type->createColumn();
         String hosts{boost::algorithm::join(target_hosts, ",")};
         host_col->insertData(hosts.data(), hosts.size());

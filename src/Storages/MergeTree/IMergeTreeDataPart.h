@@ -16,6 +16,8 @@
 #include <Storages/MergeTree/MergeTreeDataPartTTLInfo.h>
 #include <Storages/MergeTree/MergeTreeIOSettings.h>
 #include <Storages/MergeTree/KeyCondition.h>
+#include <Storages/MergeTree/SequenceInfo.h>
+#include <Columns/IColumn.h>
 
 #include <Poco/Path.h>
 
@@ -304,6 +306,10 @@ public:
 
     CompressionCodecPtr default_codec;
 
+    /// Daisy : starts
+    SequenceInfoPtr seq_info;
+    /// Daisy : ends
+
     /// For data in RAM ('index')
     UInt64 getIndexSizeInBytes() const;
     UInt64 getIndexSizeInAllocatedBytes() const;
@@ -439,6 +445,10 @@ private:
     /// Found column without specific compression and return codec
     /// for this column with default parameters.
     CompressionCodecPtr detectDefaultCompressionCodec() const;
+
+    /// Daisy : starts
+    void loadSequenceInfo();
+    /// Daisy : ends
 
     mutable State state{State::Temporary};
 };

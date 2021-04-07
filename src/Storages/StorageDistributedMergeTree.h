@@ -198,14 +198,22 @@ private:
 
     static void writeCallback(const IDistributedWriteAheadLog::AppendResult & result, void * data);
 
+    IDistributedWriteAheadLog::RecordSequenceNumber sequenceNumberLoaded() const;
     void backgroundConsumer();
     void mergeBlocks(Block & lhs, Block & rhs);
+    bool dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record);
+    void addIdempotentKey(const String & key);
 
     void commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx);
 
     using SequencePair = std::pair<IDistributedWriteAheadLog::RecordSequenceNumber, IDistributedWriteAheadLog::RecordSequenceNumber>;
-    void doCommit(Block && block, const SequencePair & seq_pair, std::any & dwal_consume_ctx);
+
+    void doCommit(Block block, SequencePair seq_pair, std::shared_ptr<std::vector<String>> keys, std::any & dwal_consume_ctx);
     void commitSN(std::any & dwal_consume_ctx);
+    void commitSNLocal(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn);
+    void commitSNRemote(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn, std::any & dwal_consume_ctx);
+    void progressSequences(const SequencePair & seq);
+    void progressSequencesWithLock(const SequencePair & seq);
 
 private:
     Int32 replication_factor;
@@ -226,23 +234,32 @@ private:
     std::vector<UInt64> slot_to_shard;
     String sharding_key_column_name;
 
-    /// cached ctx for reuse
+    /// Cached ctx for reuse
     std::any dwal_append_ctx;
 
     DistributedWriteAheadLogPtr dwal;
     IngestingBlocks & ingesting_blocks;
 
-    /// forwarding storage if it is not virtual
+    /// Local checkpoint threshhold timer
+    std::chrono::time_point<std::chrono::steady_clock> last_commit_ts = std::chrono::steady_clock::now();
+
+    /// Forwarding storage if it is not virtual
     std::shared_ptr<StorageMergeTree> storage;
     std::optional<ThreadPool> tailer;
 
     ThreadPool & part_commit_pool;
 
     mutable std::mutex sns_mutex;
-    IDistributedWriteAheadLog::RecordSequenceNumber last_sn = -1;
-    IDistributedWriteAheadLog::RecordSequenceNumber prev_sn = -1;
-    std::set<SequencePair> local_committed_sns;
+    IDistributedWriteAheadLog::RecordSequenceNumber last_sn = -1; /// To be committed to DWAL
+    IDistributedWriteAheadLog::RecordSequenceNumber prev_sn = -1; /// Committed to DWAL
+    IDistributedWriteAheadLog::RecordSequenceNumber local_sn = -1; /// Committed to `committed_sn.txt`
+    std::set<SequencePair> local_committed_sns; /// Committed to `Part` folder
     std::deque<SequencePair> outstanding_sns;
+
+    /// Idempotent keys caching
+    constexpr static size_t MAX_IDEM_KEYS = 2;
+    std::deque<std::shared_ptr<String>> idem_keys;
+    std::unordered_set<StringRef, StringRefHash> idem_keys_index;
 
     // For random shard index generation
     mutable std::mutex rng_mutex;

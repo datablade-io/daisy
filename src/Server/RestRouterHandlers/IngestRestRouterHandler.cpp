@@ -14,13 +14,22 @@ namespace ErrorCodes
 
 String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse & /* response */, Int32 & http_status) const
 {
-    String database_name = getPathParameter("database", "");
-    String table_name = getPathParameter("table", "");
+    const auto & database_name = getPathParameter("database", "");
+    const auto & table_name = getPathParameter("table", "");
 
     if (database_name.empty() || table_name.empty())
     {
         http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse("Database or Table is empty", ErrorCodes::BAD_REQUEST_PARAMETER);
+    }
+
+    if (hasQueryParameter("mode"))
+    {
+        query_context.setIngestMode(getQueryParameter("mode"));
+    }
+    else
+    {
+        query_context.setIngestMode("async");
     }
 
     query_context.setSetting("output_format_parallel_formatting", false);

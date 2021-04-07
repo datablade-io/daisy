@@ -33,7 +33,7 @@ public:
         auto & factory = RestRouterFactory::instance();
 
         factory.registerRouterHandler(
-            "/dae/v1/ingest/(?P<database>\\w+)/tables/(?P<table>\\w+)",
+            "/dae/v1/ingest/(?P<database>\\w+)/tables/(?P<table>\\w+)(\\?mode=\\w+){0,1}",
             "POST",
             [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<IngestRestRouterHandler>(query_context);
@@ -78,7 +78,7 @@ public:
             /// Match request method
             if (router_handler.method.find(method) != String::npos)
             {
-                /// captures param value
+                /// Captures param value
                 re2::StringPiece matches[num_captures];
 
                 /// Match request url
