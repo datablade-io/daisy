@@ -2,6 +2,7 @@
 
 #include "CatalogService.h"
 
+#include <Common/ClockUtils.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <Interpreters/Context.h>
 #include <Storages/System/StorageSystemStoragePolicies.h>
@@ -26,16 +27,6 @@ const String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retenti
 const String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
 
 const String THIS_HOST = getFQDNOrHostName();
-
-template <typename Clock, typename TimeScale>
-inline Int64 now()
-{
-    return std::chrono::duration_cast<TimeScale>(Clock::now().time_since_epoch()).count();
-}
-
-inline Int64 utcNowMilliseconds() { return now<std::chrono::system_clock, std::chrono::milliseconds>(); }
-inline Int64 monotonicNowMilliseconds() { return now<std::chrono::steady_clock, std::chrono::milliseconds>(); }
-
 }
 
 PlacementService & PlacementService::instance(Context & context)
@@ -88,10 +79,6 @@ std::vector<NodeMetricsPtr> PlacementService::place(
                 node_metrics->host,
                 node_metrics->last_update_time,
                 staleness);
-        }
-        else
-        {
-            node_metrics->staled = false;
         }
         /// Update num of tables
         auto tables = catalog.findTableByNode(node_identity);
@@ -189,6 +176,12 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
                 latency,
                 key,
                 host);
+        }
+
+        if (node_metrics->staled)
+        {
+            node_metrics->staled = false;
+            LOG_INFO(log, "Node identity={} host={} recovered from staleness", key, host);
         }
     }
     node_metrics->node_identity = key;
