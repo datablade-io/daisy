@@ -175,7 +175,8 @@ std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts, con
     return uris;
 }
 
-Int32 DDLService::sendRequest(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method) const
+Int32 DDLService::sendRequest(
+    const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     /// One second for connect/send/receive
     ConnectionTimeouts timeouts({1, 0}, {1, 0}, {5, 0});
@@ -191,6 +192,7 @@ Int32 DDLService::sendRequest(const Poco::JSON::Object & payload, const Poco::UR
         payload.stringify(data_str_stream, 0);
         request.setContentLength(data_str_stream.str().size());
         request.setContentType("application/json");
+        request.add("X-ClickHouse-Query-Id", query_id);
 
         auto & ostr = session->sendRequest(request);
         ostr << data_str_stream.str();
@@ -246,7 +248,7 @@ Int32 DDLService::sendRequest(const Poco::JSON::Object & payload, const Poco::UR
 }
 
 /// Try indefininitely
-Int32 DDLService::doTable(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method) const
+Int32 DDLService::doTable(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     /// FIXME, retry several times and report error
     Int32 err = ErrorCodes::OK;
@@ -255,7 +257,7 @@ Int32 DDLService::doTable(const Poco::JSON::Object & payload, const Poco::URI & 
     {
         try
         {
-            err = sendRequest(payload, uri, method);
+            err = sendRequest(payload, uri, method, query_id);
             if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
             {
                 return err;
@@ -319,8 +321,8 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             {
                 /// FIXME, check table engine, grammar check
                 target_hosts[i * replication_factor + j].setQueryParameters(
-                    Poco::URI::QueryParameters{{"_sync", "true"}, {"shard", std::to_string(j)}, {"query_id", query_id}});
-                auto err = doTable(*payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST);
+                    Poco::URI::QueryParameters{{"_sync", "true"}, {"shard", std::to_string(j)}});
+                auto err = doTable(*payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST, query_id);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
                     failDDL(query_id, user, payload_str, "Unable to fulfill the request due to unrecoverable failure");
@@ -419,8 +421,8 @@ void DDLService::mutateTable(const Block & block, const String & method) const
 
     for (auto & uri : target_hosts)
     {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"_sync", "true"}, {"query_id", query_id}});
-        doTable(payload, uri, method);
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"_sync", "true"}});
+        doTable(payload, uri, method, query_id);
     }
 
     succeedDDL(query_id, user, payload_str);

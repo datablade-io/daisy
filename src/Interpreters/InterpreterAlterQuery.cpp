@@ -211,7 +211,7 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
         appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::ALTER_TABLE, log);
 
         LOG_INFO(
-            log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
+            log, "Request of altering DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
 
         /// FIXME, project tasks status
         return true;
