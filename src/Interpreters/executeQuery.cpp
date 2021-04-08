@@ -97,14 +97,9 @@ void broadcastCatalogIfNecessary(const ASTPtr & ast, Context & context)
 {
     if (auto create = ast->as<ASTCreateQuery>())
     {
-        if (context.createDistributedMergeTreeTableLocally())
+        if (!create->database.empty() && !create->table.empty() && context.createDistributedMergeTreeTableLocally())
         {
             CatalogService::instance(context).broadcast();
-        }
-        else if (create->storage->engine->name == "DistributedMergeTree")
-        {
-            /// The table creation is just an initiator
-            return;
         }
     }
 
