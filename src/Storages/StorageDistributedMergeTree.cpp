@@ -241,7 +241,11 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
             std::move(settings_),
             has_force_restore_data_flag_);
         tailer.emplace(1);
+
+        /// Load sn and setup it
         auto sn = storage->loadSN();
+        storage->setCommittedSN(sn);
+
         if (sn >= 0)
         {
             std::lock_guard lock(sns_mutex);
@@ -1005,7 +1009,7 @@ void StorageDistributedMergeTree::doCommit(
 /// Add with lock held
 inline void StorageDistributedMergeTree::addIdempotentKey(const String & key)
 {
-    if (idem_keys.size() >= MAX_IDEM_KEYS)
+    if (idem_keys.size() >= global_context.getSettingsRef().max_idempotent_ids)
     {
         auto removed = idem_keys_index.erase(*idem_keys.front());
         (void)removed;

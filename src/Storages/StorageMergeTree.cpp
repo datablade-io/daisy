@@ -1563,16 +1563,18 @@ Int64 StorageMergeTree::loadSN() const
     return std::stoll(version_sn[1]);
 }
 
-void StorageMergeTree::commitSN(Int64 seq) const
+void StorageMergeTree::commitSN(Int64 sn) const
 {
     /// This funtion is always invoked by single thread
     auto tmpfile = sn_file.first + ".tmp";
     sn_file.second->removeFileIfExists(tmpfile);
 
     auto buf = sn_file.second->writeFile(tmpfile);
-    DB::writeText(fmt::format("1,{}", seq), *buf);
+    DB::writeText(fmt::format("1,{}", sn), *buf);
     buf->sync();
     sn_file.second->replaceFile(tmpfile, sn_file.first);
+
+    setCommittedSN(sn);
 }
 /// Daisy : ends
 

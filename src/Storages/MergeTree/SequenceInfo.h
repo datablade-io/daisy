@@ -1,14 +1,14 @@
 #pragma once
 
-#include <IO/ReadHelpers.h>
-#include <IO/WriteBuffer.h>
-#include <IO/WriteHelpers.h>
-#include <Common/Exception.h>
 #include <common/types.h>
+#include <vector>
+#include <cassert>
 
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 
+namespace Poco
+{
+class Logger;
+}
 
 namespace DB
 {
@@ -66,33 +66,57 @@ namespace DB
 ///      number during part merging and the merging behavior is exactly the same among replicas. The merging machenism is documented
 ///      elsewhere
 
-struct SequenceInfo
-{
-    std::shared_ptr<std::vector<std::pair<Int64, Int64>>> sequence_ranges;
-    /// Associated idempotenent keys
-    std::shared_ptr<std::vector<String>> idempotent_keys;
+class ReadBuffer;
+class WriteBuffer;
 
+struct SequenceRange
+{
+    Int64 start_seq = -1;
+    Int64 end_seq = -1;
     Int32 part_index = -1;
     Int32 parts = -1;
 
-    std::shared_ptr<SequenceInfo> shallowClone(Int32 part_index_, Int32 parts_)
+    bool valid() const
     {
-        auto si = std::make_shared<SequenceInfo>(sequence_ranges, idempotent_keys);
-        si->part_index = part_index_;
-        si->parts = parts_;
-        return si;
+        return start_seq >= 0 && end_seq >= 0 && start_seq <= end_seq && part_index >= 0 && parts >= 1 && part_index < parts;
     }
 
-    SequenceInfo(const std::pair<Int64, Int64> & seq_range, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
-        : sequence_ranges(std::make_shared<std::vector<std::pair<Int64, Int64>>>()), idempotent_keys(idempotent_keys_)
+    SequenceRange() { }
+    SequenceRange(Int64 start_seq_, Int64 end_seq_) : start_seq(start_seq_), end_seq(end_seq_) { }
+    SequenceRange(Int32 part_index_, Int64 parts_) : part_index(part_index_), parts(parts_) { }
+    SequenceRange(Int64 start_seq_, Int64 end_seq_, Int32 part_index_, Int64 parts_) : start_seq(start_seq_), end_seq(end_seq_), part_index(part_index_), parts(parts_) { }
+
+    void write(WriteBuffer & out) const;
+};
+
+using SequenceRanges = std::vector<SequenceRange>;
+
+struct SequenceInfo
+{
+    SequenceRanges sequence_ranges;
+
+    /// Associated idempotenent keys
+    std::shared_ptr<std::vector<String>> idempotent_keys;
+
+    std::shared_ptr<SequenceInfo> shallowClone(Int32 part_index, Int32 parts) const
     {
-        sequence_ranges->push_back(seq_range);
+        assert(sequence_ranges.size() == 1);
+
+        SequenceRanges sparts{sequence_ranges};
+        sparts[0].part_index = part_index;
+        sparts[0].parts = parts;
+
+        return std::make_shared<SequenceInfo>(std::move(sparts), idempotent_keys);
     }
 
-    SequenceInfo(
-        const std::shared_ptr<std::vector<std::pair<Int64, Int64>>> & sequence_ranges_,
-        const std::shared_ptr<std::vector<String>> & idempotent_keys_)
-        : sequence_ranges(sequence_ranges_), idempotent_keys(idempotent_keys_)
+    SequenceInfo(Int64 start_seq, Int64 end_seq, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
+        : idempotent_keys(idempotent_keys_)
+    {
+        sequence_ranges.push_back(SequenceRange{start_seq, end_seq});
+    }
+
+    SequenceInfo(SequenceRanges sequence_ranges_, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
+        : sequence_ranges(std::move(sequence_ranges_)), idempotent_keys(idempotent_keys_)
     {
     }
 
@@ -104,4 +128,8 @@ struct SequenceInfo
 };
 
 using SequenceInfoPtr = std::shared_ptr<SequenceInfo>;
+
+SequenceInfoPtr
+mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, Int64 max_idempotent_keys, Poco::Logger * log);
+
 }
