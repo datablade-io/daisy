@@ -24,7 +24,6 @@
 #include <optional>
 #include <thread>
 #include <Common/RemoteHostFilter.h>
-#include <Poco/JSON/Object.h>
 
 #if !defined(ARCADIA_BUILD)
 #    include "config_core.h"
@@ -206,8 +205,6 @@ private:
     String ingest_mode;
     bool create_distributed_merge_tree_table_locally = false;
     bool mutate_distributed_merge_tree_table_locally = true;
-
-    String payload;
     /// Daisy : ends
 
     /// Record entities accessed by current query, and store this information in system.query_log.
@@ -502,7 +499,6 @@ public:
     bool isDistributed() const;
     bool createDistributedMergeTreeTableLocally () const { return create_distributed_merge_tree_table_locally; }
     bool mutateDistributedMergeTreeTableLocally () const { return mutate_distributed_merge_tree_table_locally; }
-    const String & getPayload() const { return payload; }
     ThreadPool & getPartCommitPool() const;
     /// Daisy : ends
 
@@ -522,7 +518,6 @@ public:
     /// Kinda hacky
     void setCreateDistributedMergeTreeTableLocally (bool distributed) { create_distributed_merge_tree_table_locally = distributed; }
     void setMutateDistributedMergeTreeTableLocally (bool distributed) { mutate_distributed_merge_tree_table_locally = distributed; }
-    void setPayload (const String payload_) { payload = payload_; }
     /// Daisy : ends
 
     void killCurrentQuery();

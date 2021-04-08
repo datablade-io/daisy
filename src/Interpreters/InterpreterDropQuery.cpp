@@ -1,11 +1,7 @@
 #include <Poco/File.h>
 
 #include <Access/AccessRightsElement.h>
-#include <Columns/ColumnsNumber.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <Databases/DatabaseReplicated.h>
-#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
-#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 #include <Interpreters/BlockUtils.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ExternalDictionariesLoader.h>
@@ -17,6 +13,7 @@
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Common/typeid_cast.h>
+#include <DistributedMetadata/CatalogService.h>
 
 
 #if !defined(ARCADIA_BUILD)
@@ -89,11 +86,29 @@ void InterpreterDropQuery::waitForTableToBeActuallyDroppedOrDetached(const ASTDr
         db->waitDetachedTableNotInUse(uuid_to_wait);
 }
 
-BlockIO InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query, bool & handled)
+bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
 {
-    if(context.isDistributed() && !context.mutateDistributedMergeTreeTableLocally())
+    if (!context.isDistributed())
     {
-        assert(!context.getCurrentQueryId().empty());
+        return false;
+    }
+
+    if (!context.getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        /// context.setMutateDistributedMergeTreeTableLocally(false);
+        return false;
+    }
+
+    if(!context.mutateDistributedMergeTreeTableLocally())
+    {
+        const auto & catalog_service = CatalogService::instance(context);
+        auto tables = catalog_service.findTableByName(query.database, query.table);
+        if (tables.empty() || tables[0]->engine !="DistributedMergeTree")
+        {
+            return false;
+        }
 
         auto * log = &Poco::Logger::get("InterpreterDropQuery");
 
@@ -101,11 +116,11 @@ BlockIO InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query,
         LOG_INFO(log, "Drop DistributedMergeTree query={} query_id={}", query_str, context.getCurrentQueryId());
 
         std::vector<std::pair<String, String>> string_cols = {
-            std::make_pair("ddl", query_str),
-            std::make_pair("database", query.database),
-            std::make_pair("table", query.table),
-            std::make_pair("query_id", context.getCurrentQueryId()),
-            std::make_pair("user", context.getUserName()),
+            {"payload", context.getQueryParameters().at("_payload")},
+            {"database", query.database},
+            {"table", query.table},
+            {"query_id", context.getCurrentQueryId()},
+            {"user", context.getUserName()}
         };
 
         std::vector<std::pair<String, Int32>> int32_cols;
@@ -117,18 +132,19 @@ BlockIO InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query,
         };
 
         Block block = buildBlock(string_cols, int32_cols, uint64_cols);
-        /// Schema: (ddl,  database, table, timestamp, query_id, user)
+        /// Schema: (payload, database, table, timestamp, query_id, user)
 
-        append(std::move(block), context, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
+        appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
 
         LOG_INFO(
             log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
 
+        context.setMutateDistributedMergeTreeTableLocally(true);
+
         /// FIXME, project tasks status
-        handled = true;
-        return {};
+        return true;
     }
-    return {};
+    return false;
 }
 
 BlockIO InterpreterDropQuery::executeToTable(const ASTDropQuery & query)
@@ -136,11 +152,9 @@ BlockIO InterpreterDropQuery::executeToTable(const ASTDropQuery & query)
     DatabasePtr database;
 
     /// Daisy : start
-    bool handled = false;
-    auto res_dis = deleteTableDistributed(query, handled);
-    if (handled)
+    if (deleteTableDistributed(query))
     {
-        return res_dis;
+        return {};
     }
     /// Daisy : end
 

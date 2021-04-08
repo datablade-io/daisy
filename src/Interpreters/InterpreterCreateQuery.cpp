@@ -30,8 +30,6 @@
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Storages/StorageDistributedMergeTree.h>
 
-#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
-
 #include <Interpreters/Context.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>
 #include <Interpreters/BlockUtils.h>
@@ -793,9 +791,8 @@ void InterpreterCreateQuery::assertOrSetUUID(ASTCreateQuery & create, const Data
 }
 
 /// Daisy : starts
-BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_database, ASTCreateQuery & create, bool & handled)
+bool InterpreterCreateQuery::createTableDistributed(const String & current_database, ASTCreateQuery & create)
 {
-    handled = false;
     if (!context.isDistributed())
     {
         if (create.storage->engine->name == "DistributedMergeTree")
@@ -803,13 +800,13 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
             throw Exception(
                     "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
         }
-        return {};
+        return false;
     }
 
     if (create.storage == nullptr || create.storage->engine->name != "DistributedMergeTree")
     {
         /// We only support `DistributedMergeTree` table engine for now
-        return {};
+        return false;
     }
 
     assert(!context.getCurrentQueryId().empty());
@@ -836,15 +833,22 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
         /// HACKY
         context.setCreateDistributedMergeTreeTableLocally(true);
 
-        return {};
+        return false;
     }
 
     auto query = queryToString(create);
     LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, context.getCurrentQueryId());
 
+
+    if(!context.getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        return false;
+    }
+
     std::vector<std::pair<String, String>> string_cols
-        = {{"ddl", query},
-           {"payload", context.getPayload()},
+        = {{"payload", context.getQueryParameters().at("_payload")},
            {"database", current_database},
            {"table", create.table},
            {"query_id", context.getCurrentQueryId()},
@@ -863,15 +867,14 @@ BlockIO InterpreterCreateQuery::createTableDistributed(const String & current_da
     };
 
     Block  block = buildBlock(string_cols, int32_cols, uint64_cols);
-    /// Schema: (ddl, payload,  database, table, timestamp, query_id, user, shards, replication_factor)
+    /// Schema: (payload,  database, table, timestamp, query_id, user, shards, replication_factor)
 
-    append(std::move(block), context, IDistributedWriteAheadLog::OpCode::CREATE_TABLE, log);
+    appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::CREATE_TABLE, log);
 
     LOG_INFO(log, "Request of creating DistributedMergeTree query={} query_id={} has been accepted", query, context.getCurrentQueryId());
 
     /// FIXME, project tasks status
-    handled = true;
-    return {};
+    return true;
 }
 /// Daisy : ends
 
@@ -886,11 +889,9 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
     auto database_name = create.database.empty() ? current_database : create.database;
 
     /// Daisy : start
-    bool handled = false;
-    auto res = createTableDistributed(database_name, create, handled);
-    if (handled)
+    if (createTableDistributed(database_name, create))
     {
-        return res;
+        return {};
     }
     /// Daisy : end
 

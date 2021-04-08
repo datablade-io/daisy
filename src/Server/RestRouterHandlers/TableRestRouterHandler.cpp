@@ -5,7 +5,6 @@
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeString.h>
 #include <Databases/DatabaseFactory.h>
-#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <Interpreters/executeQuery.h>
 
 #include <boost/algorithm/string/join.hpp>
@@ -126,19 +125,15 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
 
 String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
-    const auto & params = query_context.getQueryParameters();
-    const String shard = params.contains("shard") ? params.at("shard") : String();
-    if (params.contains("query_id"))
-    {
-        query_context.setCurrentQueryId(params.at("query_id"));
-    }
+    const String shard = getQueryParameter("shard");
     const String & query = getTableCreationSQL(payload, shard);
-    if (query_context.getGlobalContext().isDistributed() && (!params.contains("_sync") || params.at("_sync") != "true"))
+
+    if (query_context.getGlobalContext().isDistributed() && getQueryParameter("_sync") != "true")
     {
         std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         payload->stringify(payload_str_stream, 0);
         const String & payload_str = payload_str_stream.str();
-        query_context.setPayload(payload_str);
+        query_context.setQueryParameter("_payload", payload_str);
     }
 
     return processQuery(query);
@@ -146,15 +141,10 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
 {
-    const auto & params = query_context.getQueryParameters();
-    if (params.contains("query_id"))
-    {
-        query_context.setCurrentQueryId(params.at("query_id"));
-    }
-
-    if (query_context.getGlobalContext().isDistributed() && (!params.contains("_sync") || params.at("_sync") != "true"))
+    if (query_context.getGlobalContext().isDistributed() && getQueryParameter("_sync") != "true")
     {
         query_context.setMutateDistributedMergeTreeTableLocally(false);
+        query_context.setQueryParameter("_payload", "{}");
     }
 
     const String & database_name = getPathParameter("database");
@@ -164,12 +154,6 @@ String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*p
 
 String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
-    const auto & params = query_context.getQueryParameters();
-    if (params.contains("query_id"))
-    {
-        query_context.setCurrentQueryId(params.at("query_id"));
-    }
-
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
 
@@ -180,14 +164,14 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
 
     const String & query = boost::algorithm::join(create_segments, " ");
 
-    if (query_context.getGlobalContext().isDistributed() && (!params.contains("_sync") || params.at("_sync") != "true"))
+    if (query_context.getGlobalContext().isDistributed() && getQueryParameter("_sync") != "true")
     {
         query_context.setMutateDistributedMergeTreeTableLocally(false);
 
         std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         payload->stringify(payload_str_stream, 0);
         const String & payload_str = payload_str_stream.str();
-        query_context.setPayload(payload_str);
+        query_context.setQueryParameter("_payload", payload_str);
     }
 
     return processQuery(query);

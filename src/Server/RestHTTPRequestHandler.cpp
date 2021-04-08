@@ -208,18 +208,6 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     }
 
     CurrentThread::QueryScope query_scope{context};
-    if (params.has("_sync"))
-    {
-        context.setQueryParameter("_sync", params.get("_sync"));
-    }
-    if (params.has("shard"))
-    {
-        context.setQueryParameter("shard", params.get("shard"));
-    }
-    if (params.has("query_id"))
-    {
-        context.setQueryParameter("query_id", params.get("query_id"));
-    }
     /// Setup common response headers etc
     response.setContentType("application/json; charset=UTF-8");
     response.add("X-ClickHouse-Query-Id", context.getCurrentQueryId());

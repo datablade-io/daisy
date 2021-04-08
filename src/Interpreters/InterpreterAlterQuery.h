@@ -30,12 +30,11 @@ private:
     AccessRightsElements getRequiredAccess() const;
 
     ASTPtr query_ptr;
-    /// daisy start
-    /// const Context & context;
+    /// Daisy : start
     Context & context;
 
-    BlockIO alterTableDistributed(const ASTAlterQuery & query, bool & handled);
-    /// daisy end
+    bool alterTableDistributed(const ASTAlterQuery & query);
+    /// Daisy : end
 };
 
 }
