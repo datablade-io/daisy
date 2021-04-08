@@ -77,11 +77,17 @@ std::vector<NodeMetricsPtr> PlacementService::place(
 
     for (const auto & [node_identity, node_metrics] : nodes_metrics)
     {
-        auto in_sync_gap = monotonicNowMilliseconds() - node_metrics->last_update_time;
-        if (in_sync_gap > STALENESS_THRESHOLD_MS)
+        auto staleness = monotonicNowMilliseconds() - node_metrics->last_update_time;
+        if (staleness > STALENESS_THRESHOLD_MS)
         {
             node_metrics->staled = true;
-            LOG_WARNING(log, "Node {} is out of sync. The gap is {}ms", node_identity, in_sync_gap);
+            LOG_WARNING(
+                log,
+                "Node identity={} host={} is staled. Didn't hear from it since last update={} for {}ms",
+                node_identity,
+                node_metrics->host,
+                node_metrics->last_update_time,
+                staleness);
         }
         else
         {
@@ -140,7 +146,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     const String & host = record->headers["_host"];
     const String & http_port = record->headers["_http_port"];
     const String & tcp_port = record->headers["_tcp_port"];
-    const UInt64 & broadcast_time = std::stoul(record->headers["_broadcast_time"]);
+    const auto broadcast_time = std::stoll(record->headers["_broadcast_time"]);
 
     DiskSpace disk_space;
     for (size_t row = 0; row < record->block.rows(); ++row)
@@ -165,8 +171,8 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     {
         /// Existing node metrics.
         node_metrics = iter->second;
-        auto local_now = utcNowMilliseconds();
-        if (static_cast<UInt64>(local_now) < broadcast_time)
+        auto utc_now = utcNowMilliseconds();
+        if (utc_now < broadcast_time)
         {
             LOG_WARNING(
                 log,
@@ -174,7 +180,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
                 key,
                 host);
         }
-        else if (auto latency = local_now - broadcast_time; latency > LATENCY_THRESHOLD_MS)
+        else if (auto latency = utc_now - broadcast_time; latency > LATENCY_THRESHOLD_MS)
         {
             LOG_WARNING(
                 log,
@@ -189,7 +195,6 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     node_metrics->http_port = http_port;
     node_metrics->tcp_port = tcp_port;
     node_metrics->disk_space.swap(disk_space);
-    node_metrics->broadcast_time = broadcast_time;
     node_metrics->last_update_time = monotonicNowMilliseconds();
 }
 

@@ -50,8 +50,8 @@ private:
     PlacementStrategyPtr strategy;
     std::unique_ptr<BackgroundSchedulePoolTaskHolder> broadcast_task;
     static constexpr size_t RESCHEDULE_INTERNAL_MS = 5000;
-    static constexpr size_t LATENCY_THRESHOLD_MS = 5000;
-    static constexpr size_t STALENESS_THRESHOLD_MS = 10000;
+    static constexpr Int64 LATENCY_THRESHOLD_MS = 5000;
+    static constexpr Int64 STALENESS_THRESHOLD_MS = 10000;
 };
 
 }

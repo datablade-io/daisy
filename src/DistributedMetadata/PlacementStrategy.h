@@ -22,10 +22,8 @@ struct NodeMetrics
     String http_port;
     String tcp_port;
 
-    UInt64 broadcast_time = 0;
-    UInt64 last_update_time = 0;
-
-    size_t num_of_tables = 0;
+    Int64 last_update_time = -1;
+    Int64 num_of_tables = -1;
 
     bool staled = false;
 
