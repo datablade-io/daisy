@@ -220,16 +220,16 @@ String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & pay
 
 String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const
 {
-    auto partition_by_granularity = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : "M";
+    const auto & partition_by_granularity = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : "M";
     return fmt::format(granularity_func_mapping[partition_by_granularity], time_column);
 }
 
 String TableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const
 {
-    auto order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "D";
-    auto default_order_expr = fmt::format(granularity_func_mapping[order_by_granularity], getTimeColumn(payload));
+    const auto & order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "D";
+    const auto & default_order_expr = fmt::format(granularity_func_mapping[order_by_granularity], getTimeColumn(payload));
+    const auto & order_by_expression = payload->has("order_by_expression") ? payload->get("order_by_expression").toString() : String();
 
-    auto order_by_expression = payload->has("order_by_expression") ? payload->get("order_by_expression").toString() : String();
     if (order_by_expression.empty())
     {
         return default_order_expr;
