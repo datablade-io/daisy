@@ -204,7 +204,7 @@ private:
     String idempotent_key;
     String ingest_mode;
     bool create_distributed_merge_tree_table_locally = false;
-    bool mutate_distributed_merge_tree_table_locally = true;
+    bool distributed_ddl_operation = false;
     /// Daisy : ends
 
     /// Record entities accessed by current query, and store this information in system.query_log.
@@ -497,8 +497,7 @@ public:
     const String & getIdempotentKey() const { return idempotent_key; }
     const String & getIngestMode() const { return ingest_mode; }
     bool isDistributed() const;
-    bool createDistributedMergeTreeTableLocally () const { return create_distributed_merge_tree_table_locally; }
-    bool mutateDistributedMergeTreeTableLocally () const { return mutate_distributed_merge_tree_table_locally; }
+    bool isDistributedDDLOperation() const { return distributed_ddl_operation;}
     ThreadPool & getPartCommitPool() const;
     /// Daisy : ends
 
@@ -516,8 +515,7 @@ public:
     void setIdempotentKey(const String & idempotent_key_) { idempotent_key = idempotent_key_; }
     void setIngestMode(const String & ingest_mode_) { ingest_mode = ingest_mode_; }
     /// Kinda hacky
-    void setCreateDistributedMergeTreeTableLocally (bool distributed) { create_distributed_merge_tree_table_locally = distributed; }
-    void setMutateDistributedMergeTreeTableLocally (bool distributed) { mutate_distributed_merge_tree_table_locally = distributed; }
+    void setDistributedDDLOperation(bool distributed) { distributed_ddl_operation = distributed; }
     /// Daisy : ends
 
     void killCurrentQuery();

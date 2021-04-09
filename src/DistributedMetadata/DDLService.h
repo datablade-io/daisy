@@ -34,8 +34,8 @@ private:
 
     std::vector<Poco::URI> toURIs(const std::vector<String> & hosts, const String & path) const;
 
-    Int32 sendRequest(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
-    Int32 doTable(const Poco::JSON::Object & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
+    Int32 sendRequest(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
+    Int32 doTable(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
     void createTable(IDistributedWriteAheadLog::RecordPtr record);
     void mutateTable(const Block & bock, const String & method) const;
     void commit(Int64 last_sn);

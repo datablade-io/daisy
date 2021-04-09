@@ -830,8 +830,6 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
     if (storage->currentShard() >= 0)
     {
         LOG_INFO(log, "Local DistributedMergeTree table creation with shard assigned");
-        /// HACKY
-        context.setCreateDistributedMergeTreeTableLocally(true);
 
         return false;
     }
@@ -844,6 +842,12 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
     {
         /// FIXME:
         /// Build json payload here from SQL statement
+        /// context.setDistributedDDLOperation(true);
+        return false;
+    }
+
+    if (!context.isDistributedDDLOperation())
+    {
         return false;
     }
 

@@ -170,16 +170,22 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
     {
         /// FIXME:
         /// Build json payload here from SQL statement
-        /// context.setMutateDistributedMergeTreeTableLocally(false);
+        /// context.setDistributedDDLOperation(true);
         return false;
     }
 
-    if (!context.mutateDistributedMergeTreeTableLocally())
+    if (context.isDistributedDDLOperation())
     {
         const auto & catalog_service = CatalogService::instance(context);
         auto tables = catalog_service.findTableByName(query.database, query.table);
-        if (tables.empty() || tables[0]->engine != "DistributedMergeTree")
+        if (tables.empty())
         {
+            throw Exception(fmt::format("Table {}.{} does not exist.", query.database, query.table), ErrorCodes::UNKNOWN_TABLE);
+        }
+
+        if (tables[0]->engine != "DistributedMergeTree")
+        {
+            /// FIXME: We only support `DistributedMergeTree` table engine for now
             return false;
         }
 

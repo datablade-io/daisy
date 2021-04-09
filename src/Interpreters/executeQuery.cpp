@@ -97,7 +97,7 @@ void broadcastCatalogIfNecessary(const ASTPtr & ast, Context & context)
 {
     if (auto create = ast->as<ASTCreateQuery>())
     {
-        if (!create->database.empty() && !create->table.empty() && context.createDistributedMergeTreeTableLocally())
+        if (!create->database.empty() && !create->table.empty() && !context.isDistributedDDLOperation())
         {
             CatalogService::instance(context).broadcast();
         }
