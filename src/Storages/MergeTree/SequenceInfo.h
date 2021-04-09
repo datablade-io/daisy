@@ -78,7 +78,8 @@ struct SequenceRange
 
     bool valid() const
     {
-        return start_seq >= 0 && end_seq >= 0 && start_seq <= end_seq && part_index >= 0 && parts >= 1 && part_index < parts;
+        return start_seq >= 0 && end_seq >= 0 && start_seq <= end_seq
+            && ((part_index >= 0 && parts >= 1 && part_index < parts) || (part_index == 0 && parts == 0));
     }
 
     SequenceRange() { }

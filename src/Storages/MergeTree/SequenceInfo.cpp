@@ -188,7 +188,7 @@ mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempot
 
     for (auto iter = sequences.rbegin(); iter != sequences.rend(); ++iter)
     {
-	const auto & seq_info = **iter;
+        const auto & seq_info = **iter;
         if (seq_info.idempotent_keys)
         {
             key_count += seq_info.idempotent_keys->size();
@@ -209,10 +209,15 @@ mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempot
         --start_iter;
     }
 
+    if (key_count == 0)
+    {
+       return nullptr;
+    }
+
     auto idempotent_keys = std::make_shared<std::vector<String>>();
     for (; start_iter != sequences.rbegin(); --start_iter)
     {
-	auto & seq_info = **start_iter;
+        auto & seq_info = **start_iter;
 
         if (start_pos > 0)
         {
@@ -242,8 +247,13 @@ mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempot
 
     if ((*sequences.rbegin())->idempotent_keys)
     {
+        size_t count = 0;
         for (auto & key : *(*sequences.rbegin())->idempotent_keys)
         {
+            if (count++ < start_pos)
+            {
+                continue;
+            }
             idempotent_keys->push_back(std::move(key));
             assert(key.empty());
         }
@@ -355,6 +365,7 @@ std::shared_ptr<SequenceInfo> SequenceInfo::read(ReadBuffer & in)
     return std::make_shared<SequenceInfo>(std::move(sequence_ranges), idempotent_keys);
 }
 
+/// Data in parameter `sequences` will be modified (reordered / moved) when merging
 SequenceInfoPtr
 mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, UInt64 max_idempotent_keys, Poco::Logger * log)
 {
