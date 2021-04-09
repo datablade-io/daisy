@@ -257,7 +257,6 @@ private:
     std::deque<SequencePair> outstanding_sns;
 
     /// Idempotent keys caching
-    constexpr static size_t MAX_IDEM_KEYS = 2;
     std::deque<std::shared_ptr<String>> idem_keys;
     std::unordered_set<StringRef, StringRefHash> idem_keys_index;
 

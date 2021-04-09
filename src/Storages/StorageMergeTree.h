@@ -227,7 +227,7 @@ private:
 
     /// Daisy : starts
     friend class StorageDistributedMergeTree;
-    void commitSN(Int64 seq) const;
+    void commitSN(Int64 sn);
     Int64 loadSN() const;
 
 private:

@@ -241,7 +241,11 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
             std::move(settings_),
             has_force_restore_data_flag_);
         tailer.emplace(1);
+
+        /// Load sn and setup it
         auto sn = storage->loadSN();
+        storage->setCommittedSN(sn);
+
         if (sn >= 0)
         {
             std::lock_guard lock(sns_mutex);
@@ -941,6 +945,7 @@ void StorageDistributedMergeTree::doCommit(
 {
     {
         std::lock_guard lock(sns_mutex);
+        assert(seq_pair.first > last_sn);
         /// We are sequentially consuming records, so seq_pair is always increasing
         outstanding_sns.push_back(seq_pair);
 
@@ -972,7 +977,7 @@ void StorageDistributedMergeTree::doCommit(
 
                 /// Setup sequence numbers to persistent them to file system
                 static_cast<MergeTreeBlockOutputStream *>(output_stream.get())
-                    ->setSequenceInfo(std::make_shared<SequenceInfo>(moved_seq, moved_keys));
+                    ->setSequenceInfo(std::make_shared<SequenceInfo>(moved_seq.first, moved_seq.second, moved_keys));
 
                 output_stream->writePrefix();
                 output_stream->write(moved_block);
@@ -1005,7 +1010,7 @@ void StorageDistributedMergeTree::doCommit(
 /// Add with lock held
 inline void StorageDistributedMergeTree::addIdempotentKey(const String & key)
 {
-    if (idem_keys.size() >= MAX_IDEM_KEYS)
+    if (idem_keys.size() >= global_context.getSettingsRef().max_idempotent_ids)
     {
         auto removed = idem_keys_index.erase(*idem_keys.front());
         (void)removed;
@@ -1131,7 +1136,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
 
     LOG_INFO(
         log,
-        "Start consuming records from shard={} sequence={} distributed_flush_threshhold_ms={} "
+        "Start consuming records from shard={} sn={} distributed_flush_threshhold_ms={} "
         "distributed_flush_threshhold_count={} "
         "distributed_flush_threshhold_size={}",
         shard,
