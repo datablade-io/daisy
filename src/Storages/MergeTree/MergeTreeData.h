@@ -813,6 +813,8 @@ public:
 
     /// Daisy : starts
     bool isVirtual() const { return relative_data_path.empty(); }
+    virtual Int64 committedSN() const { return committed_sn; }
+    virtual void setCommittedSN(Int64 committed_sn_) { committed_sn = committed_sn_; }
     /// Daisy : ends
 
 protected:
@@ -1059,6 +1061,10 @@ private:
 
     // Get partition matcher for FREEZE / UNFREEZE queries.
     MatcherFn getPartitionMatcher(const ASTPtr & partition, ContextPtr context) const;
+
+    /// Daisy : starts
+    std::atomic<Int64> committed_sn = -1;
+    /// Daisy : ends
 };
 
 /// RAII struct to record big parts that are submerging or emerging.

@@ -543,7 +543,7 @@ class IColumn;
     M(Bool, cross_to_inner_join_rewrite, true, "Use inner join instead of comma/cross join if possible", 0) \
     M(Bool, disable_distributed, false, "If setting is enabled and distributed mode will be disabled for debug and test only", 0) \
     M(UInt64, part_commit_pool_size, 8, "Total shared thread pool size for building and committing parts for DistributedMergeTree table engine", 0) \
-
+    M(UInt64, max_idempotent_ids, 1000, "Maximum idempotent IDs to keep in memory and on disk for idempotent data ingestion", 0) \
 
 // End of FORMAT_FACTORY_SETTINGS
 // Please add settings non-related to formats into the COMMON_SETTINGS above.
