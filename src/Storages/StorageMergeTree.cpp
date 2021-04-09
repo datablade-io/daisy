@@ -1537,30 +1537,11 @@ Int64 StorageMergeTree::loadSN() const
     }
 
     auto buf = sn_file.second->readFile(sn_file.first);
-    String data;
-    readText(data, *buf);
+    assertString("1\n", *buf);
 
-    if (data.empty())
-    {
-        LOG_ERROR(log, "Empty committed_sn.txt file={}", fullPath(sn_file.second, sn_file.first));
-        return -1;
-    }
-
-    std::vector<String> version_sn;
-    boost::algorithm::split(version_sn, data, boost::is_any_of(","));
-    if (version_sn.empty())
-    {
-        LOG_ERROR(log, "Corrupted committed_sn.txt file={}", fullPath(sn_file.second, sn_file.first));
-        return -1;
-    }
-
-    if (std::stoi(version_sn[0]) != 1 || version_sn.size() != 2)
-    {
-        LOG_ERROR(log, "Corrupted committed_sn.txt file={}, version={}", fullPath(sn_file.second, sn_file.first), version_sn[0]);
-        return -1;
-    }
-
-    return std::stoll(version_sn[1]);
+    Int64 sn = -1;;
+    DB::readText(sn, *buf);
+    return sn;
 }
 
 void StorageMergeTree::commitSN(Int64 sn)
@@ -1570,7 +1551,7 @@ void StorageMergeTree::commitSN(Int64 sn)
     sn_file.second->removeFileIfExists(tmpfile);
 
     auto buf = sn_file.second->writeFile(tmpfile);
-    DB::writeText(fmt::format("1,{}", sn), *buf);
+    DB::writeText(fmt::format("1\n{}", sn), *buf);
     buf->sync();
     sn_file.second->replaceFile(tmpfile, sn_file.first);
 

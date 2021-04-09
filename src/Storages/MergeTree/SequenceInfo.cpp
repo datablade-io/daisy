@@ -39,10 +39,10 @@ inline SequenceRange parseSequenceRange(const String & s, String::size_type lpos
         switch (i)
         {
             case 0:
-                seq_range.start_seq = parseIntStrict<Int64>(s, lpos, comma_pos);
+                seq_range.start_sn = parseIntStrict<Int64>(s, lpos, comma_pos);
                 break;
             case 1:
-                seq_range.end_seq = parseIntStrict<Int64>(s, lpos, comma_pos);
+                seq_range.end_sn  = parseIntStrict<Int64>(s, lpos, comma_pos);
                 break;
             case 2:
                 seq_range.part_index = parseIntStrict<Int32>(s, lpos, comma_pos);
@@ -131,10 +131,11 @@ std::shared_ptr<std::vector<String>> readIdempotentKeys(ReadBuffer & in)
 SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequences, Int64 last_committed_sn, Poco::Logger * log)
 {
     SequenceRanges merged;
-
     SequenceRange last_seq_range;
 
     size_t total_ranges = 0;
+    Int64 min_sn = -1;
+    Int64 max_sn = -1;
 
     for (auto & seq_info : sequences)
     {
@@ -145,6 +146,16 @@ SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequence
         {
             assert(next_seq_range.valid());
 
+            if (min_sn == -1)
+            {
+                min_sn = next_seq_range.start_sn;
+            }
+
+            if (next_seq_range.end_sn > max_sn)
+            {
+                max_sn = next_seq_range.end_sn;
+            }
+
             if (!last_seq_range.valid())
             {
                 last_seq_range = next_seq_range;
@@ -152,7 +163,7 @@ SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequence
             else
             {
                 /// There shall be no cases where there is sequence overlapping in a partition
-                assert(last_seq_range.end_seq < next_seq_range.start_seq);
+                assert(last_seq_range.end_sn < next_seq_range.start_sn);
                 last_seq_range = next_seq_range;
             }
 
@@ -162,7 +173,7 @@ SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequence
             /// 3. The Block whish has the missing sequence is distributed to a different partition
             /// Only for sequence ranges which are beyond the `last_committed_sn`, we need merge them and
             /// keep them around
-            if (next_seq_range.end_seq > last_committed_sn)
+            if (next_seq_range.end_sn > last_committed_sn)
             {
                 /// We can still merge, because `last_committed_sn` confirms that
                 /// all blocks with sequence IDs less than it are committed
@@ -173,7 +184,14 @@ SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequence
 
     if (log)
     {
-        LOG_DEBUG(log, "Merge {} sequence ranges to {}", total_ranges, merged.size());
+        LOG_DEBUG(
+            log,
+            "Merge {} sequence ranges to {}, last_committed_sn={} min_sn={} max_sn={}",
+            total_ranges,
+            merged.size(),
+            last_committed_sn,
+            min_sn,
+            max_sn);
     }
 
     return merged;
@@ -261,7 +279,7 @@ mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempot
 
     if (log)
     {
-        LOG_DEBUG(log, "Merge {} idempotent keys to {}", key_count, idempotent_keys->size());
+        LOG_DEBUG(log, "Merge {} idempotent keys to {}, max_idempotent_keys={}", key_count, idempotent_keys->size(), max_idempotent_keys);
     }
 
     return idempotent_keys;
@@ -270,14 +288,14 @@ mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempot
 
 bool operator==(const SequenceRange & lhs, const SequenceRange & rhs)
 {
-    return lhs.start_seq == rhs.start_seq && lhs.end_seq == rhs.end_seq && lhs.part_index == rhs.part_index && lhs.parts == rhs.parts;
+    return lhs.start_sn == rhs.start_sn && lhs.end_sn == rhs.end_sn && lhs.part_index == rhs.part_index && lhs.parts == rhs.parts;
 }
 
 inline void SequenceRange::write(WriteBuffer & out) const
 {
-    DB::writeText(start_seq, out);
+    DB::writeText(start_sn, out);
     DB::writeText(",", out);
-    DB::writeText(end_seq, out);
+    DB::writeText(end_sn, out);
     DB::writeText(",", out);
     DB::writeText(part_index, out);
     DB::writeText(",", out);
@@ -311,7 +329,7 @@ void SequenceInfo::write(WriteBuffer & out) const
 
     /// Format:
     /// version
-    /// seqs:start_seq,end_seq,part_index,parts;
+    /// seqs:start_sn,end_sn,part_index,parts;
     /// keys:a,b,c
 
     /// Version
@@ -371,7 +389,17 @@ mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn
 {
     /// Sort sequence according to sequence ID ranges
     std::sort(sequences.begin(), sequences.end(), [](const auto & lhs, const auto & rhs) {
-        return lhs->sequence_ranges[0].start_seq < rhs->sequence_ranges[0].start_seq;
+        if (lhs->sequence_ranges.empty())
+        {
+            return true;
+        }
+
+        if (rhs->sequence_ranges.empty())
+        {
+            return false;
+        }
+
+        return lhs->sequence_ranges[0].start_sn < rhs->sequence_ranges[0].start_sn;
     });
 
     auto sequence_ranges = mergeSequenceRanges(sequences, last_commit_sn, log);

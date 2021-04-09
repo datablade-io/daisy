@@ -1084,14 +1084,14 @@ MergeTreeData::MutableDataPartPtr MergeTreeDataMergerMutator::mergePartsToTempor
             ReadableSize(merge_entry->bytes_read_uncompressed / elapsed_seconds));
     }
 
+    /// Daisy : starts
+    mergeSequenceInfo(parts, new_data_part, context);
+    /// Daisy : ends
+
     if (chosen_merge_algorithm != MergeAlgorithm::Vertical)
         to.writeSuffixAndFinalizePart(new_data_part, need_sync);
     else
         to.writeSuffixAndFinalizePart(new_data_part, need_sync, &storage_columns, &checksums_gathered_columns);
-
-    /// Daisy : starts
-    mergeSequenceInfo(parts, new_data_part, context);
-    /// Daisy : ends
 
     return new_data_part;
 }

@@ -71,21 +71,21 @@ class WriteBuffer;
 
 struct SequenceRange
 {
-    Int64 start_seq = -1;
-    Int64 end_seq = -1;
+    Int64 start_sn = -1;
+    Int64 end_sn = -1;
     Int32 part_index = -1;
     Int32 parts = -1;
 
     bool valid() const
     {
-        return start_seq >= 0 && end_seq >= 0 && start_seq <= end_seq
+        return start_sn >= 0 && end_sn >= 0 && start_sn <= end_sn
             && ((part_index >= 0 && parts >= 1 && part_index < parts) || (part_index == 0 && parts == 0));
     }
 
     SequenceRange() { }
-    SequenceRange(Int64 start_seq_, Int64 end_seq_) : start_seq(start_seq_), end_seq(end_seq_) { }
+    SequenceRange(Int64 start_seq_, Int64 end_seq_) : start_sn(start_seq_), end_sn(end_seq_) { }
     SequenceRange(Int32 part_index_, Int64 parts_) : part_index(part_index_), parts(parts_) { }
-    SequenceRange(Int64 start_seq_, Int64 end_seq_, Int32 part_index_, Int64 parts_) : start_seq(start_seq_), end_seq(end_seq_), part_index(part_index_), parts(parts_) { }
+    SequenceRange(Int64 start_seq_, Int64 end_seq_, Int32 part_index_, Int64 parts_) : start_sn(start_seq_), end_sn(end_seq_), part_index(part_index_), parts(parts_) { }
 
     void write(WriteBuffer & out) const;
 };
@@ -112,10 +112,10 @@ struct SequenceInfo
         return std::make_shared<SequenceInfo>(std::move(sparts), idempotent_keys);
     }
 
-    SequenceInfo(Int64 start_seq, Int64 end_seq, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
+    SequenceInfo(Int64 start_sn, Int64 end_sn, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
         : idempotent_keys(idempotent_keys_)
     {
-        sequence_ranges.push_back(SequenceRange{start_seq, end_seq});
+        sequence_ranges.push_back(SequenceRange{start_sn, end_sn});
     }
 
     SequenceInfo(SequenceRanges sequence_ranges_, const std::shared_ptr<std::vector<String>> & idempotent_keys_)

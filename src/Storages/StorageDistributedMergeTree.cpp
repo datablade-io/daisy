@@ -945,6 +945,7 @@ void StorageDistributedMergeTree::doCommit(
 {
     {
         std::lock_guard lock(sns_mutex);
+        assert(seq_pair.first > last_sn);
         /// We are sequentially consuming records, so seq_pair is always increasing
         outstanding_sns.push_back(seq_pair);
 
@@ -1135,7 +1136,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
 
     LOG_INFO(
         log,
-        "Start consuming records from shard={} sequence={} distributed_flush_threshhold_ms={} "
+        "Start consuming records from shard={} sn={} distributed_flush_threshhold_ms={} "
         "distributed_flush_threshhold_count={} "
         "distributed_flush_threshhold_size={}",
         shard,
