@@ -28,18 +28,18 @@ private:
     String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
 
 private:
-    static std::map<String, std::map<String, String>> create_schema;
-    static std::map<String, std::map<String, String>> column_schema;
-    static std::map<String, std::map<String, String>> update_schema;
-
-    String getColumnsDefinition(const Poco::JSON::Array::Ptr & columns, const String & time_column) const;
+    String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const;
     String getColumnDefinition(const Poco::JSON::Object::Ptr & column) const;
 
     String buildResponse() const;
     String processQuery(const String & query) const;
 
-    String getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
 
+    String getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
+    String getTimeColumn(const Poco::JSON::Object::Ptr & payload) const;
+    String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
+    String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
+    String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
 };
 
 }

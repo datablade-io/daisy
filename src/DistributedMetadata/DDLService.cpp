@@ -314,7 +314,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             {
                 /// FIXME, check table engine, grammar check
                 target_hosts[i * replication_factor + j].setQueryParameters(
-                    Poco::URI::QueryParameters{{"distributed", "false"}, {"shard", std::to_string(j)}});
+                    Poco::URI::QueryParameters{{"distributed_ddl", "false"}, {"shard", std::to_string(j)}});
                 auto err = doTable(payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST, query_id);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
@@ -406,7 +406,7 @@ void DDLService::mutateTable(const Block & block, const String & method) const
 
     for (auto & uri : target_hosts)
     {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed", "false"}});
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
         doTable(payload, uri, method, query_id);
     }
 
