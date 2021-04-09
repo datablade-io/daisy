@@ -203,7 +203,6 @@ private:
     String query_status_poll_id;
     String idempotent_key;
     String ingest_mode;
-    bool create_distributed_merge_tree_table_locally = false;
     bool distributed_ddl_operation = false;
     /// Daisy : ends
 
