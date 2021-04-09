@@ -1563,7 +1563,7 @@ Int64 StorageMergeTree::loadSN() const
     return std::stoll(version_sn[1]);
 }
 
-void StorageMergeTree::commitSN(Int64 sn) const
+void StorageMergeTree::commitSN(Int64 sn)
 {
     /// This funtion is always invoked by single thread
     auto tmpfile = sn_file.first + ".tmp";

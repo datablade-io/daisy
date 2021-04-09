@@ -976,7 +976,7 @@ void StorageDistributedMergeTree::doCommit(
 
                 /// Setup sequence numbers to persistent them to file system
                 static_cast<MergeTreeBlockOutputStream *>(output_stream.get())
-                    ->setSequenceInfo(std::make_shared<SequenceInfo>(moved_seq, moved_keys));
+                    ->setSequenceInfo(std::make_shared<SequenceInfo>(moved_seq.first, moved_seq.second, moved_keys));
 
                 output_stream->writePrefix();
                 output_stream->write(moved_block);

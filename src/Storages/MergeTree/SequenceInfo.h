@@ -89,6 +89,8 @@ struct SequenceRange
     void write(WriteBuffer & out) const;
 };
 
+bool operator==(const SequenceRange & lhs, const SequenceRange & rhs);
+
 using SequenceRanges = std::vector<SequenceRange>;
 
 struct SequenceInfo
@@ -130,6 +132,6 @@ struct SequenceInfo
 using SequenceInfoPtr = std::shared_ptr<SequenceInfo>;
 
 SequenceInfoPtr
-mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, Int64 max_idempotent_keys, Poco::Logger * log);
+mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, UInt64 max_idempotent_keys, Poco::Logger * log);
 
 }

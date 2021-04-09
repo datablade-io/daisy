@@ -8,10 +8,10 @@
 
 TEST(SequenceInfoSerializationDeserialization, Serder)
 {
-    SequenceRange seq_range{1, 3, 0, 3};
-    SequenceRange seq_range2{4, 5, 1, 2};
+    DB::SequenceRange seq_range{1, 3, 0, 3};
+    DB::SequenceRange seq_range2{4, 5, 1, 2};
 
-    DB::SequenceInfo si(seq_range, {});
+    DB::SequenceInfo si({seq_range}, {});
 
     /// 1 sequence range + no idempotent key
     /// Ser

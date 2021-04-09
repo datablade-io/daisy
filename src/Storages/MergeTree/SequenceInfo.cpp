@@ -116,6 +116,7 @@ std::shared_ptr<std::vector<String>> readIdempotentKeys(ReadBuffer & in)
         if (comma_pos == String::npos)
         {
             idempotent_keys->push_back(String(keys, lpos, siz - lpos));
+            break;
         }
         else
         {
@@ -126,6 +127,140 @@ std::shared_ptr<std::vector<String>> readIdempotentKeys(ReadBuffer & in)
 
     return idempotent_keys;
 }
+
+SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequences, Int64 last_committed_sn, Poco::Logger * log)
+{
+    SequenceRanges merged;
+
+    SequenceRange last_seq_range;
+
+    size_t total_ranges = 0;
+
+    for (auto & seq_info : sequences)
+    {
+        total_ranges += seq_info->sequence_ranges.size();
+
+        /// Merge ranges
+        for (const auto & next_seq_range : seq_info->sequence_ranges)
+        {
+            assert(next_seq_range.valid());
+
+            if (!last_seq_range.valid())
+            {
+                last_seq_range = next_seq_range;
+            }
+            else
+            {
+                /// There shall be no cases where there is sequence overlapping in a partition
+                assert(last_seq_range.end_seq < next_seq_range.start_seq);
+                last_seq_range = next_seq_range;
+            }
+
+            /// We don't check sequence gap here. There are 3 possible cases
+            /// 1. The missing sequence is not committed yet (rarely)
+            /// 2. It is casued by resending an / several idempotent blocks which will be deduped and ignored.
+            /// 3. The Block whish has the missing sequence is distributed to a different partition
+            /// Only for sequence ranges which are beyond the `last_committed_sn`, we need merge them and
+            /// keep them around
+            if (next_seq_range.end_seq > last_committed_sn)
+            {
+                /// We can still merge, because `last_committed_sn` confirms that
+                /// all blocks with sequence IDs less than it are committed
+                merged.push_back(next_seq_range);
+            }
+        }
+    }
+
+    if (log)
+    {
+        LOG_DEBUG(log, "Merge {} sequence ranges to {}", total_ranges, merged.size());
+    }
+
+    return merged;
+}
+
+std::shared_ptr<std::vector<String>>
+mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempotent_keys, Poco::Logger * log)
+{
+    auto start_iter = sequences.rend();
+    size_t start_pos = 0;
+    size_t key_count = 0;
+
+    for (auto iter = sequences.rbegin(); iter != sequences.rend(); ++iter)
+    {
+	const auto & seq_info = **iter;
+        if (seq_info.idempotent_keys)
+        {
+            key_count += seq_info.idempotent_keys->size();
+
+            if (key_count >= max_idempotent_keys)
+            {
+                if (start_pos == 0)
+                {
+                    start_pos = key_count - max_idempotent_keys;
+                    start_iter = iter;
+                }
+            }
+        }
+    }
+
+    if (start_iter == sequences.rend())
+    {
+        --start_iter;
+    }
+
+    auto idempotent_keys = std::make_shared<std::vector<String>>();
+    for (; start_iter != sequences.rbegin(); --start_iter)
+    {
+	auto & seq_info = **start_iter;
+
+        if (start_pos > 0)
+        {
+            /// We will need fist skipping `start_pos` elements
+            size_t count = 0;
+            for (auto & key : *seq_info.idempotent_keys)
+            {
+                if (count++ < start_pos)
+                {
+                    continue;
+                }
+                idempotent_keys->push_back(std::move(key));
+                assert(key.empty());
+            }
+
+            start_pos = 0;
+        }
+        else if (seq_info.idempotent_keys)
+        {
+            for (auto & key : *seq_info.idempotent_keys)
+            {
+                idempotent_keys->push_back(std::move(key));
+                assert(key.empty());
+            }
+        }
+    }
+
+    if ((*sequences.rbegin())->idempotent_keys)
+    {
+        for (auto & key : *(*sequences.rbegin())->idempotent_keys)
+        {
+            idempotent_keys->push_back(std::move(key));
+            assert(key.empty());
+        }
+    }
+
+    if (log)
+    {
+        LOG_DEBUG(log, "Merge {} idempotent keys to {}", key_count, idempotent_keys->size());
+    }
+
+    return idempotent_keys;
+}
+}
+
+bool operator==(const SequenceRange & lhs, const SequenceRange & rhs)
+{
+    return lhs.start_seq == rhs.start_seq && lhs.end_seq == rhs.end_seq && lhs.part_index == rhs.part_index && lhs.parts == rhs.parts;
 }
 
 inline void SequenceRange::write(WriteBuffer & out) const
@@ -174,9 +309,9 @@ void SequenceInfo::write(WriteBuffer & out) const
 
     DB::writeText("seqs:", out);
     /// Sequence ranges
-    for (size_t index = 0, auto siz = ->size(); index < siz;)
+    for (size_t index = 0, siz = sequence_ranges.size(); index < siz;)
     {
-        [index].write(out);
+        sequence_ranges[index].write(out);
         if (++index < siz)
         {
             DB::writeText(";", out);
@@ -193,9 +328,9 @@ void SequenceInfo::write(WriteBuffer & out) const
 
     DB::writeText("keys:", out);
     /// Idempotent keys
-    for (size_t index = 0, auto siz = idempotent_keys->size(); index < siz;)
+    for (size_t index = 0, siz = idempotent_keys->size(); index < siz;)
     {
-        DB::writeText(key, out);
+        DB::writeText(idempotent_keys->at(index), out);
         if (++index < siz)
         {
             DB::writeText(",", out);
@@ -220,136 +355,8 @@ std::shared_ptr<SequenceInfo> SequenceInfo::read(ReadBuffer & in)
     return std::make_shared<SequenceInfo>(std::move(sequence_ranges), idempotent_keys);
 }
 
-SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequences, Int64 last_committed_sn, Poco::Logger * log)
-{
-    SequenceRanges merged;
-
-    SequenceRange last_seq_range;
-
-    size_t total_ranges = 0;
-
-    for (auto & seq_info : sequences)
-    {
-        total_ranges += seq_info->.size();
-
-        /// Merge ranges
-        for (const auto & next_seq_range : seq_info->)
-        {
-            assert(next_seq_ranges.valid());
-
-            if (!last_seq_range.valid())
-            {
-                last_seq_range = next_seq_range;
-            }
-            else
-            {
-                /// There shall be no cases where there is sequence overlapping in a partition
-                assert(last_seq_range.end_seq < next_seq_range.start_seq);
-                last_seq_range = next_seq_range;
-            }
-
-            /// We don't check sequence gap here. There are 3 possible cases
-            /// 1. The missing sequence is not committed yet (rarely)
-            /// 2. It is casued by resending an / several idempotent blocks which will be deduped and ignored.
-            /// 3. The Block whish has the missing sequence is distributed to a different partition
-            /// Only for sequence ranges which are beyond the `last_committed_sn`, we need merge them and
-            /// keep them around
-            if (next_seq_range.end_seq > last_committed_sn)
-            {
-                /// We can still merge, because `last_committed_sn` confirms that
-                /// all blocks with sequence IDs less than it are committed
-                merged.push_back(next_seq_range);
-            }
-        }
-    }
-
-    if (log)
-    {
-        LOG_DEBUG(log, "Merge {} sequence ranges to {}", total_ranges, merged.size());
-    }
-
-    return merged;
-}
-
-std::shared_ptr<std::vector<String>>
-mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, Int64 max_idempotent_keys, Poco::Logger * log)
-{
-    auto idempotent_keys = std::make_shared<std::vector<String>>();
-
-    std::vector<SequenceInfoPtr>::iterator start_iter = sequences.rend();
-
-    size_t start_pos = 0;
-    size_t key_count = 0;
-
-    for (auto iter = sequences.rbegin(); iter != sequences.rend(); ++iter)
-    {
-        if (iter->idempotent_keys)
-        {
-            key_count += iter->idempotent_keys->count();
-
-            if (key_count >= max_idempotent_keys)
-            {
-                if (start_pos == 0)
-                {
-                    start_pos = key_count - max_idempotent_keys;
-                    start_iter = iter;
-                }
-            }
-        }
-    }
-
-    if (start_iter == sequences.rend())
-    {
-        --start_iter;
-    }
-
-    for (; start_iter != sequences.rbegin(); --start_iter)
-    {
-        if (start_pos > 0)
-        {
-            /// We will need fist skipping `start_pos` elements
-            size_t count = 0;
-            for (auto & key : *(*start_iter)->idempotent_keys)
-            {
-                if (count++ < start_pos)
-                {
-                    continue;
-                }
-                idempotent_keys->push_back(std::move(key));
-                assert(key.empty());
-            }
-
-            start_pos = 0;
-        }
-        else if ((*start_iter)->idempotent_keys)
-        {
-            for (auto & key : (*start_iter)->idempotent_keys)
-            {
-                idempotent_keys->push_back(std::move(key));
-                assert(key.empty());
-            }
-        }
-    }
-
-    if ((*sequences.rbegin())->idempotent_keys)
-    {
-        for (auto & key : (*sequences.rbegin())->idempotent_keys)
-        {
-            idempotent_keys->push_back(std::move(key));
-            assert(key.empty());
-        }
-    }
-
-    if (log)
-    {
-        LOG_DEBUG(log, "Merge {} idempotent keys to {}", key_count, idempotent_keys->size());
-    }
-
-    return idempotent_keys;
-}
-
 SequenceInfoPtr
-mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, Int64 max_idempotent_keys, Poco::Logger * log)
+mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, UInt64 max_idempotent_keys, Poco::Logger * log)
 {
     /// Sort sequence according to sequence ID ranges
     std::sort(sequences.begin(), sequences.end(), [](const auto & lhs, const auto & rhs) {
