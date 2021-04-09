@@ -388,7 +388,7 @@ SequenceInfoPtr
 mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, UInt64 max_idempotent_keys, Poco::Logger * log)
 {
     /// Sort sequence according to sequence ID ranges
-    std::sort(sequences.begin(), sequences.end(), [](const auto & lhs, const auto & rhs) {
+    std::sort(sequences.begin(), sequences.end(), [](const auto & lhs, const auto & rhs) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
         if (lhs->sequence_ranges.empty())
         {
             return true;
