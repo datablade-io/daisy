@@ -311,13 +311,163 @@ mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempot
 
     return idempotent_keys;
 }
+
+inline void collectMissingSequenceRangeBefore(
+    const SequenceRange & prev, size_t prev_index, Int64 next_expecting_sn, Poco::Logger * log, SequenceRanges & missing_ranges)
+{
+    if (prev_index != 0)
+    {
+        return;
+    }
+
+    if (prev.start_sn != next_expecting_sn)
+    {
+        /// There are sequence range missing before prev_range
+        missing_ranges.emplace_back(next_expecting_sn, prev.start_sn - 1);
+        assert(next_expecting_sn <= prev.start_sn - 1);
+
+        if (log)
+        {
+            LOG_INFO(log, "Missing sn range=({}, {})", next_expecting_sn, prev.start_sn - 1);
+        }
+    }
+}
+
+inline void collectMissingSequenceRangeBetween(
+    const SequenceRange & prev, const SequenceRange & cur, Poco::Logger * log, SequenceRanges & missing_ranges)
+{
+    if (prev.start_sn != cur.start_sn && prev.end_sn + 1 != cur.start_sn)
+    {
+        if (log)
+        {
+            LOG_INFO(log, "Missing sn range({}, {})", prev.end_sn + 1, cur.start_sn - 1);
+        }
+
+        assert(prev.end_sn + 1 <= cur.start_sn - 1);
+        missing_ranges.emplace_back(prev.end_sn + 1, cur.start_sn - 1);
+    }
+}
+
+inline void collectMissingPartsSequenceRange(
+    const SequenceRanges & sequence_ranges, size_t prev_index, size_t cur_index, Poco::Logger * log, SequenceRanges & missing_ranges)
+{
+    Int32 next_expecting_part_index = 0;
+    std::vector<String> missed_parts;
+
+    for (size_t i = prev_index; i < cur_index; ++i)
+    {
+        if (sequence_ranges[i].part_index != next_expecting_part_index)
+        {
+            /// Collect the missing parts
+            for (auto j = next_expecting_part_index; j != sequence_ranges[i].part_index; ++j)
+            {
+                SequenceRange range_copy = sequence_ranges[prev_index];
+                range_copy.part_index = j;
+                missing_ranges.push_back(range_copy);
+                missed_parts.push_back(std::to_string(j));
+            }
+            next_expecting_part_index = sequence_ranges[i].part_index + 1;
+        }
+        else
+        {
+            ++next_expecting_part_index;
+        }
+    }
+
+    for (;next_expecting_part_index < sequence_ranges[prev_index].parts; ++next_expecting_part_index)
+    {
+        SequenceRange range_copy = sequence_ranges[prev_index];
+        range_copy.part_index = next_expecting_part_index;
+        missing_ranges.push_back(range_copy);
+        missed_parts.push_back(std::to_string(next_expecting_part_index));
+    }
+
+    if (log)
+    {
+        LOG_INFO(
+            log,
+            "Not all parts in sn range=({}, {}) are committed, total parts={}, missed parts=({})",
+            sequence_ranges[prev_index].start_sn,
+            sequence_ranges[prev_index].end_sn,
+            sequence_ranges[prev_index].parts,
+            boost::algorithm::join(missed_parts, ", "));
+    }
+}
+
+inline void collectMissingSequenceRanges(
+    const SequenceRanges & sequence_ranges,
+    size_t prev_index,
+    size_t cur_index,
+    Int32 parts,
+    Poco::Logger * log,
+    Int64 & next_expecting_sn,
+    SequenceRanges & missing_ranges)
+{
+    const auto & prev_range = sequence_ranges[prev_index];
+    auto index = cur_index;
+    if (cur_index == sequence_ranges.size())
+    {
+        index = cur_index - 1;
+    }
+    const auto & cur_range = sequence_ranges[index];
+
+    /// Meet a new start_sn, calcuate if the parts in prev_range
+    /// are all committed. There are several cases
+    /// 1. There are sequence gaps before prev_range
+    /// 2. There are part missing in current prev_range
+    /// 3. There are sequence gaps between prev_range and current range
+    if (prev_range.parts == parts)
+    {
+        /// All parts in this prev_range are committed
+        assert (prev_range.start_sn >= next_expecting_sn);
+
+        if (prev_range.start_sn == next_expecting_sn)
+        {
+            /// If we can progress sn, it means ther are no sequence missing
+            /// before prev_range. Progress next expecting sn
+            next_expecting_sn = prev_range.end_sn + 1;
+
+            if (log)
+            {
+                LOG_INFO(
+                    log,
+                    "Parts in sn range=({}, {}) having total parts={} are all committed. Progressing next expecting sn to "
+                    "{}",
+                    prev_range.start_sn,
+                    prev_range.end_sn,
+                    prev_range.parts,
+                    prev_range.end_sn + 1);
+            }
+        }
+        else
+        {
+            /// Check if there are sequence range missing before prev_range
+            collectMissingSequenceRangeBefore(prev_range, prev_index, next_expecting_sn, log, missing_ranges);
+        }
+
+        /// Check if there are sequence range missing between pre_range and cur_range
+        collectMissingSequenceRangeBetween(prev_range, cur_range, log, missing_ranges);
+    }
+    else
+    {
+        /// 1) Hanlde missing sequence range before prev_range
+        collectMissingSequenceRangeBefore(prev_range, prev_index, next_expecting_sn, log, missing_ranges);
+
+        /// 2) Handle missing parts in prev_range
+        /// Some parts in prev_range are missing
+        /// Find the missing parts and add to `missing_ranges`
+        collectMissingPartsSequenceRange(sequence_ranges, prev_index, cur_index, log, missing_ranges);
+
+        /// 3) Handle missing sequence range between prev_range and cur_range
+        collectMissingSequenceRangeBetween(prev_range, cur_range, log, missing_ranges);
+    }
+}
 }
 
 bool operator==(const SequenceRange & lhs, const SequenceRange & rhs)
 {
     return lhs.start_sn == rhs.start_sn && lhs.end_sn == rhs.end_sn && lhs.part_index == rhs.part_index && lhs.parts == rhs.parts;
 }
-
 
 bool operator<(const SequenceRange & lhs, const SequenceRange & rhs)
 {
@@ -459,122 +609,40 @@ mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 committed_sn, 
     return std::make_shared<SequenceInfo>(std::move(sequence_ranges), idempotent_keys);
 }
 
-/// The `sequence_ranges` are supposed to have sequence numbers which are great than `committed`
-std::pair<std::vector<SequenceRange>, Int64>
-missingSequenceRanges(std::vector<SequenceRange> & sequence_ranges, Int64 committed, Poco::Logger * log)
+/// The `sequence_ranges` are assumed to have sequence numbers which are great than `committed`
+std::pair<SequenceRanges, Int64>
+missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed, Poco::Logger * log)
 {
-    auto next_expecting_sn = committed + 1;
-    SequenceRanges missing_ranges;
-    SequenceRange prev_range;
-    Int32 parts = 1;
-
     std::sort(sequence_ranges.begin(), sequence_ranges.end());
 
-    for (size_t prev_index = 0, index = 0, siz = sequence_ranges.size(); index < siz; ++index)
+    SequenceRanges missing_ranges;
+    auto next_expecting_sn = committed + 1;
+    size_t prev_index = 0;
+    Int32 parts = 1;
+
+    for (size_t cur_index = 1, siz = sequence_ranges.size(); cur_index < siz; ++cur_index)
     {
-        const auto & cur_range = sequence_ranges[index];
-        if (prev_range.start_sn == -1)
-        {
-            prev_range = cur_range;
-        }
-        else if (prev_range.start_sn == cur_range.start_sn)
+        const auto & prev_range = sequence_ranges[prev_index];
+        const auto & cur_range = sequence_ranges[cur_index];
+
+        if (prev_range.start_sn == cur_range.start_sn)
         {
             assert(prev_range.end_sn == cur_range.end_sn);
             assert(prev_range.part_index < cur_range.part_index);
             ++parts;
+
+            continue;
         }
-        else
-        {
-            /// Meet a new start_sn, calcuate if the parts in current sn
-            /// are all committed
-            if (prev_range.parts == parts)
-            {
-                assert (prev_range.start_sn >= next_expecting_sn);
 
-                /// All parts in this sn range are committed
-                if (prev_range.start_sn == next_expecting_sn)
-                {
-                    if (log)
-                    {
-                        LOG_INFO(
-                            log,
-                            "Parts in sn range=({}, {}) having total parts={} are all committed and there is no gap with previous "
-                            "committed sn",
-                            prev_range.start_sn,
-                            prev_range.end_sn,
-                            prev_range.parts);
-                    }
-                    next_expecting_sn = prev_range.end_sn + 1;
-                }
-                else
-                {
-                    if (log)
-                    {
-                        LOG_INFO(
-                            log,
-                            "Parts in sn range=({}, {}) having total parts={} are all committed but there are missing sn range=({}, {})",
-                            prev_range.start_sn,
-                            prev_range.end_sn,
-                            prev_range.parts,
-                            next_expecting_sn,
-                            prev_range.start_sn - 1);
-                    }
-                    missing_ranges.emplace_back(next_expecting_sn, prev_range.start_sn - 1);
-                }
-            }
-            else
-            {
-                /// Some parts in this sn range are missing
-                /// Find the missing parts and add to `missing_ranges`
-                Int32 next_expecting_part_index = 0;
-                std::vector<String> missed_parts;
+        collectMissingSequenceRanges(sequence_ranges, prev_index, cur_index, parts, log, next_expecting_sn, missing_ranges);
 
-                for (size_t i = prev_index; i < index; ++i)
-                {
-                    if (sequence_ranges[i].part_index != next_expecting_part_index)
-                    {
-                        /// Collect the missing parts
-                        for (auto j = next_expecting_part_index; j != sequence_ranges[i].part_index; ++j)
-                        {
-                            SequenceRange range_copy = prev_range;
-                            range_copy.part_index = j;
-                            missing_ranges.push_back(range_copy);
-                            missed_parts.push_back(std::to_string(j));
-                        }
-                        next_expecting_part_index = sequence_ranges[i].part_index + 1;
-                    }
-                    else
-                    {
-                        ++next_expecting_part_index;
-                    }
-                }
-
-                for (;next_expecting_part_index < sequence_ranges[prev_index].parts; ++next_expecting_part_index)
-                {
-                    SequenceRange range_copy = prev_range;
-                    range_copy.part_index = next_expecting_part_index;
-                    missing_ranges.push_back(range_copy);
-                    missed_parts.push_back(std::to_string(next_expecting_part_index));
-                }
-
-                if (log)
-                {
-                    LOG_INFO(
-                        log,
-                        "Not all parts in sn range=({}, {}) are committed, total parts={}, missed parts=({})",
-                        prev_range.start_sn,
-                        prev_range.end_sn,
-                        prev_range.parts,
-                        boost::algorithm::join(missed_parts, ", "));
-                }
-            }
-
-            /// Since here it starts a new start_sn, update prev_range, prev_index and parts
-            prev_range = cur_range;
-            prev_index = index;
-            parts = 1;
-        }
+        /// Since here it starts a new start_sn, update prev_index and parts
+        prev_index = cur_index;
+        parts = 1;
     }
+
+    /// The last range
+    collectMissingSequenceRanges(sequence_ranges, prev_index, sequence_ranges.size(), parts, log, next_expecting_sn, missing_ranges);
 
     return {std::move(missing_ranges), next_expecting_sn};
 }
