@@ -242,17 +242,15 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
             has_force_restore_data_flag_);
         tailer.emplace(1);
 
-        /// Load sn and setup it
-        auto sn = storage->loadSN();
-        storage->setCommittedSN(sn);
-
+        buildIdempotentKeysIndex(storage->lastIdempotentKeys());
+        auto sn = storage->committedSN();
         if (sn >= 0)
         {
             std::lock_guard lock(sns_mutex);
             last_sn = sn;
             local_sn = sn;
         }
-        LOG_INFO(log, "Load committed sequence={}", sn);
+        LOG_INFO(log, "Load committed sn={}", sn);
     }
 
     initWal();
@@ -684,7 +682,6 @@ QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageR
 }
 
 /// New functions
-
 IColumn::Selector StorageDistributedMergeTree::createSelector(const ColumnWithTypeAndName & result) const
 {
 /// If result.type is DataTypeLowCardinality, do shard according to its dictionaryType
@@ -941,7 +938,7 @@ inline void StorageDistributedMergeTree::progressSequences(const SequencePair & 
 }
 
 void StorageDistributedMergeTree::doCommit(
-    Block block, SequencePair seq_pair, std::shared_ptr<std::vector<String>> keys, std::any & dwal_consume_ctx)
+    Block block, SequencePair seq_pair, std::shared_ptr<IdempotentKeys> keys, std::any & dwal_consume_ctx)
 {
     {
         std::lock_guard lock(sns_mutex);
@@ -1007,6 +1004,15 @@ void StorageDistributedMergeTree::doCommit(
     commitSN(dwal_consume_ctx);
 }
 
+void StorageDistributedMergeTree::buildIdempotentKeysIndex(const std::deque<std::shared_ptr<String>> & idem_keys_)
+{
+    idem_keys = idem_keys_;
+    for (const auto key : idem_keys)
+    {
+        idem_keys_index.emplace(*key);
+    }
+}
+
 /// Add with lock held
 inline void StorageDistributedMergeTree::addIdempotentKey(const String & key)
 {
@@ -1064,7 +1070,7 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
     }
 
     Block block;
-    auto keys = std::make_shared<std::vector<String>>();
+    auto keys = std::make_shared<IdempotentKeys>();
 
     for (auto & rec : records)
     {
@@ -1089,7 +1095,7 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
 
             if (rec->hasIdempotentKey())
             {
-                keys->push_back(std::move(rec->idempotentKey()));
+                keys->emplace_back(rec->sn, std::move(rec->idempotentKey()));
             }
         }
         else if (rec->op_code == IDistributedWriteAheadLog::OpCode::ALTER_DATA_BLOCK)
@@ -1133,6 +1139,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
     consume_ctx.consume_callback_timeout_ms = ssettings->distributed_flush_threshhold_ms.value;
     consume_ctx.consume_callback_max_rows = ssettings->distributed_flush_threshhold_count;
     consume_ctx.consume_callback_max_messages_size = ssettings->distributed_flush_threshhold_size;
+    SequenceRanges missing_ranges = storage->missingSequenceRanges();
 
     LOG_INFO(
         log,

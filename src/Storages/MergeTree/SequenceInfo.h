@@ -90,7 +90,11 @@ struct SequenceRange
     void write(WriteBuffer & out) const;
 };
 
+using IdempotentKey = std::pair<Int64, String>;
+using IdempotentKeys = std::vector<IdempotentKey>;
+
 bool operator==(const SequenceRange & lhs, const SequenceRange & rhs);
+bool operator<(const SequenceRange & lhs, const SequenceRange & rhs);
 
 using SequenceRanges = std::vector<SequenceRange>;
 
@@ -99,7 +103,7 @@ struct SequenceInfo
     SequenceRanges sequence_ranges;
 
     /// Associated idempotenent keys
-    std::shared_ptr<std::vector<String>> idempotent_keys;
+    std::shared_ptr<IdempotentKeys> idempotent_keys;
 
     std::shared_ptr<SequenceInfo> shallowClone(Int32 part_index, Int32 parts) const
     {
@@ -112,13 +116,13 @@ struct SequenceInfo
         return std::make_shared<SequenceInfo>(std::move(sparts), idempotent_keys);
     }
 
-    SequenceInfo(Int64 start_sn, Int64 end_sn, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
+    SequenceInfo(Int64 start_sn, Int64 end_sn, const std::shared_ptr<IdempotentKeys> & idempotent_keys_)
         : idempotent_keys(idempotent_keys_)
     {
         sequence_ranges.push_back(SequenceRange{start_sn, end_sn});
     }
 
-    SequenceInfo(SequenceRanges sequence_ranges_, const std::shared_ptr<std::vector<String>> & idempotent_keys_)
+    SequenceInfo(SequenceRanges sequence_ranges_, const std::shared_ptr<IdempotentKeys> & idempotent_keys_)
         : sequence_ranges(std::move(sequence_ranges_)), idempotent_keys(idempotent_keys_)
     {
     }
@@ -132,7 +136,10 @@ struct SequenceInfo
 
 using SequenceInfoPtr = std::shared_ptr<SequenceInfo>;
 
+/// Merge SequenceInfo into one according to last committed sn and max idempotent keys
 SequenceInfoPtr
-mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 last_commit_sn, UInt64 max_idempotent_keys, Poco::Logger * log);
+mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 committed_sn, UInt64 max_idempotent_keys, Poco::Logger * log);
 
+/// Find missing sequence ranges according to committed sn and return missing sequence ranges and new committed sn
+std::pair<SequenceRanges, Int64> missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed_sn, Poco::Logger * log);
 }
