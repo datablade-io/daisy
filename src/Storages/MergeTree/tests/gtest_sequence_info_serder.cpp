@@ -126,6 +126,7 @@ TEST(SequenceInfo, Merge)
     /// => seqs:1,1,0,1;2,2,0,1
     DB::SequenceRange range1{1, 1, 0, 1};
     DB::SequenceRange range2{2, 2, 0, 1};
+    DB::SequenceRange range3{3, 3, 0, 1};
 
     auto seq_info1 = std::shared_ptr<DB::SequenceInfo>(new DB::SequenceInfo({range1}, {}));
     auto seq_info2 = std::shared_ptr<DB::SequenceInfo>(new DB::SequenceInfo({range2}, {}));
@@ -165,6 +166,19 @@ TEST(SequenceInfo, Merge)
     EXPECT_TRUE(merged);
     EXPECT_TRUE(merged->sequence_ranges.empty());
     EXPECT_TRUE(!merged->idempotent_keys);
+
+    /// Unordered
+    /// seqs:1,1,0,1;3,3,0,1
+    /// seqs:2,2,0,1
+    /// committed_sn : 2
+    /// => seqs:3,3,0,1
+    seq_info1->sequence_ranges.push_back(range3);
+    merged = DB::mergeSequenceInfo(sequences, 2, 3, nullptr);
+    EXPECT_TRUE(merged);
+    EXPECT_EQ(merged->sequence_ranges.size(), 1);
+    EXPECT_EQ(merged->sequence_ranges[0], range3);
+    EXPECT_TRUE(!merged->idempotent_keys);
+    seq_info1->sequence_ranges.pop_back();
 
     DB::IdempotentKey key1{1, "idem1"};
     DB::IdempotentKey key2{2, "idem2"};
