@@ -9,8 +9,11 @@
 #include <Interpreters/MutationsInterpreter.h>
 #include <Interpreters/QueryLog.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>
+#include <Interpreters/BlockUtils.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Parsers/ASTAssignment.h>
+#include <Parsers/queryToString.h>
+#include <Storages/IStorage.h>
 #include <Storages/AlterCommands.h>
 #include <Storages/IStorage.h>
 #include <Storages/LiveView/LiveViewCommands.h>
@@ -18,6 +21,11 @@
 #include <Storages/MutationCommands.h>
 #include <Storages/PartitionCommands.h>
 #include <Common/typeid_cast.h>
+
+#include <Databases/IDatabase.h>
+#include <Databases/DatabaseReplicated.h>
+#include <Databases/DatabaseFactory.h>
+#include <DistributedMetadata/CatalogService.h>
 
 #include <boost/range/algorithm_ext/push_back.hpp>
 
@@ -32,6 +40,10 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int INCORRECT_QUERY;
     extern const int NOT_IMPLEMENTED;
+    /// Daisy : start
+    extern const int CONFIG_ERROR;
+    extern const int OK;
+    /// Daisy : end
 }
 
 
@@ -142,12 +154,87 @@ BlockIO InterpreterAlterQuery::execute()
         alter_commands.validate(metadata, getContext());
         alter_commands.prepare(metadata);
         table->checkAlterIsPossible(alter_commands, getContext());
+
+        /// Daisy : start
+        if (alterTableDistributed(alter))
+        {
+            return {};
+        }
+        /// Daisy : end
+
         table->alter(alter_commands, getContext(), alter_lock);
     }
 
     return res;
 }
 
+/// Daisy : start
+bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
+{
+    if (!context.isDistributed())
+    {
+        return false;
+    }
+
+    if (!context.getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        /// context.setDistributedDDLOperation(true);
+        return false;
+    }
+
+    if (context.isDistributedDDLOperation())
+    {
+        const auto & catalog_service = CatalogService::instance(context);
+        auto tables = catalog_service.findTableByName(query.database, query.table);
+        if (tables.empty())
+        {
+            throw Exception(fmt::format("Table {}.{} does not exist.", query.database, query.table), ErrorCodes::UNKNOWN_TABLE);
+        }
+
+        if (tables[0]->engine != "DistributedMergeTree")
+        {
+            /// FIXME: We only support `DistributedMergeTree` table engine for now
+            return false;
+        }
+
+        assert(!context.getCurrentQueryId().empty());
+
+        auto * log = &Poco::Logger::get("InterpreterAlterQuery");
+
+        auto query_str = queryToString(query);
+        LOG_INFO(log, "Altering DistributedMergeTree query={} query_id={}", query_str, context.getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols
+            = {{"payload", context.getQueryParameters().at("_payload")},
+               {"database", query.database},
+               {"table", query.table},
+               {"query_id", context.getCurrentQueryId()},
+               {"user", context.getUserName()}};
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        std::vector<std::pair<String, UInt64>> uint64_cols = {
+            /// Milliseconds since epoch
+            std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
+        };
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (payload,  database, table, timestamp, query_id, user)
+
+        appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::ALTER_TABLE, log);
+
+        LOG_INFO(
+            log, "Request of altering DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        return true;
+    }
+    return false;
+}
+/// Daisy : end
 
 AccessRightsElements InterpreterAlterQuery::getRequiredAccess() const
 {

@@ -37,6 +37,35 @@ namespace
     const String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
     const String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";
     const String DDL_DEFAULT_TOPIC = "__system_ddls";
+
+    const String DDL_TABLE_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/tables/{}";
+    const String DDL_TABLE_POST_API_PATH_FMT = "/dae/v1/ddl/{}/tables";
+
+    int toErrorCode(std::istream & istr)
+    {
+        std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        error_message << istr.rdbuf();
+        /// FIXME, revise HTTP status code for the legacy HTTP API
+        const auto & msg = error_message.str();
+        if (msg.find("Code: 57") != std::string_view::npos)
+        {
+            /// Table already exists. FIXME: enhance table creation idempotent by adding query id
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
+        /// FIXME, other un-retriable error codes
+        return ErrorCodes::UNKNOWN_EXCEPTION;
+    }
+
+    int toErrorCode(const Poco::Exception & e)
+    {
+        /// FIXME, more error code handling
+        auto code = e.code();
+        if (code == 1000 || code == 422)
+        {
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
+        return ErrorCodes::UNKNOWN_EXCEPTION;
+    }
 }
 
 DDLService & DDLService::instance(Context & global_context_)
@@ -124,7 +153,7 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
     return true;
 }
 
-inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts) const
+std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts, const String & path) const
 {
     std::vector<Poco::URI> uris;
     uris.reserve(hosts.size());
@@ -135,21 +164,20 @@ inline std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hos
         if (host.rfind(":") != String::npos)
         {
             /// `host` contains port information
-            uris.emplace_back("http://" + host);
+            uris.emplace_back("http://" + host + path);
         }
         else
         {
-            uris.emplace_back("http://" + host + http_port);
+            uris.emplace_back("http://" + host + http_port + path);
         }
     }
 
     return uris;
 }
 
-Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
+Int32 DDLService::sendRequest(
+    const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
-    LOG_INFO(log, "Execute table statement={} on uri={}", query, uri.toString());
-
     /// One second for connect/send/receive
     ConnectionTimeouts timeouts({1, 0}, {1, 0}, {5, 0});
 
@@ -157,17 +185,18 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
     try
     {
         session = makePooledHTTPSession(uri, timeouts, 1);
-        Poco::Net::HTTPRequest request{Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
+        Poco::Net::HTTPRequest request{method, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
         request.setHost(uri.getHost());
-        request.setChunkedTransferEncoding(true);
+        request.setContentLength(payload.size());
+        request.setContentType("application/json");
+        request.add("X-ClickHouse-Query-Id", query_id);
 
-        auto ostr = &session->sendRequest(request);
-        ostr->write(query.c_str(), query.size());
-        ostr->flush();
+        auto & ostr = session->sendRequest(request);
+        ostr << payload;
 
-        if (!ostr->good())
+        if (!ostr.good())
         {
-            LOG_ERROR(log, "Failed to execute table statement={} on uri={}", query, uri.toString());
+            LOG_ERROR(log, "Failed to send request data {} to uri={}", payload, uri.toString());
             return ErrorCodes::UNKNOWN_EXCEPTION;
         }
 
@@ -175,25 +204,15 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
         /// FIXME: handle table exists, table not exists etc error explicitly
         auto & istr = session->receiveResponse(response);
         auto status = response.getStatus();
-        if (status == Poco::Net::HTTPResponse::HTTP_OK || status == Poco::Net::HTTPResponse::HTTP_CREATED || status == Poco::Net::HTTPResponse::HTTP_ACCEPTED)
+        if (status == Poco::Net::HTTPResponse::HTTP_OK)
         {
-            LOG_INFO(log, "Executed table statement={} on uri={} successfully", query, uri.toString());
+            LOG_INFO(
+                log, "Executed DDL operation on uri={} successfully, method={}, payload={}", uri.toString(), method, payload);
             return ErrorCodes::OK;
         }
         else
         {
-            std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-            error_message << istr.rdbuf();
-            /// FIXME, revise HTTP status code for the legacy HTTP API
-            const auto & msg = error_message.str();
-            if (msg.find("Code: 57") != std::string_view::npos)
-            {
-                /// Table already exists. FIXME: enhance table creation idempotent by adding query id
-                return ErrorCodes::UNRETRIABLE_ERROR;
-            }
-
-            /// FIXME, other un-retriable error codes
-            return ErrorCodes::UNKNOWN_EXCEPTION;
+            return toErrorCode(istr);
         }
     }
     catch (const Poco::Exception & e)
@@ -205,33 +224,28 @@ Int32 DDLService::postRequest(const String & query, const Poco::URI & uri) const
 
         LOG_ERROR(
             log,
-            "Failed to execute table statement={} on uri={} error={} exception={}",
-            query,
+            "Failed to do DDL operation on uri={} method={} error={} exception={}",
             uri.toString(),
+            method,
             e.message(),
             getCurrentExceptionMessage(true, true));
 
-        /// FIXME, more error code handling
-        auto code = e.code();
-        if (code == 1000 || code == 422)
-        {
-            return ErrorCodes::UNRETRIABLE_ERROR;
-        }
+        return toErrorCode(e);
     }
     catch (...)
     {
         LOG_ERROR(
             log,
-            "Failed to execute table statement={} on uri={} exception={}",
-            query,
+            "Failed to do DDL operation on uri={} method={} exception={}",
             uri.toString(),
+            method,
             getCurrentExceptionMessage(true, true));
     }
     return ErrorCodes::UNKNOWN_EXCEPTION;
 }
 
 /// Try indefininitely
-Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
+Int32 DDLService::doTable(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     /// FIXME, retry several times and report error
     Int32 err = ErrorCodes::OK;
@@ -240,7 +254,7 @@ Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
     {
         try
         {
-            err = postRequest(query, uri);
+            err = sendRequest(payload, uri, method, query_id);
             if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
             {
                 return err;
@@ -248,8 +262,7 @@ Int32 DDLService::doTable(const String & query, const Poco::URI & uri) const
         }
         catch (...)
         {
-            LOG_ERROR(
-                log, "Failed to send request={} to uri={} exception={}", query, uri.toString(), getCurrentExceptionMessage(true, true));
+            LOG_ERROR(log, "Failed to send request to uri={} exception={}", uri.toString(), getCurrentExceptionMessage(true, true));
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -262,19 +275,18 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 {
     Block & block = record->block;
     assert(block.has("query_id"));
-
-    if (!validateSchema(block, {"ddl", "database", "table", "shards", "replication_factor", "timestamp", "query_id", "user"}))
+    if (!validateSchema(block, {"payload", "database", "table", "shards", "replication_factor", "query_id", "user", "timestamp"}))
     {
         return;
     }
 
-    String query = block.getByName("ddl").column->getDataAt(0).toString();
     String database = block.getByName("database").column->getDataAt(0).toString();
+    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
+    String user = block.getByName("user").column->getDataAt(0).toString();
+    String payload = block.getByName("payload").column->getDataAt(0).toString();
     String table = block.getByName("table").column->getDataAt(0).toString();
     Int32 shards = block.getByName("shards").column->getInt(0);
     Int32 replication_factor = block.getByName("replication_factor").column->getInt(0);
-    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
-    String user = block.getByName("user").column->getDataAt(0).toString();
 
     /// FIXME : check with catalog to see if this DDL is fufilled
     /// Build a data structure to cached last 10000 DDLs, check aginst this data structure
@@ -293,7 +305,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         boost::algorithm::split(hosts, hosts_val, boost::is_any_of(","));
         assert(hosts.size() > 0);
 
-        std::vector<Poco::URI> target_hosts{toURIs(hosts)};
+        std::vector<Poco::URI> target_hosts{toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database))};
 
         /// Create table on each target host accordign to placement
         for (Int32 i = 0; i < replication_factor; ++i)
@@ -301,17 +313,18 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             for (Int32 j = 0; j < shards; ++j)
             {
                 /// FIXME, check table engine, grammar check
-                String create_query = query + ", shard=" + std::to_string(j);
-                auto err = doTable(create_query, target_hosts[i * replication_factor + j]);
+                target_hosts[i * replication_factor + j].setQueryParameters(
+                    Poco::URI::QueryParameters{{"distributed", "false"}, {"shard", std::to_string(j)}});
+                auto err = doTable(payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST, query_id);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
-                    failDDL(query_id, user, query, "Unable to fulfill the request due to unrecoverable failure");
+                    failDDL(query_id, user, payload, "Unable to fulfill the request due to unrecoverable failure");
                     return;
                 }
             }
         }
 
-        succeedDDL(query_id, user, query);
+        succeedDDL(query_id, user, payload);
     }
     else
     {
@@ -321,13 +334,13 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         {
             LOG_ERROR(
                 log,
-                "Failed to create table because there are not enough hosts to place its total={} shard replicas, query={} "
+                "Failed to create table because there are not enough hosts to place its total={} shard replicas, payload={} "
                 "query_id={} user={}",
                 shards * replication_factor,
-                query,
+                payload,
                 query_id,
                 user);
-            failDDL(query_id, user, query, "There are not enough hosts to place the table shard replicas");
+            failDDL(query_id, user, payload, "There are not enough hosts to place the table shard replicas");
             return;
         }
 
@@ -340,6 +353,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 
         /// We got the placement, commit the placement decision
         /// Add `hosts` column to block
+        /// FIXME: put the hosts in header
         auto string_type = DataTypeFactory::instance().get(getTypeName(TypeIndex::String));
         auto host_col = string_type->createColumn();
         String hosts{boost::algorithm::join(target_hosts, ",")};
@@ -351,38 +365,39 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         auto result = dwal->append(*record.get(), dwal_append_ctx);
         if (result.err != ErrorCodes::OK)
         {
-            LOG_ERROR(log, "Failed to commit placement decision for query={}", query);
-            failDDL(query_id, user, query, "Internal server error");
+            LOG_ERROR(log, "Failed to commit placement decision for create table payload={}", payload);
+            failDDL(query_id, user, payload, "Internal server error");
         }
         else
         {
-            LOG_INFO(log, "Successfully find placement for query={} placement={}", query, hosts);
-            progressDDL(query_id, user, query, "shard replicas placed");
+            LOG_INFO(log, "Successfully find placement for create table payload={} placement={}", payload, hosts);
+            progressDDL(query_id, user, payload, "shard replicas placed");
         }
     }
 }
 
-void DDLService::mutateTable(const Block & block) const
+void DDLService::mutateTable(const Block & block, const String & method) const
 {
     assert(block.has("query_id"));
 
-    if (!validateSchema(block, {"ddl", "database", "table", "timestamp", "query_id", "user"}))
+    if (!validateSchema(block, {"payload", "database", "table", "timestamp", "query_id", "user"}))
     {
         return;
     }
 
-    String query = block.getByName("ddl").column->getDataAt(0).toString();
     String database = block.getByName("database").column->getDataAt(0).toString();
     String table = block.getByName("table").column->getDataAt(0).toString();
     String query_id = block.getByName("query_id").column->getDataAt(0).toString();
     String user = block.getByName("user").column->getDataAt(0).toString();
+    String payload = block.getByName("payload").column->getDataAt(0).toString();
 
-    std::vector<Poco::URI> target_hosts{toURIs(placement.placed(database, table))};
+    std::vector<Poco::URI> target_hosts{
+        toURIs(placement.placed(database, table), fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, table))};
 
     if (target_hosts.empty())
     {
-        LOG_ERROR(log, "Table {} is not found, query={} query_id={} user={}", table, query, query_id, user);
-        failDDL(query_id, user, query, "Table not found");
+        LOG_ERROR(log, "Table {} is not found, payload={} query_id={} user={}", table, payload, query_id, user);
+        failDDL(query_id, user, payload, "Table not found");
         return;
     }
 
@@ -391,10 +406,11 @@ void DDLService::mutateTable(const Block & block) const
 
     for (auto & uri : target_hosts)
     {
-        doTable(query, uri);
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed", "false"}});
+        doTable(payload, uri, method, query_id);
     }
 
-    succeedDDL(query_id, user, query);
+    succeedDDL(query_id, user, payload);
 }
 
 void DDLService::commit(Int64 last_sn)
@@ -433,7 +449,7 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
         {
-            mutateTable(record->block);
+            mutateTable(record->block, Poco::Net::HTTPRequest::HTTP_DELETE);
 
             /// delete DWAL
             String database = record->block.getByName("database").column->getDataAt(0).toString();
@@ -443,7 +459,7 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
         {
-            mutateTable(record->block);
+            mutateTable(record->block, Poco::Net::HTTPRequest::HTTP_PATCH);
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_DATABASE)
         {

@@ -3,10 +3,10 @@
 #include "RestRouterHandlers/RestRouterFactory.h"
 #include "RestRouterHandlers/RestRouterHandler.h"
 
-#include <IO/WriteHelpers.h>
 #include <Interpreters/Context.h>
 #include <Server/IServer.h>
 #include <Common/setThreadName.h>
+#include <IO/HTTPCommon.h>
 
 
 namespace DB
@@ -208,7 +208,6 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     }
 
     CurrentThread::QueryScope query_scope{context};
-
     /// Setup common response headers etc
     response.setContentType("application/json; charset=UTF-8");
     response.add("X-ClickHouse-Query-Id", context.getCurrentQueryId());

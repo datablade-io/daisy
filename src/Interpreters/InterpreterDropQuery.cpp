@@ -6,13 +6,16 @@
 #include <Interpreters/InterpreterDropQuery.h>
 #include <Interpreters/ExternalDictionariesLoader.h>
 #include <Interpreters/QueryLog.h>
+#include <Interpreters/BlockUtils.h>
 #include <Access/AccessRightsElement.h>
 #include <Parsers/ASTDropQuery.h>
+#include <Parsers/queryToString.h>
 #include <Storages/IStorage.h>
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Common/typeid_cast.h>
 #include <Databases/DatabaseReplicated.h>
+#include <DistributedMetadata/CatalogService.h>
 
 #if !defined(ARCADIA_BUILD)
 #    include "config_core.h"
@@ -34,6 +37,8 @@ namespace ErrorCodes
     extern const int UNKNOWN_DICTIONARY;
     extern const int NOT_IMPLEMENTED;
     extern const int INCORRECT_QUERY;
+    extern const int CONFIG_ERROR;
+    extern const int OK;
 }
 
 
@@ -84,9 +89,83 @@ void InterpreterDropQuery::waitForTableToBeActuallyDroppedOrDetached(const ASTDr
         db->waitDetachedTableNotInUse(uuid_to_wait);
 }
 
+/// Daisy : start
+bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
+{
+    if (!context.isDistributed())
+    {
+        return false;
+    }
+
+    if (!context.getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        /// context.setDistributedDDLOperation(true);
+        return false;
+    }
+
+    if(context.isDistributedDDLOperation())
+    {
+        const auto & catalog_service = CatalogService::instance(context);
+        auto tables = catalog_service.findTableByName(query.database, query.table);
+        if (tables.empty())
+        {
+            throw Exception(fmt::format("Table {}.{} does not exist.", query.database, query.table), ErrorCodes::UNKNOWN_TABLE);
+        }
+        if (tables[0]->engine !="DistributedMergeTree")
+        {
+            /// FIXME:  We only support `DistributedMergeTree` table engine for now
+            return false;
+        }
+
+        auto * log = &Poco::Logger::get("InterpreterDropQuery");
+
+        auto query_str = queryToString(query);
+        LOG_INFO(log, "Drop DistributedMergeTree query={} query_id={}", query_str, context.getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols = {
+            {"payload", context.getQueryParameters().at("_payload")},
+            {"database", query.database},
+            {"table", query.table},
+            {"query_id", context.getCurrentQueryId()},
+            {"user", context.getUserName()}
+        };
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        std::vector<std::pair<String, UInt64>> uint64_cols = {
+            /// Milliseconds since epoch
+            std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
+        };
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (payload, database, table, timestamp, query_id, user)
+
+        appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
+
+        LOG_INFO(
+            log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        return true;
+    }
+    return false;
+}
+/// Daisy : end
+
 BlockIO InterpreterDropQuery::executeToTable(ASTDropQuery & query)
 {
     DatabasePtr database;
+
+    /// Daisy : start
+    if (deleteTableDistributed(query))
+    {
+        return {};
+    }
+    /// Daisy : end
+
     UUID table_to_wait_on = UUIDHelpers::Nil;
     auto res = executeToTableImpl(query, database, table_to_wait_on);
     if (query.no_delay)
@@ -199,7 +278,6 @@ BlockIO InterpreterDropQuery::executeToTableImpl(ASTDropQuery & query, DatabaseP
     return {};
 }
 
-
 BlockIO InterpreterDropQuery::executeToDictionary(
     const String & database_name_,
     const String & dictionary_name,
@@ -293,7 +371,6 @@ BlockIO InterpreterDropQuery::executeToTemporaryTable(const String & table_name,
 
     return {};
 }
-
 
 BlockIO InterpreterDropQuery::executeToDatabase(const ASTDropQuery & query)
 {
