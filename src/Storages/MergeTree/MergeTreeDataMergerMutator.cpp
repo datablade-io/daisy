@@ -1085,7 +1085,7 @@ MergeTreeData::MutableDataPartPtr MergeTreeDataMergerMutator::mergePartsToTempor
     }
 
     /// Daisy : starts
-    mergeSequenceInfo(parts, new_data_part, context);
+    new_data_part->seq_info = mergeSequenceInfo(parts, context);
     /// Daisy : ends
 
     if (chosen_merge_algorithm != MergeAlgorithm::Vertical)
@@ -1917,12 +1917,12 @@ bool MergeTreeDataMergerMutator::checkOperationIsNotCanceled(const MergeListEntr
 }
 
 /// Daisy : starts
-/// Merge sequence info from parts to new part
-void MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, MergeTreeData::MutableDataPartPtr & new_data_part, const Context & context) const
+/// Merge sequence info from parts in a partition to new part
+SequenceInfoPtr MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, const Context & context)
 {
     std::vector<SequenceInfoPtr> sequences;
 
-    for (auto & part : parts)
+    for (const auto & part : parts)
     {
         if (part->seq_info)
         {
@@ -1933,13 +1933,7 @@ void MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeData::DataPart
         }
     }
 
-    if (sequences.empty())
-    {
-        return;
-    }
-
-    new_data_part->seq_info = DB::mergeSequenceInfo(sequences, data.committedSN(), context.getSettingsRef().max_idempotent_ids, log);
+    return DB::mergeSequenceInfo(sequences, data.committedSN(), context.getSettingsRef().max_idempotent_ids, log);
 }
 /// Daisy : ends
-
 }

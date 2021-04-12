@@ -203,12 +203,13 @@ private:
     void mergeBlocks(Block & lhs, Block & rhs);
     bool dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record);
     void addIdempotentKey(const String & key);
+    void buildIdempotentKeysIndex(const std::deque<std::shared_ptr<String>> & idempotent_keys_);
 
     void commit(const IDistributedWriteAheadLog::RecordPtrs & records, std::any & dwal_consume_ctx);
 
     using SequencePair = std::pair<IDistributedWriteAheadLog::RecordSequenceNumber, IDistributedWriteAheadLog::RecordSequenceNumber>;
 
-    void doCommit(Block block, SequencePair seq_pair, std::shared_ptr<std::vector<String>> keys, std::any & dwal_consume_ctx);
+    void doCommit(Block block, SequencePair seq_pair, std::shared_ptr<IdempotentKeys> keys, std::any & dwal_consume_ctx);
     void commitSN(std::any & dwal_consume_ctx);
     void commitSNLocal(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn);
     void commitSNRemote(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn, std::any & dwal_consume_ctx);
@@ -257,8 +258,8 @@ private:
     std::deque<SequencePair> outstanding_sns;
 
     /// Idempotent keys caching
-    std::deque<std::shared_ptr<String>> idem_keys;
-    std::unordered_set<StringRef, StringRefHash> idem_keys_index;
+    std::deque<std::shared_ptr<String>> idempotent_keys;
+    std::unordered_set<StringRef, StringRefHash> idempotent_keys_index;
 
     // For random shard index generation
     mutable std::mutex rng_mutex;
