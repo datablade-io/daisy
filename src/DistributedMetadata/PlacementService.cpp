@@ -2,7 +2,7 @@
 
 #include "CatalogService.h"
 
-#include <Common/ClockUtils.h>
+#include <common/ClockUtils.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <Interpreters/Context.h>
 #include <Storages/System/StorageSystemStoragePolicies.h>
@@ -68,7 +68,7 @@ std::vector<NodeMetricsPtr> PlacementService::place(
 
     for (const auto & [node_identity, node_metrics] : nodes_metrics)
     {
-        auto staleness = monotonicNowMilliseconds() - node_metrics->last_update_time;
+        auto staleness = MonotonicMilliseconds::now() - node_metrics->last_update_time;
         if (staleness > STALENESS_THRESHOLD_MS)
         {
             node_metrics->staled = true;
@@ -158,7 +158,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     {
         /// Existing node metrics.
         node_metrics = iter->second;
-        auto utc_now = utcNowMilliseconds();
+        auto utc_now = UTCMilliseconds::now();
         if (utc_now < broadcast_time)
         {
             LOG_WARNING(
@@ -188,7 +188,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     node_metrics->http_port = http_port;
     node_metrics->tcp_port = tcp_port;
     node_metrics->disk_space.swap(disk_space);
-    node_metrics->last_update_time = monotonicNowMilliseconds();
+    node_metrics->last_update_time = MonotonicMilliseconds::now();
 }
 
 void PlacementService::broadcast()
@@ -235,7 +235,7 @@ void PlacementService::broadcastTask()
     record.headers["_host"] = THIS_HOST;
     record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
-    record.headers["_broadcast_time"] = std::to_string(utcNowMilliseconds());
+    record.headers["_broadcast_time"] = std::to_string(UTCMilliseconds::now());
     record.headers["_version"] = "1";
 
     const auto & result = dwal->append(record, dwal_append_ctx);

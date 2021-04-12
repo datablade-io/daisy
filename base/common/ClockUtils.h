@@ -2,6 +2,8 @@
 
 #include <chrono>
 
+#include "types.h"
+
 namespace DB
 {
 template<typename Clock, typename TimeScale>
