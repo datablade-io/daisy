@@ -2,6 +2,9 @@
 #include "SchemaValidator.h"
 
 #include <Core/Block.h>
+#include <DataTypes/DataTypeFactory.h>
+#include <DataTypes/DataTypeString.h>
+#include <Databases/DatabaseFactory.h>
 #include <Interpreters/executeQuery.h>
 
 #include <boost/algorithm/string/join.hpp>
@@ -10,6 +13,11 @@
 
 namespace DB
 {
+namespace ErrorCodes
+{
+    extern const int CONFIG_ERROR;
+    extern const int OK;
+}
 
 std::map<String, std::map<String, String> > TableRestRouterHandler::create_schema = {
     {"required",{
@@ -49,9 +57,6 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::update_schem
                 }
     },
     {"optional", {
-                    {"shards", "int"},
-                    {"replication_factor", "int"},
-                    {"order_by_expression", "string"},
                     {"ttl_expression", "string"}
                 }
     }
@@ -85,74 +90,104 @@ bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & paylo
     return validateSchema(update_schema, payload, error_msg);
 }
 
-String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
-{
-    String query = "show databases";
-    return processQuery(query, http_status);
-}
-
-String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+String TableRestRouterHandler::getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard ) const
 {
     String database_name = getPathParameter("database");
     std::vector<String> create_segments;
-
     create_segments.push_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
     create_segments.push_back("(");
-    create_segments.push_back(getColumnsDefination(payload->getArray("columns"), payload->get("_time_column").toString()));
+    create_segments.push_back(getColumnsDefinition(payload->getArray("columns"), payload->get("_time_column").toString()));
     create_segments.push_back(")");
-    create_segments.push_back("ENGINE = MergeTree() PARTITION BY " + payload->get("partition_by_expression").toString());
+    create_segments.push_back(fmt::format(
+        "ENGINE = DistributedMergeTree({}, {}, {})",
+        payload->get("replication_factor").toString(),
+        payload->get("shards").toString(),
+        payload->get("shard_by_expression").toString()));
+    create_segments.push_back("PARTITION BY " + payload->get("partition_by_expression").toString());
     create_segments.push_back("ORDER BY " + payload->get("order_by_expression").toString());
-    create_segments.push_back(" TTL " + payload->get("ttl_expression").toString());
-
-    String query = boost::algorithm::join(create_segments, " ");
-
-    return processQuery(query, http_status);
-}
-
-String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
-{
-    String database_name = getPathParameter("database");
-    String table_name = getPathParameter("table");
-
-    String query = "DROP TABLE " + database_name + "." + table_name;
-    return processQuery(query, http_status);
-}
-
-String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
-{
-    String database_name = getPathParameter("database");
-    String table_name = getPathParameter("table");
-    bool has_order_by = payload->has("order_by_expression");
-    bool has_ttl = payload->has("ttl_expression");
-
-    std::vector<String> create_segments;
-
-    if (has_order_by || has_ttl)
+    if (payload->has("ttl_expression"))
     {
-        create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
-
-        if (payload->has("order_by_expression"))
-        {
-            create_segments.push_back(" MODIFY ORDER BY " + payload->get("order_by_expression").toString());
-        }
-
-        if (has_order_by && has_ttl)
-        {
-            create_segments.push_back(",");
-        }
-
-        if (payload->has("ttl_expression"))
-        {
-            create_segments.push_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
-        }
+        create_segments.push_back("TTL " + payload->get("ttl_expression").toString());
+    }
+    if (!shard.empty())
+    {
+        create_segments.push_back("SETTINGS shard=" + shard);
     }
 
-    String query = boost::algorithm::join(create_segments, " ");
-
-    return processQuery(query, http_status);
+    return boost::algorithm::join(create_segments, " ");
 }
 
-String TableRestRouterHandler::processQuery(const String & query, Int32 & /* http_status */) const
+String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status*/) const
+{
+    String query = "show databases";
+    return processQuery(query);
+}
+
+String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
+{
+    const auto & shard = getQueryParameter("shard");
+    const auto & query = getTableCreationSQL(payload, shard);
+
+    if (query_context.isDistributed() && getQueryParameter("distributed") != "false")
+    {
+        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        payload->stringify(payload_str_stream, 0);
+        const String & payload_str = payload_str_stream.str();
+        query_context.setQueryParameter("_payload", payload_str);
+        query_context.setDistributedDDLOperation(true);
+    }
+
+    return processQuery(query);
+}
+
+String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
+{
+    if (query_context.isDistributed() && getQueryParameter("distributed") != "false")
+    {
+        query_context.setDistributedDDLOperation(true);
+        query_context.setQueryParameter("_payload", "{}");
+    }
+
+    const String & database_name = getPathParameter("database");
+    const String & table_name = getPathParameter("table");
+    return processQuery("DROP TABLE " + database_name + "." + table_name);
+}
+
+String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
+{
+    const String & database_name = getPathParameter("database");
+    const String & table_name = getPathParameter("table");
+
+    LOG_INFO(log, "Updating table {}.{}", database_name, table_name);
+    std::vector<String> create_segments;
+    create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
+    create_segments.push_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
+
+    const String & query = boost::algorithm::join(create_segments, " ");
+
+    if (query_context.isDistributed() && getQueryParameter("distributed") != "false")
+    {
+        query_context.setDistributedDDLOperation(true);
+
+        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        payload->stringify(payload_str_stream, 0);
+        query_context.setQueryParameter("_payload", payload_str_stream.str());
+    }
+
+    return processQuery(query);
+}
+
+String TableRestRouterHandler::buildResponse() const
+{
+    Poco::JSON::Object resp;
+    resp.set("query_id", query_context.getCurrentQueryId());
+    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+    resp.stringify(resp_str_stream, 0);
+
+    return resp_str_stream.str();
+}
+
+String TableRestRouterHandler::processQuery(const String & query) const
 {
     BlockIO io{executeQuery(query, query_context, false /* internal */)};
 
@@ -160,40 +195,28 @@ String TableRestRouterHandler::processQuery(const String & query, Int32 & /* htt
     {
         return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
     }
-    else if (io.in)
-    {
-        Block block = io.getInputStream()->read();
-        return block.getColumns().at(0)->getDataAt(0).data;
-    }
-    else
-    {
-        Poco::JSON::Object resp;
-        resp.set("query_id", query_context.getClientInfo().initial_query_id);
-        std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        resp.stringify(resp_str_stream, 4);
-        String resp_str = resp_str_stream.str();
-        return resp_str;
-    }
+
+    return buildResponse();
 }
 
-String TableRestRouterHandler::getColumnsDefination(const Poco::JSON::Array::Ptr & columns, const String & time_column) const
+String TableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Array::Ptr & columns, const String & time_column) const
 {
     std::ostringstream oss; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     using std::begin;
     using std::end;
-    std::vector<String> column_definatins;
+    std::vector<String> column_definitions;
 
     for (auto & col : *columns)
     {
-        column_definatins.push_back(getColumnDefination(col.extract<Poco::JSON::Object::Ptr>()));
+        column_definitions.push_back(getColumnDefinition(col.extract<Poco::JSON::Object::Ptr>()));
     }
 
     /// FIXME : we can choose between ALIAS or DEFAULT
-    std::copy(begin(column_definatins), end(column_definatins), std::ostream_iterator<String>(oss, ","));
+    std::copy(begin(column_definitions), end(column_definitions), std::ostream_iterator<String>(oss, ","));
     return oss.str() + " `_time` DateTime64(3) ALIAS " + time_column;
 }
 
-String TableRestRouterHandler::getColumnDefination(const Poco::JSON::Object::Ptr & column) const
+String TableRestRouterHandler::getColumnDefinition(const Poco::JSON::Object::Ptr & column) const
 {
     std::vector<String> create_segments;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Interpreters/IInterpreter.h>
+#include <Parsers/ASTAlterQuery.h>
 #include <Parsers/IAST_fwd.h>
 
 
@@ -17,7 +18,7 @@ class ASTAlterCommand;
 class InterpreterAlterQuery : public IInterpreter
 {
 public:
-    InterpreterAlterQuery(const ASTPtr & query_ptr_, const Context & context_);
+    InterpreterAlterQuery(const ASTPtr & query_ptr_, Context & context_);
 
     BlockIO execute() override;
 
@@ -29,8 +30,11 @@ private:
     AccessRightsElements getRequiredAccess() const;
 
     ASTPtr query_ptr;
+    /// Daisy : start
+    Context & context;
 
-    const Context & context;
+    bool alterTableDistributed(const ASTAlterQuery & query);
+    /// Daisy : end
 };
 
 }
