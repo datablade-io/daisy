@@ -1579,7 +1579,7 @@ Int64 StorageMergeTree::loadSN() const
     auto buf = sn_file.second->readFile(sn_file.first);
     assertString("1\n", *buf);
 
-    Int64 sn = -1;;
+    Int64 sn = -1;
     DB::readText(sn, *buf);
     return sn;
 }
