@@ -1,18 +1,20 @@
 #include <Poco/File.h>
 
-#include <Access/AccessRightsElement.h>
-#include <Databases/DatabaseReplicated.h>
-#include <Interpreters/BlockUtils.h>
+#include <Databases/IDatabase.h>
 #include <Interpreters/Context.h>
-#include <Interpreters/ExternalDictionariesLoader.h>
-#include <Interpreters/InterpreterDropQuery.h>
-#include <Interpreters/QueryLog.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>
+#include <Interpreters/InterpreterDropQuery.h>
+#include <Interpreters/ExternalDictionariesLoader.h>
+#include <Interpreters/QueryLog.h>
+#include <Interpreters/BlockUtils.h>
+#include <Access/AccessRightsElement.h>
 #include <Parsers/ASTDropQuery.h>
 #include <Parsers/queryToString.h>
+#include <Storages/IStorage.h>
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Common/typeid_cast.h>
+#include <Databases/DatabaseReplicated.h>
 #include <DistributedMetadata/CatalogService.h>
 
 
@@ -86,6 +88,7 @@ void InterpreterDropQuery::waitForTableToBeActuallyDroppedOrDetached(const ASTDr
         db->waitDetachedTableNotInUse(uuid_to_wait);
 }
 
+/// Daisy : start
 bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
 {
     if (!context.isDistributed())
@@ -111,7 +114,7 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
         }
         if (tables[0]->engine !="DistributedMergeTree")
         {
-            ///FIXME:  We only support `DistributedMergeTree` table engine for now
+            /// FIXME:  We only support `DistributedMergeTree` table engine for now
             return false;
         }
 
@@ -149,6 +152,7 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
     }
     return false;
 }
+/// Daisy : end
 
 BlockIO InterpreterDropQuery::executeToTable(const ASTDropQuery & query)
 {

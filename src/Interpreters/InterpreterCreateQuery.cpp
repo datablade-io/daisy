@@ -11,14 +11,22 @@
 
 #include <Core/Defines.h>
 #include <Core/Settings.h>
+#include <Core/ColumnWithTypeAndName.h>
+
+#include <Columns/ColumnString.h>
+#include <Columns/ColumnVector.h>
+#include <Columns/ColumnsNumber.h>
+#include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 
 #include <IO/WriteBufferFromFile.h>
 #include <IO/WriteHelpers.h>
+#include <IO/ReadHelpers.h>
 
 #include <Parsers/ASTColumnDeclaration.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTIdentifier.h>
+#include <Parsers/ASTIndexDeclaration.h>
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTInsertQuery.h>
 #include <Parsers/ParserCreateQuery.h>
@@ -30,9 +38,12 @@
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Storages/StorageDistributedMergeTree.h>
 
+#include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
+
 #include <Interpreters/Context.h>
 #include <Interpreters/executeDDLQueryOnCluster.h>
-#include <Interpreters/BlockUtils.h>
 #include <Interpreters/Cluster.h>
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/InterpreterCreateQuery.h>
@@ -43,6 +54,8 @@
 #include <Access/AccessRightsElement.h>
 
 #include <DataTypes/DataTypeFactory.h>
+#include <DataTypes/NestedUtils.h>
+#include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
 
@@ -59,6 +72,7 @@
 #include <Interpreters/QueryLog.h>
 #include <Interpreters/addTypeConversionToAST.h>
 #include <Interpreters/FunctionNameNormalizer.h>
+#include <Interpreters/BlockUtils.h>
 
 #include <TableFunctions/TableFunctionFactory.h>
 #include <common/logger_useful.h>

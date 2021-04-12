@@ -275,7 +275,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 {
     Block & block = record->block;
     assert(block.has("query_id"));
-    if (!validateSchema(block, {"payload", "database", "table", "query_id", "user", "timestamp"}))
+    if (!validateSchema(block, {"payload", "database", "table", "shards", "replication_factor", "query_id", "user", "timestamp"}))
     {
         return;
     }

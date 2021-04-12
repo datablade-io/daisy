@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <Databases/IDatabase.h>
 #include <Databases/DatabaseReplicated.h>
+#include <Databases/DatabaseFactory.h>
 #include <DistributedMetadata/CatalogService.h>
 
 
