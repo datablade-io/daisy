@@ -1630,14 +1630,17 @@ void StorageMergeTree::populateCommittedSNFromParts()
 
     /// Collect last N idempotent keys
     auto max_keys = global_context.getSettingsRef().max_idempotent_ids;
-    for (auto iter = idempotent_keys.rbegin(); iter != idempotent_keys.rend(); ++iter)
+    auto keys_iter = idempotent_keys.begin();
+
+    if (idempotent_keys.size() > max_keys)
     {
-        last_idempotent_keys.push_front(iter->second);
-        LOG_DEBUG(log, "Loading idempotent key={}", *iter->second);
-        if (last_idempotent_keys.size() >= max_keys)
-        {
-            break;
-        }
+        std::advance(keys_iter, idempotent_keys.size() - max_keys);
+    }
+
+    for (; keys_iter != idempotent_keys.end(); ++keys_iter)
+    {
+        last_idempotent_keys.push_back(keys_iter->second);
+        LOG_DEBUG(log, "Loading idempotent key={}", *keys_iter->second);
     }
 }
 /// Daisy : ends

@@ -148,67 +148,61 @@ std::shared_ptr<IdempotentKeys> readIdempotentKeys(ReadBuffer & in)
     return idempotent_keys;
 }
 
-SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequences, Int64 committed_sn, Poco::Logger * log)
+SequenceRanges mergeSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed_sn, Poco::Logger * log)
 {
+    std::sort(sequence_ranges.begin(), sequence_ranges.end());
+
     SequenceRanges merged;
     SequenceRange last_seq_range;
 
-    size_t total_ranges = 0;
     Int64 min_sn = -1;
     Int64 max_sn = -1;
 
-    for (auto & seq_info : sequences)
+    for (const auto & next_seq_range : sequence_ranges)
     {
-        total_ranges += seq_info->sequence_ranges.size();
-
         /// Merge ranges
-        for (const auto & next_seq_range : seq_info->sequence_ranges)
+        assert(next_seq_range.valid());
+
+        if (min_sn == -1)
         {
-            assert(next_seq_range.valid());
+            min_sn = next_seq_range.start_sn;
+        }
 
-            if (min_sn == -1)
-            {
-                min_sn = next_seq_range.start_sn;
-            }
+        if (next_seq_range.end_sn > max_sn)
+        {
+            max_sn = next_seq_range.end_sn;
+        }
 
-            if (next_seq_range.end_sn > max_sn)
+        if (!last_seq_range.valid())
+        {
+            last_seq_range = next_seq_range;
+        }
+        else
+        {
+            /// There shall be no cases where there is sequence overlapping in a partition
+            assert(last_seq_range.end_sn < next_seq_range.start_sn);
+            if (last_seq_range.end_sn >= next_seq_range.start_sn)
             {
-                max_sn = next_seq_range.end_sn;
+                LOG_ERROR(
+                    log,
+                    "Duplicate sn found: ({}, {}) -> ({}, {})",
+                    last_seq_range.start_sn,
+                    last_seq_range.end_sn,
+                    next_seq_range.start_sn,
+                    next_seq_range.end_sn);
             }
+            last_seq_range = next_seq_range;
+        }
 
-            if (!last_seq_range.valid())
-            {
-                last_seq_range = next_seq_range;
-            }
-            else
-            {
-                /// There shall be no cases where there is sequence overlapping in a partition
-                assert(last_seq_range.end_sn < next_seq_range.start_sn);
-                if (last_seq_range.end_sn >= next_seq_range.start_sn)
-                {
-                    LOG_ERROR(
-                        log,
-                        "Duplicate sn found: ({}, {}) -> ({}, {})",
-                        last_seq_range.start_sn,
-                        last_seq_range.end_sn,
-                        next_seq_range.start_sn,
-                        next_seq_range.end_sn);
-                }
-                last_seq_range = next_seq_range;
-            }
-
-            /// We don't check sequence gap here. There are 3 possible cases
-            /// 1. The missing sequence is not committed yet (rarely)
-            /// 2. It is casued by resending an / several idempotent blocks which will be deduped and ignored.
-            /// 3. The Block whish has the missing sequence is distributed to a different partition
-            /// Only for sequence ranges which are beyond the `committed_sn`, we need merge them and
-            /// keep them around
-            if (next_seq_range.end_sn > committed_sn)
-            {
-                /// We can still merge, because `committed_sn` confirms that
-                /// all blocks with sequence IDs less than it are committed
-                merged.push_back(next_seq_range);
-            }
+        /// We don't check sequence gap here. There are 3 possible cases
+        /// 1. The missing sequence is not committed yet (rarely)
+        /// 2. It is casued by resending an / several idempotent blocks which will be deduped and ignored.
+        /// 3. The Block whish has the missing sequence is distributed to a different partition
+        /// Only for sequence ranges which are beyond the `committed_sn`, we need merge them and
+        /// keep them around
+        if (next_seq_range.end_sn > committed_sn)
+        {
+            merged.push_back(next_seq_range);
         }
     }
 
@@ -217,7 +211,7 @@ SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequence
         LOG_DEBUG(
             log,
             "Merge {} sequence ranges to {}, committed_sn={} min_sn={} max_sn={}",
-            total_ranges,
+            sequence_ranges.size(),
             merged.size(),
             committed_sn,
             min_sn,
@@ -227,89 +221,43 @@ SequenceRanges mergeSequenceRanges(const std::vector<SequenceInfoPtr> & sequence
     return merged;
 }
 
-std::shared_ptr<IdempotentKeys>
-mergeIdempotentKeys(std::vector<SequenceInfoPtr> & sequences, UInt64 max_idempotent_keys, Poco::Logger * log)
+inline std::shared_ptr<IdempotentKeys>
+mergeIdempotentKeys(const std::set<IdempotentKey> & idempotent_keys, UInt64 max_idempotent_keys, Poco::Logger * log)
 {
-    auto start_iter = sequences.rend();
-    size_t start_pos = 0;
-    size_t key_count = 0;
-
-    for (auto iter = sequences.rbegin(); iter != sequences.rend(); ++iter)
+    if (idempotent_keys.empty())
     {
-        const auto & seq_info = **iter;
-        if (seq_info.idempotent_keys)
-        {
-            key_count += seq_info.idempotent_keys->size();
-
-            if (key_count >= max_idempotent_keys)
-            {
-                if (start_pos == 0)
-                {
-                    start_pos = key_count - max_idempotent_keys;
-                    start_iter = iter;
-                }
-            }
-        }
+        return nullptr;
     }
 
-    if (start_iter == sequences.rend())
+    auto result = std::make_shared<IdempotentKeys>();
+
+    auto keys_iter = idempotent_keys.begin();
+    if (idempotent_keys.size() > max_idempotent_keys)
     {
-        --start_iter;
+        std::advance(keys_iter, idempotent_keys.size() - max_idempotent_keys);
+        result->reserve(max_idempotent_keys);
+    }
+    else
+    {
+        result->reserve(idempotent_keys.size());
     }
 
-    if (key_count == 0)
+    for (; keys_iter != idempotent_keys.end(); ++keys_iter)
     {
-       return nullptr;
-    }
-
-    auto idempotent_keys = std::make_shared<IdempotentKeys>();
-    for (; start_iter != sequences.rbegin(); --start_iter)
-    {
-        auto & seq_info = **start_iter;
-
-        if (start_pos > 0)
-        {
-            /// We will need fist skipping `start_pos` elements
-            size_t count = 0;
-            for (const auto & key : *seq_info.idempotent_keys)
-            {
-                if (count++ < start_pos)
-                {
-                    continue;
-                }
-                idempotent_keys->push_back(key);
-            }
-
-            start_pos = 0;
-        }
-        else if (seq_info.idempotent_keys)
-        {
-            for (const auto & key : *seq_info.idempotent_keys)
-            {
-                idempotent_keys->push_back(key);
-            }
-        }
-    }
-
-    if ((*sequences.rbegin())->idempotent_keys)
-    {
-        size_t count = 0;
-        for (const auto & key : *(*sequences.rbegin())->idempotent_keys)
-        {
-            if (count++ < start_pos)
-            {
-                continue;
-            }
-            idempotent_keys->push_back(key);
-        }
+        result->push_back(*keys_iter);
     }
 
     if (log)
     {
-        LOG_DEBUG(log, "Merge {} idempotent keys to {}, max_idempotent_keys={}", key_count, idempotent_keys->size(), max_idempotent_keys);
+        LOG_DEBUG(
+            log,
+            "Merge {} idempotent keys to {}, max_idempotent_keys={}",
+            idempotent_keys.size(),
+            result->size(),
+            max_idempotent_keys);
     }
 
-    return idempotent_keys;
+    return result;
 }
 
 inline void collectMissingSequenceRangeBefore(
@@ -588,31 +536,42 @@ mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 committed_sn, 
         return nullptr;
     }
 
-    /// Sort sequence according to sequence ID ranges
-    std::sort(sequences.begin(), sequences.end(), [](const auto & lhs, const auto & rhs) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-        if (lhs->sequence_ranges.empty())
+    SequenceRanges sequence_ranges;
+    std::set<IdempotentKey> idempotent_keys;
+
+    for (const auto & seq_info : sequences)
+    {
+        for (const auto & seq_range : seq_info->sequence_ranges)
         {
-            return true;
+            /// We don't filter out sequence range according to `committed_sn` here
+            /// because we like to do validation
+            sequence_ranges.push_back(seq_range);
         }
 
-        if (rhs->sequence_ranges.empty())
+        if (seq_info->idempotent_keys)
         {
-            return false;
+            for (const auto & key : *seq_info->idempotent_keys)
+            {
+                idempotent_keys.insert(key);
+            }
         }
+    }
 
-        return lhs->sequence_ranges[0].start_sn < rhs->sequence_ranges[0].start_sn;
-    });
+    auto merged_ranges = mergeSequenceRanges(sequence_ranges, committed_sn, log);
+    auto merged_keys = mergeIdempotentKeys(idempotent_keys, max_idempotent_keys, log);
 
-    auto sequence_ranges = mergeSequenceRanges(sequences, committed_sn, log);
-    auto idempotent_keys = mergeIdempotentKeys(sequences, max_idempotent_keys, log);
-
-    return std::make_shared<SequenceInfo>(std::move(sequence_ranges), idempotent_keys);
+    return std::make_shared<SequenceInfo>(std::move(merged_ranges), merged_keys);
 }
 
 /// The `sequence_ranges` are assumed to have sequence numbers which are great than `committed`
 std::pair<SequenceRanges, Int64>
 missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed, Poco::Logger * log)
 {
+    if (sequence_ranges.empty())
+    {
+        return {{}, committed + 1};
+    }
+
     std::sort(sequence_ranges.begin(), sequence_ranges.end());
 
     SequenceRanges missing_ranges;

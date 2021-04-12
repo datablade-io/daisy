@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 
 
-TEST(SequenceInfoSerializationDeserialization, Serder)
+TEST(SequenceInfo, Serder)
 {
     DB::SequenceRange seq_range{1, 3, 0, 3};
     DB::SequenceRange seq_range2{4, 5, 1, 2};
@@ -118,7 +118,7 @@ TEST(SequenceInfoSerializationDeserialization, Serder)
     EXPECT_EQ(out11.str(), "");
 }
 
-TEST(SequenceInfoMerge, Merge)
+TEST(SequenceInfo, Merge)
 {
     /// seqs:1,1,0,1
     /// seqs:2,2,0,1
@@ -318,7 +318,7 @@ TEST(SequenceInfoMerge, Merge)
     EXPECT_EQ(merged->idempotent_keys->at(6), DB::IdempotentKey(22, "idem22"));
 }
 
-TEST(SequenceInfoMissingSequenceRanges, Missing)
+TEST(SequenceInfo, MissingSequenceRanges)
 {
     {
         DB::SequenceRanges sequence_ranges = {
