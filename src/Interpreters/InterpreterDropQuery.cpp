@@ -17,7 +17,6 @@
 #include <Databases/DatabaseReplicated.h>
 #include <DistributedMetadata/CatalogService.h>
 
-
 #if !defined(ARCADIA_BUILD)
 #    include "config_core.h"
 #endif
