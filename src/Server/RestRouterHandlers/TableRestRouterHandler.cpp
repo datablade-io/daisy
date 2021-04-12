@@ -9,7 +9,6 @@
 
 #include <boost/algorithm/string/join.hpp>
 
-#include <regex>
 #include <vector>
 
 namespace DB
@@ -20,25 +19,27 @@ namespace ErrorCodes
     extern const int OK;
 }
 
-std::map<String, std::map<String, String> > TableRestRouterHandler::create_schema = {
-    {"required",{
-                    {"name","string"},
-                    {"columns", "array"}
-                }
-    },
-    {"optional", {
-                    {"shards", "int"},
-                    {"_time_column", "string"},
-                    {"replication_factor", "int"},
-                    {"order_by_expression", "string"},
-                    {"order_by_granularity", "string"},
-                    {"partition_by_granularity", "string"},
-                    {"ttl_expression", "string"}
-                }
-    }
-};
+namespace
+{
+    std::map<String, std::map<String, String> > CREATE_SCHEMA = {
+        {"required",{
+                        {"name","string"},
+                        {"columns", "array"}
+                    }
+        },
+        {"optional", {
+                        {"shards", "int"},
+                        {"_time_column", "string"},
+                        {"replication_factor", "int"},
+                        {"order_by_expression", "string"},
+                        {"order_by_granularity", "string"},
+                        {"partition_by_granularity", "string"},
+                        {"ttl_expression", "string"}
+                    }
+        }
+    };
 
-std::map<String, std::map<String, String> > TableRestRouterHandler::column_schema = {
+std::map<String, std::map<String, String> > COLUMN_SCHEMA= {
     {"required",{
                     {"name","string"},
                     {"type", "string"},
@@ -54,7 +55,7 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::column_schem
     }
 };
 
-std::map<String, std::map<String, String> > TableRestRouterHandler::update_schema = {
+std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
     {"required",{
                 }
     },
@@ -64,25 +65,25 @@ std::map<String, std::map<String, String> > TableRestRouterHandler::update_schem
     }
 };
 
-std::map<String, String> TableRestRouterHandler::granularity_func_mapping = {
+std::map<String, String> GRANULARITY_FUNC_MAPPING = {
     {"M", "toYYYYMM({})"},
     {"D", "toYYYYMMDD({})"},
     {"H", "toStartOfHour({})"},
-    {"m", "toStartOfMinute({})"},
-    {"s", "toStartOfSecond({})"}
+    {"m", "toStartOfMinute({})"}
 };
+}
 
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    if (!validateSchema(create_schema, payload, error_msg))
+    if (!validateSchema(CREATE_SCHEMA, payload, error_msg))
     {
         return false;
     }
 
     Poco::JSON::Array::Ptr columns = payload->getArray("columns");
-    for (auto & col : *columns)
+    for (const auto & col : *columns)
     {
-        if (!validateSchema(column_schema, col.extract<Poco::JSON::Object::Ptr>(), error_msg))
+        if (!validateSchema(COLUMN_SCHEMA, col.extract<Poco::JSON::Object::Ptr>(), error_msg))
         {
             return false;
         }
@@ -90,24 +91,36 @@ bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payloa
 
     if (payload->has("partition_by_granularity"))
     {
-        return granularity_func_mapping.contains(payload->get("partition_by_granularity").toString());
+        if (!GRANULARITY_FUNC_MAPPING.contains(payload->get("partition_by_granularity").toString()))
+        {
+            error_msg = "Invalid partition_by_granularity, only `m, H, D, M` are supported";
+            return false;
+        }
     }
 
     if (payload->has("order_by_granularity"))
     {
-        return granularity_func_mapping.contains(payload->get("order_by_granularity").toString());
+        if (!GRANULARITY_FUNC_MAPPING.contains(payload->get("order_by_granularity").toString()))
+        {
+            error_msg = "Invalid order_by_granularity, only `m, H, D, M` are supported";
+            return false;
+        }
     }
 
-    if (query_context.isDistributed()
-        || (payload->has("shards")
-            && payload->has("replication_factor")
-            && payload->get("shards").toString() == "1"
-            && payload->get("replication_factor").toString() == "1"))
+    /// For non-distributed env or user force to create a `local` MergeTree table
+    if (!query_context.isDistributed() || getQueryParameter("distributed") == "false")
     {
-        return true;
+        int shards = payload->has("shards") ? payload->get("shards").convert<Int32>() : 1;
+        int replication_factor = payload->has("replication_factor") ? payload->get("replication_factor").convert<Int32>() : 1;
+
+        if (shards != 1 || replication_factor != 1)
+        {
+            error_msg = "Invalid shards / replication factor, local table shall have only 1 shard and 1 replica";
+            return false;
+        }
     }
 
-    return false;
+    return true;
 }
 
 bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const
@@ -117,7 +130,7 @@ bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & /* payl
 
 bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    return validateSchema(update_schema, payload, error_msg);
+    return validateSchema(UPDATE_SCHEMA, payload, error_msg);
 }
 
 String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status*/) const
@@ -131,7 +144,7 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
     const auto & shard = getQueryParameter("shard");
     const auto & query = getTableCreationSQL(payload, shard);
 
-    if (query_context.isDistributed() && getQueryParameter("distributed") != "false")
+    if (query_context.isDistributed() && getQueryParameter("distributed") != "false" && getQueryParameter("distributed_ddl") != "false")
     {
         std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         payload->stringify(payload_str_stream, 0);
@@ -145,7 +158,7 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
 {
-    if (query_context.isDistributed() && getQueryParameter("distributed") != "false")
+    if (query_context.isDistributed() && getQueryParameter("distributed") != "false" && getQueryParameter("distributed_ddl") != "false")
     {
         query_context.setDistributedDDLOperation(true);
         query_context.setQueryParameter("_payload", "{}");
@@ -163,12 +176,12 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
 
     LOG_INFO(log, "Updating table {}.{}", database_name, table_name);
     std::vector<String> create_segments;
-    create_segments.emplace_back("ALTER TABLE " + database_name + "." + table_name);
-    create_segments.emplace_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
+    create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
+    create_segments.push_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
 
     const String & query = boost::algorithm::join(create_segments, " ");
 
-    if (query_context.isDistributed() && getQueryParameter("distributed") != "false")
+    if (query_context.isDistributed() && getQueryParameter("distributed") != "false" && getQueryParameter("distributed_ddl") != "false")
     {
         query_context.setDistributedDDLOperation(true);
 
@@ -198,15 +211,16 @@ String TableRestRouterHandler::processQuery(const String & query) const
     {
         return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
     }
+    io.onFinish();
 
     return buildResponse();
 }
 
 String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & payload) const
 {
-    if(query_context.isDistributed())
+    if (query_context.isDistributed())
     {
-        if (getQueryParameter("distributed") != "false" || hasQueryParameter("shard"))
+        if (getQueryParameter("distributed") != "false")
         {
             return fmt::format(
                 "DistributedMergeTree({}, {}, {})",
@@ -215,19 +229,26 @@ String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & pay
                 payload->get("shard_by_expression").toString());
         }
     }
+
     return "MergeTree()";
+}
+
+inline String TableRestRouterHandler::getTimeColumn(const Poco::JSON::Object::Ptr & payload) const
+{
+    return payload->has("_time_column") ? payload->get("_time_column").toString() : "_time";
 }
 
 String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const
 {
-    const auto & partition_by_granularity = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : "M";
-    return fmt::format(granularity_func_mapping[partition_by_granularity], time_column);
+    const auto & partition_by_granularity
+        = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : "M";
+    return fmt::format(GRANULARITY_FUNC_MAPPING[partition_by_granularity], time_column);
 }
 
-String TableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const
+String TableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/) const
 {
     const auto & order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "D";
-    const auto & default_order_expr = fmt::format(granularity_func_mapping[order_by_granularity], getTimeColumn(payload));
+    const auto & default_order_expr = fmt::format(GRANULARITY_FUNC_MAPPING[order_by_granularity], getTimeColumn(payload));
     const auto & order_by_expression = payload->has("order_by_expression") ? payload->get("order_by_expression").toString() : String();
 
     if (order_by_expression.empty())
@@ -235,45 +256,33 @@ String TableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & pa
         return default_order_expr;
     }
 
-    if(order_by_expression.find(time_column) != String::npos)
-    {
-        Strings expressions;
-        boost::split(expressions, order_by_expression, boost::is_any_of(","));
-
-        String pattern = "\\W" + time_column + "\\W";
-        std::regex express(pattern);
-        std::match_results<std::string::iterator> matched;
-        if(std::regex_match(expressions[0].begin(), expressions[0].end(), matched, express))
-        {
-            if (!matched.empty())
-            {
-                return order_by_expression;
-            }
-        }
-    }
+    /// FIXME: We may need to check whether the time column is already set as the first column in order by expression.
 
     return default_order_expr + ", " + order_by_expression;
 }
 
-String TableRestRouterHandler::getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard ) const
+String TableRestRouterHandler::getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
 {
     const auto & database_name = getPathParameter("database");
     const auto & time_col = getTimeColumn(payload);
     std::vector<String> create_segments;
-    create_segments.emplace_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
-    create_segments.emplace_back("(");
-    create_segments.emplace_back(getColumnsDefinition(payload));
-    create_segments.emplace_back(")");
-    create_segments.emplace_back("ENGINE = " + getEngineExpr(payload));
-    create_segments.emplace_back("PARTITION BY " + getPartitionExpr(payload, time_col));
-    create_segments.emplace_back("ORDER BY (" + getOrderbyExpr(payload, time_col) + ")");
+    create_segments.push_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
+    create_segments.push_back("(");
+    create_segments.push_back(getColumnsDefinition(payload));
+    create_segments.push_back(")");
+    create_segments.push_back("ENGINE = " + getEngineExpr(payload));
+    create_segments.push_back("PARTITION BY " + getPartitionExpr(payload, time_col));
+    create_segments.push_back("ORDER BY (" + getOrderbyExpr(payload, time_col) + ")");
+
     if (payload->has("ttl_expression"))
     {
-        create_segments.emplace_back("TTL " + payload->get("ttl_expression").toString());
+        /// FIXME  Enforce time based TTL only
+        create_segments.push_back("TTL " + payload->get("ttl_expression").toString());
     }
+
     if (!shard.empty())
     {
-        create_segments.emplace_back("SETTINGS shard=" + shard);
+        create_segments.push_back("SETTINGS shard=" + shard);
     }
 
     return boost::algorithm::join(create_segments, " ");
@@ -288,9 +297,9 @@ String TableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Pt
     using std::end;
     std::vector<String> column_definitions;
 
-    for (auto & col : *columns)
+    for (const auto & col : *columns)
     {
-        column_definitions.emplace_back(getColumnDefinition(col.extract<Poco::JSON::Object::Ptr>()));
+        column_definitions.push_back(getColumnDefinition(col.extract<Poco::JSON::Object::Ptr>()));
     }
 
     std::copy(begin(column_definitions), end(column_definitions), std::ostream_iterator<String>(oss, ","));
@@ -298,41 +307,41 @@ String TableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Pt
     {
         return oss.str() + " `_time` DateTime64(3) ALIAS " + payload->get("_time_column").toString();
     }
-    return oss.str() + " `_time` DateTime64(3, UTC) DEFAULT now()";
+    return oss.str() + " `_time` DateTime64(3, UTC) DEFAULT now64(3)";
 }
 
 String TableRestRouterHandler::getColumnDefinition(const Poco::JSON::Object::Ptr & column) const
 {
     std::vector<String> create_segments;
 
-    create_segments.emplace_back(column->get("name").toString());
+    create_segments.push_back(column->get("name").toString());
     if (column->has("nullable") && column->get("nullable"))
     {
-        create_segments.emplace_back(" Nullable(" + column->get("type").toString() + ")");
+        create_segments.push_back(" Nullable(" + column->get("type").toString() + ")");
     }
     else
     {
-        create_segments.emplace_back(" " + column->get("type").toString());
+        create_segments.push_back(" " + column->get("type").toString());
     }
 
     if (column->has("default"))
     {
-        create_segments.emplace_back(" DEFAULT " + column->get("default").toString());
+        create_segments.push_back(" DEFAULT " + column->get("default").toString());
     }
 
     if (column->has("compression_codec"))
     {
-        create_segments.emplace_back(" CODEC(" + column->get("compression_codec").toString() + ")");
+        create_segments.push_back(" CODEC(" + column->get("compression_codec").toString() + ")");
     }
 
     if (column->has("ttl_expression"))
     {
-        create_segments.emplace_back(" TTL " + column->get("ttl_expression").toString());
+        create_segments.push_back(" TTL " + column->get("ttl_expression").toString());
     }
 
     if (column->has("skipping_index_expression"))
     {
-        create_segments.emplace_back(", " + column->get("skipping_index_expression").toString());
+        create_segments.push_back(", " + column->get("skipping_index_expression").toString());
     }
 
     return boost::algorithm::join(create_segments, " ");

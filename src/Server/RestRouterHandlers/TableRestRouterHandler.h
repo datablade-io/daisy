@@ -28,12 +28,6 @@ private:
     String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
 
 private:
-    static std::map<String, std::map<String, String>> create_schema;
-    static std::map<String, std::map<String, String>> column_schema;
-    static std::map<String, std::map<String, String>> update_schema;
-
-    static std::map<String, String> granularity_func_mapping;
-
     String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const;
     String getColumnDefinition(const Poco::JSON::Object::Ptr & column) const;
 
@@ -42,10 +36,7 @@ private:
 
 
     String getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
-    inline String getTimeColumn(const Poco::JSON::Object::Ptr & payload) const
-    {
-        return payload->has("_time_column") ? payload->get("_time_column").toString() : "_time";
-    }
+    String getTimeColumn(const Poco::JSON::Object::Ptr & payload) const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
     String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
     String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
