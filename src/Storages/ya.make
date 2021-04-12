@@ -106,6 +106,7 @@ SRCS(
     MergeTree/ReplicatedMergeTreeQueue.cpp
     MergeTree/ReplicatedMergeTreeRestartingThread.cpp
     MergeTree/ReplicatedMergeTreeTableMetadata.cpp
+    MergeTree/SequenceInfo.cpp
     MergeTree/SimpleMergeSelector.cpp
     MergeTree/TTLMergeSelector.cpp
     MergeTree/checkDataPart.cpp

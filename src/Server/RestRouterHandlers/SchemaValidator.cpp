@@ -3,11 +3,6 @@
 
 namespace DB
 {
-namespace ErrorCodes
-{
-    extern const int POCO_EXCEPTION;
-}
-
 bool validateSchema(const std::map<String, std::map<String, String>> & schema, const Poco::JSON::Object::Ptr & payload, String & error_msg)
 {
     auto iter = schema.find("required");
