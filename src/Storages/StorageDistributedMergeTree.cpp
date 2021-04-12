@@ -242,17 +242,15 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
             has_force_restore_data_flag_);
         tailer.emplace(1);
 
-        /// Load sn and setup it
-        auto sn = storage->loadSN();
-        storage->setCommittedSN(sn);
-
+        buildIdempotentKeysIndex(storage->lastIdempotentKeys());
+        auto sn = storage->committedSN();
         if (sn >= 0)
         {
             std::lock_guard lock(sns_mutex);
             last_sn = sn;
             local_sn = sn;
         }
-        LOG_INFO(log, "Load committed sequence={}", sn);
+        LOG_INFO(log, "Load committed sn={}", sn);
     }
 
     initWal();
@@ -684,7 +682,6 @@ QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageR
 }
 
 /// New functions
-
 IColumn::Selector StorageDistributedMergeTree::createSelector(const ColumnWithTypeAndName & result) const
 {
 /// If result.type is DataTypeLowCardinality, do shard according to its dictionaryType
@@ -941,7 +938,7 @@ inline void StorageDistributedMergeTree::progressSequences(const SequencePair & 
 }
 
 void StorageDistributedMergeTree::doCommit(
-    Block block, SequencePair seq_pair, std::shared_ptr<std::vector<String>> keys, std::any & dwal_consume_ctx)
+    Block block, SequencePair seq_pair, std::shared_ptr<IdempotentKeys> keys, std::any & dwal_consume_ctx)
 {
     {
         std::lock_guard lock(sns_mutex);
@@ -1007,27 +1004,36 @@ void StorageDistributedMergeTree::doCommit(
     commitSN(dwal_consume_ctx);
 }
 
+void StorageDistributedMergeTree::buildIdempotentKeysIndex(const std::deque<std::shared_ptr<String>> & idempotent_keys_)
+{
+    idempotent_keys = idempotent_keys_;
+    for (const auto & key : idempotent_keys)
+    {
+        idempotent_keys_index.emplace(*key);
+    }
+}
+
 /// Add with lock held
 inline void StorageDistributedMergeTree::addIdempotentKey(const String & key)
 {
-    if (idem_keys.size() >= global_context.getSettingsRef().max_idempotent_ids)
+    if (idempotent_keys.size() >= global_context.getSettingsRef().max_idempotent_ids)
     {
-        auto removed = idem_keys_index.erase(*idem_keys.front());
+        auto removed = idempotent_keys_index.erase(*idempotent_keys.front());
         (void)removed;
         assert(removed == 1);
 
-        idem_keys.pop_front();
+        idempotent_keys.pop_front();
     }
 
     auto shared_key = std::make_shared<String>(key);
-    idem_keys.push_back(shared_key);
+    idempotent_keys.push_back(shared_key);
 
-    auto [iter, inserted] = idem_keys_index.emplace(*shared_key);
+    auto [iter, inserted] = idempotent_keys_index.emplace(*shared_key);
     assert(inserted);
     (void)inserted;
     (void)iter;
 
-    assert(idem_keys.size() == idem_keys_index.size());
+    assert(idempotent_keys.size() == idempotent_keys_index.size());
 }
 
 bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::RecordPtr & record)
@@ -1041,7 +1047,7 @@ bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::Re
     auto key_exists = false;
     {
         std::lock_guard lock{sns_mutex};
-        key_exists = idem_keys_index.contains(idem_key);
+        key_exists = idempotent_keys_index.contains(idem_key);
         if (!key_exists)
         {
             addIdempotentKey(idem_key);
@@ -1064,7 +1070,7 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
     }
 
     Block block;
-    auto keys = std::make_shared<std::vector<String>>();
+    auto keys = std::make_shared<IdempotentKeys>();
 
     for (auto & rec : records)
     {
@@ -1089,7 +1095,7 @@ void StorageDistributedMergeTree::commit(const IDistributedWriteAheadLog::Record
 
             if (rec->hasIdempotentKey())
             {
-                keys->push_back(std::move(rec->idempotentKey()));
+                keys->emplace_back(rec->sn, std::move(rec->idempotentKey()));
             }
         }
         else if (rec->op_code == IDistributedWriteAheadLog::OpCode::ALTER_DATA_BLOCK)
@@ -1133,6 +1139,7 @@ void StorageDistributedMergeTree::backgroundConsumer()
     consume_ctx.consume_callback_timeout_ms = ssettings->distributed_flush_threshhold_ms.value;
     consume_ctx.consume_callback_max_rows = ssettings->distributed_flush_threshhold_count;
     consume_ctx.consume_callback_max_messages_size = ssettings->distributed_flush_threshhold_size;
+    SequenceRanges missing_ranges = storage->missingSequenceRanges();
 
     LOG_INFO(
         log,

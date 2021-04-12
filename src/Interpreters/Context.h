@@ -306,7 +306,7 @@ private:
                                                     /// to DatabaseOnDisk::commitCreateTable(...) or IStorage::alter(...) without changing
                                                     /// thousands of signatures.
                                                     /// And I hope it will be replaced with more common Transaction sometime.
-    
+
     /// Daisy : starts. Parameters for time predicates of main table
     TimeParam time_param;
     /// Daisy : end.

@@ -97,6 +97,7 @@ StorageMergeTree::StorageMergeTree(
 
     /// Daisy : starts
     locateSNFile();
+    populateCommittedSNFromParts();
     /// Daisy : ends
 }
 
@@ -1526,6 +1527,8 @@ void StorageMergeTree::locateSNFile()
     {
         sn_file = {relative_data_path + MergeTreeData::COMMITTED_SN_FILE_NAME, getStoragePolicy()->getAnyDisk()};
     }
+
+    setCommittedSN(loadSN());
 }
 
 /// Return -1 if failed to load SN
@@ -1557,6 +1560,88 @@ void StorageMergeTree::commitSN(Int64 sn)
 
     setCommittedSN(sn);
 }
-/// Daisy : ends
 
+/// Populate committed sequence number from part directory and also populate
+/// last N idempotent keys.
+/// `sn` is committed in two places
+/// 1. In part directory (`sn.txt`). It is telling us the data to that sn is for sure committed
+/// 2. In top directory of the table directory (`committed_sn.txt`). It is tellsing us the data
+///    may be committed to that sn. It is more up to date than `sn` in table directory.
+///    Please refer to `SequenceInfo.h` for more details.
+/// Why we need checkpoints in 2 places
+/// 1. Data Consistency
+/// 2. Avoid missing data and duplicate data
+void StorageMergeTree::populateCommittedSNFromParts()
+{
+    auto data_parts = getDataPartsVector();
+    auto committed = committedSN();
+
+    SequenceRanges sequence_ranges;
+    std::map<Int64, std::shared_ptr<String>> idempotent_keys;
+
+    for (const auto & part : data_parts)
+    {
+        if (!part->seq_info)
+        {
+            continue;
+        }
+
+        for (const auto & seq_range : part->seq_info->sequence_ranges)
+        {
+            if (seq_range.end_sn > committed)
+            {
+                sequence_ranges.push_back(seq_range);
+            }
+        }
+
+        if (part->seq_info->idempotent_keys)
+        {
+            for (const auto & key : *part->seq_info->idempotent_keys)
+            {
+                if (!idempotent_keys.contains(key.first))
+                {
+                    idempotent_keys[key.first] = std::make_shared<String>(key.second);
+                }
+            }
+        }
+    }
+
+    auto [missing_ranges, next_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, committed, log);
+    if (next_expecting_sn != committed + 1)
+    {
+        /// We are progressing committed sn here as the committed sn in sn.txt in parts directories
+        /// shows more recent than that in committed_sn.txt
+        LOG_INFO(log, "Progressing committed_sn from {} to {}", committed, next_expecting_sn - 1);
+        setCommittedSN(next_expecting_sn - 1);
+    }
+
+    for (const auto & missing_range: missing_ranges)
+    {
+        LOG_INFO(
+            log,
+            "Missing sn range : ({}, {}, {}, {})",
+            missing_range.start_sn,
+            missing_range.end_sn,
+            missing_range.part_index,
+            missing_range.parts);
+    }
+
+    missing_sequence_ranges.swap(missing_ranges);
+
+    /// Collect last N idempotent keys
+    auto max_keys = global_context.getSettingsRef().max_idempotent_ids;
+    auto keys_iter = idempotent_keys.begin();
+
+    if (idempotent_keys.size() > max_keys)
+    {
+        std::advance(keys_iter, idempotent_keys.size() - max_keys);
+    }
+
+    for (; keys_iter != idempotent_keys.end(); ++keys_iter)
+    {
+        last_idempotent_keys.push_back(keys_iter->second);
+        LOG_DEBUG(log, "Loading idempotent key={}", *keys_iter->second);
+    }
+}
+/// Daisy : ends
 }
