@@ -1,8 +1,8 @@
 #include <string>
 #include <string.h>
 
-#include <Poco/UTF8Encoding.h>
 #include <Poco/NumberParser.h>
+#include <Poco/UTF8Encoding.h>
 #include <common/JSON.h>
 #include <common/find_symbols.h>
 #include <common/preciseExp10.h>
@@ -141,8 +141,7 @@ static double readFloatText(const char * buf, const char * end)
                 }
                 break;
             case 'e':
-            case 'E':
-            {
+            case 'E': {
                 ++buf;
                 Int32 exponent = readIntText(buf, end);
                 x *= preciseExp10(exponent);
@@ -175,7 +174,16 @@ void JSON::checkInit() const
 
 JSON::ElementType JSON::getType() const
 {
-    switch (*ptr_begin)
+    /// Daisy : starts
+    Pos pos = skipWhitespaceIfAny();
+    return getType(pos);
+    /// Daisy : ends
+}
+
+/// Daisy : starts
+JSON::ElementType JSON::getType(Pos pos) const
+{
+    switch (*pos)
     {
         case '{':
             return TYPE_OBJECT;
@@ -198,10 +206,10 @@ JSON::ElementType JSON::getType() const
         case '8':
         case '9':
             return TYPE_NUMBER;
-        case '"':
-        {
+        case '"': {
             /// Проверим - это просто строка или name-value pair
-            Pos after_string = skipString();
+            Pos after_string = skipString(pos);
+            after_string = skipWhitespaceIfAny(after_string);
             if (after_string < ptr_end && *after_string == ':')
                 return TYPE_NAME_VALUE_PAIR;
             else
@@ -211,7 +219,7 @@ JSON::ElementType JSON::getType() const
             throw JSONException(std::string("JSON: unexpected char ") + *ptr_begin + ", expected one of '{[tfn-0123456789\"'");
     }
 }
-
+/// Daisy : ends
 
 void JSON::checkPos(Pos pos) const
 {
@@ -223,8 +231,15 @@ void JSON::checkPos(Pos pos) const
 JSON::Pos JSON::skipString() const
 {
     //std::cerr << "skipString()\t" << data() << std::endl;
+    /// Dasiy : starts
+    return skipString(ptr_begin);
+    /// Daisy : ends
+}
 
-    Pos pos = ptr_begin;
+/// Dasiy : starts
+JSON::Pos JSON::skipString(Pos start) const
+{
+    Pos pos = skipWhitespaceIfAny(start);
     checkPos(pos);
     if (*pos != '"')
         throw JSONException(std::string("JSON: expected \", got ") + *pos);
@@ -258,13 +273,19 @@ JSON::Pos JSON::skipString() const
 
     return pos;
 }
-
+/// Daisy : ends
 
 JSON::Pos JSON::skipNumber() const
 {
-    //std::cerr << "skipNumber()\t" << data() << std::endl;
+    /// Daisy : starts
+    return skipNumber(ptr_begin);
+    /// Daisy : ends
+}
 
-    Pos pos = ptr_begin;
+/// Daisy : starts
+JSON::Pos JSON::skipNumber(Pos begin) const
+{
+    Pos pos = skipWhitespaceIfAny(begin);
 
     checkPos(pos);
     if (*pos == '-')
@@ -280,62 +301,92 @@ JSON::Pos JSON::skipNumber() const
         ++pos;
     if (pos < ptr_end && *pos == '-')
         ++pos;
-     while (pos < ptr_end && *pos >= '0' && *pos <= '9')
+    while (pos < ptr_end && *pos >= '0' && *pos <= '9')
         ++pos;
 
     return pos;
 }
-
+/// Daisy : ends
 
 JSON::Pos JSON::skipBool() const
 {
     //std::cerr << "skipBool()\t" << data() << std::endl;
+    /// Daisy : starts
+    return skipBool(ptr_begin);
+    /// Daisy : ends
+}
 
-    Pos pos = ptr_begin;
+/// Daisy : starts
+JSON::Pos JSON::skipBool(Pos begin) const
+{
+    Pos pos = skipWhitespaceIfAny(begin);
     checkPos(pos);
 
-    if (*ptr_begin == 't')
+    if (*pos == 't')
         pos += 4;
-    else if (*ptr_begin == 'f')
+    else if (*pos == 'f')
         pos += 5;
     else
         throw JSONException("JSON: expected true or false.");
 
     return pos;
 }
-
+/// Daisy : ends
 
 JSON::Pos JSON::skipNull() const
 {
     //std::cerr << "skipNull()\t" << data() << std::endl;
 
-    return ptr_begin + 4;
+    /// Daisy : starts
+    return skipBool(ptr_begin);
+    /// Daisy : ends
 }
 
+/// Daisy : starts
+JSON::Pos JSON::skipNull(Pos begin) const
+{
+    return begin + 4;
+}
+/// Daisy : ends
 
 JSON::Pos JSON::skipNameValuePair() const
 {
-    //std::cerr << "skipNameValuePair()\t" << data() << std::endl;
+    /// Daisy : starts
+    return skipNameValuePair(ptr_begin);
+    /// Daisy : ends
+}
 
-    Pos pos = skipString();
+/// Daisy : starts
+JSON::Pos JSON::skipNameValuePair(Pos begin) const
+{
+    Pos pos = skipString(begin);
     checkPos(pos);
 
+    pos = skipWhitespaceIfAny(pos);
     if (*pos != ':')
         throw JSONException("JSON: expected :.");
     ++pos;
 
     return JSON(pos, ptr_end, level + 1).skipElement();
-
 }
-
+/// Daisy : ends
 
 JSON::Pos JSON::skipArray() const
 {
     //std::cerr << "skipArray()\t" << data() << std::endl;
+    /// Daisy : starts
+    return skipArray(ptr_begin);
+    /// Daisy : ends
+}
 
-    if (!isArray())
+/// Daisy : starts
+JSON::Pos JSON::skipArray(Pos begin) const
+{
+    //std::cerr << "skipArray()\t" << data() << std::endl;
+    Pos pos = skipWhitespaceIfAny(begin);
+    if (!isArray(pos))
         throw JSONException("JSON: expected [");
-    Pos pos = ptr_begin;
+
     ++pos;
     checkPos(pos);
     if (*pos == ']')
@@ -346,7 +397,7 @@ JSON::Pos JSON::skipArray() const
         pos = JSON(pos, ptr_end, level + 1).skipElement();
 
         checkPos(pos);
-
+        pos = skipWhitespaceIfAny(pos);
         switch (*pos)
         {
             case ',':
@@ -359,15 +410,23 @@ JSON::Pos JSON::skipArray() const
         }
     }
 }
-
+/// Daisy : ends
 
 JSON::Pos JSON::skipObject() const
 {
     //std::cerr << "skipObject()\t" << data() << std::endl;
+    /// Daisy : starts
+    return skipObject(ptr_begin);
+    /// Daisy : ends
+}
 
-    if (!isObject())
+/// Daisy : starts
+JSON::Pos JSON::skipObject(const Pos begin) const
+{
+    Pos pos = skipWhitespaceIfAny(begin);
+    if (!isObject(pos))
         throw JSONException("JSON: expected {");
-    Pos pos = ptr_begin;
+
     ++pos;
     checkPos(pos);
     if (*pos == '}')
@@ -378,6 +437,7 @@ JSON::Pos JSON::skipObject() const
         pos = JSON(pos, ptr_end, level + 1).skipNameValuePair();
 
         checkPos(pos);
+        pos = skipWhitespaceIfAny(pos);
 
         switch (*pos)
         {
@@ -391,34 +451,57 @@ JSON::Pos JSON::skipObject() const
         }
     }
 }
-
+/// Daisy : ends
 
 JSON::Pos JSON::skipElement() const
 {
     //std::cerr << "skipElement()\t" << data() << std::endl;
-
-    ElementType type = getType();
+    /// Daisy : starts
+    Pos pos = skipWhitespaceIfAny();
+    ElementType type = getType(pos);
 
     switch (type)
     {
         case TYPE_NULL:
-            return skipNull();
+            return skipNull(pos);
         case TYPE_BOOL:
-            return skipBool();
+            return skipBool(pos);
         case TYPE_NUMBER:
-            return skipNumber();
+            return skipNumber(pos);
         case TYPE_STRING:
-            return skipString();
+            return skipString(pos);
         case TYPE_NAME_VALUE_PAIR:
-            return skipNameValuePair();
+            return skipNameValuePair(pos);
         case TYPE_ARRAY:
-            return skipArray();
+            return skipArray(pos);
         case TYPE_OBJECT:
-            return skipObject();
+            return skipObject(pos);
         default:
             throw JSONException("Logical error in JSON: unknown element type: " + std::to_string(type));
     }
+    /// Daisy : ends
 }
+
+/// Daisy : starts
+/// Skip whitespace characters.
+JSON::Pos JSON::skipWhitespaceIfAny() const
+{
+    return skipWhitespaceIfAny(ptr_begin);
+}
+
+JSON::Pos JSON::skipWhitespaceIfAny(Pos begin) const
+{
+    Pos pos = begin;
+
+    checkPos(pos);
+    while (*pos == ' ' || *pos == '\t' || *pos == '\n' || *pos == '\r' || *pos == '\f' || *pos == '\v')
+    {
+        ++pos;
+        checkPos(pos);
+    }
+    return pos;
+}
+/// Daisy : ends
 
 size_t JSON::size() const
 {
@@ -437,7 +520,7 @@ bool JSON::empty() const
 }
 
 
-JSON JSON::operator[] (size_t n) const
+JSON JSON::operator[](size_t n) const
 {
     ElementType type = getType();
 
@@ -512,9 +595,8 @@ bool JSON::hasEscapes() const
 bool JSON::hasSpecialChars() const
 {
     Pos pos = ptr_begin + 1;
-    while (pos < ptr_end && *pos != '"'
-        && *pos != '\\' && *pos != '\r' && *pos != '\n' && *pos != '\t'
-        && *pos != '\f' && *pos != '\b' && *pos != '\0' && *pos != '\'')
+    while (pos < ptr_end && *pos != '"' && *pos != '\\' && *pos != '\r' && *pos != '\n' && *pos != '\t' && *pos != '\f' && *pos != '\b'
+           && *pos != '\0' && *pos != '\'')
         ++pos;
 
     if (*pos == '"')
@@ -525,7 +607,7 @@ bool JSON::hasSpecialChars() const
 }
 
 
-JSON JSON::operator[] (const std::string & name) const
+JSON JSON::operator[](const std::string & name) const
 {
     Pos pos = searchField(name);
     if (!pos)
@@ -567,7 +649,9 @@ bool JSON::getBool() const
 
 std::string JSON::getString() const
 {
-    Pos s = ptr_begin;
+    /// Daisy : starts
+    Pos s = skipWhitespaceIfAny();
+    /// Daisy : ends
 
     if (*s != '"')
         throw JSONException(std::string("JSON: expected \", got ") + *s);
@@ -577,7 +661,7 @@ std::string JSON::getString() const
     std::string buf;
     do
     {
-        Pos p = find_first_symbols<'\\','"'>(s, ptr_end);
+        Pos p = find_first_symbols<'\\', '"'>(s, ptr_end);
         if (p >= ptr_end)
         {
             break;
@@ -616,8 +700,7 @@ std::string JSON::getString() const
                     case 't':
                         buf += '\t';
                         break;
-                    case 'u':
-                    {
+                    case 'u': {
                         Poco::UTF8Encoding utf8;
 
                         ++s;
@@ -633,12 +716,11 @@ std::string JSON::getString() const
                         {
                             throw JSONException("JSON: incorrect syntax: incorrect HEX code.");
                         }
-                        buf.resize(buf.size() + 6);    /// максимальный размер UTF8 многобайтовой последовательности
-                        int res = utf8.convert(unicode,
-                            reinterpret_cast<unsigned char *>(const_cast<char*>(buf.data())) + buf.size() - 6, 6);
+                        buf.resize(buf.size() + 6); /// максимальный размер UTF8 многобайтовой последовательности
+                        int res
+                            = utf8.convert(unicode, reinterpret_cast<unsigned char *>(const_cast<char *>(buf.data())) + buf.size() - 6, 6);
                         if (!res)
-                            throw JSONException("JSON: cannot convert unicode " + std::to_string(unicode)
-                                + " to UTF8.");
+                            throw JSONException("JSON: cannot convert unicode " + std::to_string(unicode) + " to UTF8.");
                         buf.resize(buf.size() - 6 + res);
                         break;
                     }
@@ -667,7 +749,8 @@ StringRef JSON::getRawString() const
     Pos s = ptr_begin;
     if (*s != '"')
         throw JSONException(std::string("JSON: expected \", got ") + *s);
-    while (++s != ptr_end && *s != '"');
+    while (++s != ptr_end && *s != '"')
+        ;
     if (s != ptr_end)
         return StringRef(ptr_begin + 1, s - ptr_begin - 1);
     throw JSONException("JSON: incorrect syntax (expected end of string, found end of JSON).");
@@ -682,10 +765,14 @@ JSON JSON::getValue() const
 {
     Pos pos = skipString();
     checkPos(pos);
+    /// Daisy : starts
+    pos = skipWhitespaceIfAny(pos);
     if (*pos != ':')
         throw JSONException("JSON: expected :.");
     ++pos;
     checkPos(pos);
+    pos = skipWhitespaceIfAny(pos);
+    /// Daisy : ends
     return JSON(pos, ptr_end, level + 1);
 }
 
@@ -742,14 +829,18 @@ std::string JSON::toString() const
 
 JSON::iterator JSON::iterator::begin() const
 {
-    ElementType type = getType();
+    /// Daisy : starts
+    Pos pos = skipWhitespaceIfAny();
+    ElementType type = getType(pos);
+    /// Daisy : ends
 
     if (type != TYPE_ARRAY && type != TYPE_OBJECT)
         throw JSONException("JSON: not array or object when calling begin() method.");
 
     //std::cerr << "begin()\t" << data() << std::endl;
-
-    Pos pos = ptr_begin + 1;
+    /// Daisy : starts
+    ++pos;
+    /// Daisy : ends
     checkPos(pos);
     if (*pos == '}' || *pos == ']')
         return end();
@@ -764,7 +855,10 @@ JSON::iterator JSON::iterator::end() const
 
 JSON::iterator & JSON::iterator::operator++()
 {
+    /// Daisy : starts
+    ptr_begin = skipWhitespaceIfAny();
     Pos pos = skipElement();
+    /// Daisy : ends
     checkPos(pos);
 
     if (*pos != ',')
@@ -839,4 +933,3 @@ bool JSON::isType<bool>() const
 {
     return isBool();
 }
-

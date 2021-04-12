@@ -1,6 +1,7 @@
 #include "IngestRestRouterHandler.h"
+#include "JSONHelper.h"
 
-#include <IO/JSON2QueryReadBuffer.h>
+#include <IO/ConcatReadBuffer.h>
 #include <IO/WriteBufferFromString.h>
 
 #include <Interpreters/executeQuery.h>
@@ -34,8 +35,77 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
 
     query_context.setSetting("output_format_parallel_formatting", false);
 
-    std::unique_ptr<ReadBuffer> in
-        = std::make_unique<JSON2QueryReadBuffer>(wrapReadBufferReference(input), database_name + "." + table_name);
+    /// Parse JSON into ReadBuffers
+    PODArray<char> parse_buf;
+    Buffers buffers;
+    String error;
+    if (!readIntoBuffers(input, parse_buf, buffers, error))
+    {
+        http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+        LOG_ERROR(
+            log,
+            "Ingest to database {}, table {} failed with invalid JSON request, exception = {}",
+            database_name,
+            table_name,
+            error,
+            ErrorCodes::INCORRECT_DATA);
+        return jsonErrorResponse(error, ErrorCodes::INCORRECT_DATA);
+    }
+
+    /// Get query
+    auto it = buffers.find("columns");
+    String query;
+    if (it != buffers.end())
+    {
+        char * begin = it->second->internalBuffer().begin();
+        char * end = it->second->internalBuffer().end();
+
+        while (begin < end && *begin != '[')
+            ++begin;
+        if (*begin == '[')
+            *begin = '(';
+        else
+        {
+            http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+            LOG_ERROR(
+                log,
+                "Ingest to database {}, rawstore {} failed with invalid request, exception = {}",
+                database_name,
+                table_name,
+                "Invalid Request, 'columns' field is invalid",
+                ErrorCodes::INCORRECT_DATA);
+            return jsonErrorResponse("Invalid Request, 'columns' field is invalid", ErrorCodes::INCORRECT_DATA);
+        }
+
+        while (end > begin && *end != ']')
+            --end;
+        if (*end == ']')
+            *end = ')';
+
+        query = "INSERT into " + database_name + "." + table_name + " " + String{begin, static_cast<size_t>(end - begin + 1)}
+            + " FORMAT JSONCompactEachRow ";
+    }
+
+    it = buffers.find("data");
+    std::unique_ptr<ReadBuffer> in;
+    if (it != buffers.end())
+    {
+        ReadBufferFromString query_buf(query);
+        in = std::make_unique<ConcatReadBuffer>(query_buf, *it->second);
+    }
+    else
+    {
+        http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+        LOG_ERROR(
+            log,
+            "Ingest to database {}, rawstore {} failed with invalid request, exception = {}",
+            database_name,
+            table_name,
+            "Invalid Request, missing 'data' field",
+            ErrorCodes::INCORRECT_DATA);
+        return jsonErrorResponse("Invalid Request, missing 'data' field", ErrorCodes::INCORRECT_DATA);
+    }
+
     String dummy_string;
     WriteBufferFromString out(dummy_string);
 

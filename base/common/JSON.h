@@ -186,6 +186,28 @@ private:
     Pos skipObject() const;
     Pos skipArray() const;
 
+    /// Daisy : starts
+    bool isObject(Pos begin) const        { return getType(begin) == TYPE_OBJECT; }
+    bool isArray(Pos begin) const         { return getType(begin) == TYPE_ARRAY; }
+    bool isNumber(Pos begin) const        { return getType(begin) == TYPE_NUMBER; }
+    bool isString(Pos begin) const        { return getType(begin) == TYPE_STRING; }
+    bool isBool(Pos begin) const          { return getType(begin) == TYPE_BOOL; }
+    bool isNull(Pos begin) const          { return getType(begin) == TYPE_NULL; }
+    bool isNameValuePair(const Pos begin) const { return getType(begin) == TYPE_NAME_VALUE_PAIR; }
+
+    Pos skipWhitespaceIfAny() const;
+    Pos skipWhitespaceIfAny(Pos begin) const;
+    Pos skipString(Pos start) const;
+    Pos skipNumber(Pos begin) const;
+    Pos skipBool(Pos begin) const;
+    Pos skipNull(Pos begin) const;
+    Pos skipNameValuePair(Pos begin) const;
+    Pos skipObject(Pos begin) const;
+    Pos skipArray(Pos begin) const;
+
+    ElementType getType(Pos pos) const;
+    /// Daisy : ends
+
     Pos skipElement() const;
 
     /// Найти name-value пару с заданным именем в объекте.

@@ -1,12 +1,12 @@
 #include "IngestRawStoreHandler.h"
+#include "JSONHelper.h"
 #include "SchemaValidator.h"
 
 #include <IO/ConcatReadBuffer.h>
 #include <IO/ReadBufferFromString.h>
-#include <IO/ReadHelpers.h>
 #include <IO/WriteBufferFromString.h>
+#include <IO/copyData.h>
 #include <Interpreters/executeQuery.h>
-#include <common/find_symbols.h>
 
 namespace DB
 {
@@ -16,19 +16,6 @@ namespace ErrorCodes
     extern const int INCORRECT_DATA;
     extern const int INVALID_CONFIG_PARAMETER;
 }
-
-namespace
-{
-    inline void skipToChar(char c, ReadBuffer & buf)
-    {
-        skipWhitespaceIfAny(buf);
-        assertChar(c, buf);
-        skipWhitespaceIfAny(buf);
-    }
-}
-
-std::map<String, std::map<String, String>> IngestRawStoreHandler::enrichment_schema
-    = {{"optional", {{"time_extraction_type", "string"}, {"time_extraction_rule", "string"}}}};
 
 String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /* response */, Int32 & http_status) const
 {
@@ -43,27 +30,63 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
     }
 
     String query = "INSERT into " + database_name + "." + table_name + " FORMAT RawStoreEachRow ";
-    ReadBufferFromString query_buf(query);
-    std::unique_ptr<ReadBuffer> in = std::make_unique<ConcatReadBuffer>(query_buf, input);
 
-    try
-    {
-        handleEnrichment(input);
-    }
-    catch (Exception & e)
+    /// Parse JSON into ReadBuffers
+    PODArray<char> parse_buf;
+    Buffers buffers;
+    String error;
+    if (!readIntoBuffers(input, parse_buf, buffers, error))
     {
         http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
         LOG_ERROR(
             log,
-            "ingest to database {}, rawstore {} failed with invalid request, exception = {}",
+            "Ingest to database {}, rawstore {} failed with invalid JSON request, exception = {}",
             database_name,
             table_name,
-            e.message(),
-            e.code());
-        return jsonErrorResponse(e.message(), e.code());
+            error,
+            ErrorCodes::INCORRECT_DATA);
+        return jsonErrorResponse(error, ErrorCodes::INCORRECT_DATA);
     }
 
-    /// No change, to executeQuery
+    /// Handle "enrichment"
+    auto it = buffers.find("enrichment");
+    if (it != buffers.end())
+    {
+        if (!handleEnrichment(*it->second, error))
+        {
+            http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+            LOG_ERROR(
+                log,
+                "Ingest to database {}, rawstore {} failed with invalid request, exception = {}",
+                database_name,
+                table_name,
+                error,
+                ErrorCodes::INCORRECT_DATA);
+            return jsonErrorResponse("error", ErrorCodes::INCORRECT_DATA);
+        }
+    }
+
+    /// Prepare ReadBuffer for executeQuery
+    it = buffers.find("data");
+    std::unique_ptr<ReadBuffer> in;
+    if (it != buffers.end())
+    {
+        ReadBufferFromString query_buf(query);
+        in = std::make_unique<ConcatReadBuffer>(query_buf, *it->second);
+    }
+    else
+    {
+        http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+        LOG_ERROR(
+            log,
+            "Ingest to database {}, rawstore {} failed with invalid request, exception = {}",
+            database_name,
+            table_name,
+            "Invalid Request, missing 'data' field",
+            ErrorCodes::INCORRECT_DATA);
+        return jsonErrorResponse("Invalid Request, missing 'data' field", ErrorCodes::INCORRECT_DATA);
+    }
+
     String dummy_string;
     WriteBufferFromString out(dummy_string);
 
@@ -83,111 +106,46 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
     return resp_str_stream.str();
 }
 
-void IngestRawStoreHandler::handleEnrichment(ReadBuffer & buf) const
+bool IngestRawStoreHandler::handleEnrichment(ReadBuffer & buf, String & error) const
 {
-    skipToChar('{', buf);
+    const char * begin = buf.internalBuffer().begin();
+    const char * end = buf.internalBuffer().end();
+    String name;
+    String time_extraction_type;
+    String time_extraction_rule;
 
-    /// Read enrichment first
-    if (!buf.eof())
+    JSON obj{begin, end};
+
+    for (auto it = obj.begin(); it != obj.end(); ++it)
     {
-        String name;
-        readJSONString(name, buf);
-        if (name == "enrichment")
-        {
-            String value = readJSONField(buf);
+        name = it.getName();
 
-            if (value.empty())
-                return;
-
-            Poco::JSON::Parser parser;
-            Poco::JSON::Object::Ptr result;
-
-            try
-            {
-                auto var = parser.parse(value);
-                result = var.extract<Poco::JSON::Object::Ptr>();
-            }
-            catch (Poco::JSON::JSONException & exception)
-            {
-                LOG_ERROR(log, exception.message());
-                throw Exception("Invalid enrichment", ErrorCodes::INCORRECT_DATA);
-            }
-
-            String error;
-            if (!validateSchema(enrichment_schema, result, error))
-                throw Exception(error, ErrorCodes::INCORRECT_DATA);
-
-            if (result->has("time_extraction_type") && result->has("time_extraction_rule"))
-            {
-                const auto & type = result->get("time_extraction_type").toString();
-                if (type == "json_path" || type == "regex")
-                {
-                    query_context.setSetting("rawstore_time_extraction_type", type);
-                    query_context.setSetting("rawstore_time_extraction_rule", result->get("time_extraction_rule").toString());
-                }
-                else
-                    throw Exception(
-                        "Invalid enrichment, only 'json_path' and 'regex' are supported right now",
-                        ErrorCodes::INCORRECT_DATA);
-            }
-            else if (result->has("time_extraction_type") || result->has("time_extraction_rule"))
-                throw Exception(
-                    "Invalid enrichment, either 'rawstore_time_extraction_type' or 'rawstore_time_extraction_rule' is missing ",
-                    ErrorCodes::INCORRECT_DATA);
-        }
+        if (name == "time_extraction_type" && it.getType() == JSON::TYPE_NAME_VALUE_PAIR)
+            time_extraction_type = it.getValue().getString();
+        else if (name == "time_extraction_rule" && it.getType() == JSON::TYPE_NAME_VALUE_PAIR)
+            time_extraction_rule = it.getValue().getString();
     }
 
-    /// Move position to the start of data field
-    if (!buf.eof())
+    if (!time_extraction_type.empty() && !time_extraction_rule.empty())
     {
-        String name;
-        readJSONString(name, buf);
-
-        if (name == "data")
+        if (time_extraction_type == "json_path" || time_extraction_type == "regex")
         {
-            skipToChar(':', buf);
-            return;
+            query_context.setSetting("rawstore_time_extraction_type", time_extraction_type);
+            query_context.setSetting("rawstore_time_extraction_rule", time_extraction_rule);
+            return true;
+        }
+        else
+        {
+            error = "Invalid enrichment, only 'json_path' and 'regex' are supported right now";
+            return false;
         }
     }
-
-    throw Exception("Invalid Request", ErrorCodes::INCORRECT_DATA);
-}
-
-String IngestRawStoreHandler::readJSONField(ReadBuffer & buf)
-{
-    String s;
-    skipToChar(':', buf);
-    bool in_brace = false;
-    while (!buf.eof())
+    else if (!time_extraction_type.empty() || !time_extraction_rule.empty())
     {
-        if (!in_brace)
-        {
-            if (*buf.position() != '{')
-            {
-                char err[2] = {'{', '\0'};
-                throwAtAssertionFailed(err, buf);
-            }
-            in_brace = true;
-        }
-
-
-        char * next_pos = find_first_symbols<'}'>(buf.position() + 1, buf.buffer().end());
-
-        s.append(buf.position(), next_pos - buf.position());
-        buf.position() = next_pos;
-
-        if (buf.hasPendingData())
-        {
-            if (*buf.position() == '}')
-            {
-                ++buf.position();
-                s.append(1, '}');
-            }
-            skipToChar(',', buf);
-            return s;
-        }
+        error = "Invalid enrichment, either 'rawstore_time_extraction_type' or 'rawstore_time_extraction_rule' is missing ";
+        return false;
     }
-    s.clear();
-    return s;
+
+    return true;
 }
 }
