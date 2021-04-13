@@ -108,7 +108,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
         assert(record->op_code == IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK);
         if (record->headers["_version"] == "1")
         {
-            mergeMetrics(record->headers["_idem"], record);
+            mergeMetrics(record->idempotentKey(), record);
         }
         else
         {
@@ -254,7 +254,7 @@ void PlacementService::doBroadcast()
     const String table_count_query = "SELECT count(*) as table_counts FROM system.tables WHERE database != 'system'";
     Context context = global_context;
     context.makeQueryContext();
-    executeSelectQuery(table_count_query, context, [&record](Block && block) {
+    executeSelectQuery(table_count_query, context, [&record](Block && block) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
         const auto & table_counts_col = block.findByName("table_counts")->column;
         record.headers["_tables"] = std::to_string(table_counts_col->getUInt(0));
     });

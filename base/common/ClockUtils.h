@@ -1,8 +1,8 @@
 #pragma once
 
-#include <chrono>
-
 #include "types.h"
+
+#include <chrono>
 
 namespace DB
 {
