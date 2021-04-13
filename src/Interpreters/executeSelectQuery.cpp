@@ -6,7 +6,7 @@
 
 namespace
 {
-void executeQueryWithProcessors(DB::QueryPipeline & pipeline, const std::function<void(DB::Block &&)> & callback) 
+void executeQueryWithProcessors(DB::QueryPipeline & pipeline, const std::function<void(DB::Block &&)> & callback)
 {
     DB::PullingAsyncPipelineExecutor executor(pipeline);
     DB::Block block;
