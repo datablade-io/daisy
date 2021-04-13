@@ -1,7 +1,7 @@
 #include "IngestRestRouterHandler.h"
-#include "JSONHelper.h"
 
 #include <IO/ConcatReadBuffer.h>
+#include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromString.h>
 
 #include <Interpreters/executeQuery.h>
@@ -37,7 +37,7 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
 
     /// Parse JSON into ReadBuffers
     PODArray<char> parse_buf;
-    Buffers buffers;
+    JSONReadBuffers buffers;
     String error;
     if (!readIntoBuffers(input, parse_buf, buffers, error))
     {
@@ -53,40 +53,22 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
     }
 
     /// Get query
-    auto it = buffers.find("columns");
-    String query;
-    if (it != buffers.end())
+    String query, cols;
+    if (!parseColumns(buffers, cols, error))
     {
-        char * begin = it->second->internalBuffer().begin();
-        char * end = it->second->internalBuffer().end();
-
-        while (begin < end && *begin != '[')
-            ++begin;
-        if (*begin == '[')
-            *begin = '(';
-        else
-        {
-            http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
-            LOG_ERROR(
-                log,
-                "Ingest to database {}, rawstore {} failed with invalid request, exception = {}",
-                database_name,
-                table_name,
-                "Invalid Request, 'columns' field is invalid",
-                ErrorCodes::INCORRECT_DATA);
-            return jsonErrorResponse("Invalid Request, 'columns' field is invalid", ErrorCodes::INCORRECT_DATA);
-        }
-
-        while (end > begin && *end != ']')
-            --end;
-        if (*end == ']')
-            *end = ')';
-
-        query = "INSERT into " + database_name + "." + table_name + " " + String{begin, static_cast<size_t>(end - begin + 1)}
-            + " FORMAT JSONCompactEachRow ";
+        http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+        LOG_ERROR(
+            log,
+            "Ingest to database {}, table {} failed with invalid request, exception = {}",
+            database_name,
+            table_name,
+            error,
+            ErrorCodes::INCORRECT_DATA);
+        return jsonErrorResponse(error, ErrorCodes::INCORRECT_DATA);
     }
+    query = "INSERT into " + database_name + "." + table_name + " " + cols + " FORMAT JSONCompactEachRow ";
 
-    it = buffers.find("data");
+    auto it = buffers.find("data");
     std::unique_ptr<ReadBuffer> in;
     if (it != buffers.end())
     {
@@ -98,7 +80,7 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
         http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
         LOG_ERROR(
             log,
-            "Ingest to database {}, rawstore {} failed with invalid request, exception = {}",
+            "Ingest to database {}, table {} failed with invalid request, exception = {}",
             database_name,
             table_name,
             "Invalid Request, missing 'data' field",
@@ -125,4 +107,40 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
     return resp_str_stream.str();
 }
 
+inline bool IngestRestRouterHandler::parseColumns(JSONReadBuffers & buffers, String & cols, String & error)
+{
+    error.clear();
+    auto it = buffers.find("columns");
+    String query;
+    if (it == buffers.end())
+    {
+        error = "Invalid Request, 'columns' field is missing";
+        return false;
+    }
+    char * begin = it->second->internalBuffer().begin();
+    char * end = it->second->internalBuffer().end();
+
+    while (begin < end && *begin != '[')
+        ++begin;
+    if (*begin == '[')
+        *begin = '(';
+    else
+    {
+        error = "Invalid Request, 'columns' field is invalid";
+        return false;
+    }
+
+    while (end > begin && *end != ']')
+        --end;
+    if (*end == ']')
+        *end = ')';
+    else
+    {
+        error = "Invalid Request, 'columns' field is invalid";
+        return false;
+    }
+
+    cols.assign(begin, static_cast<size_t>(end - begin + 1));
+    return true;
+}
 }

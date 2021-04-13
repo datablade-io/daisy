@@ -4,12 +4,13 @@
 #include <IO/WriteBufferFromString.h>
 #include <IO/copyData.h>
 #include <Common/PODArray.h>
-#include <common/JSON.h>
+#include <common/SimpleJSON.h>
 
 namespace DB
 {
-bool readIntoBuffers(ReadBuffer & from, PODArray<char> & to, Buffers & buffers, String & error)
+inline bool readIntoBuffers(ReadBuffer & from, PODArray<char> & to, JSONReadBuffers & buffers, String & error)
 {
+    error.clear();
     WriteBufferFromVector<PODArray<char>> tmp_buf(to);
     copyData(from, tmp_buf);
     tmp_buf.finalize();
@@ -19,7 +20,7 @@ bool readIntoBuffers(ReadBuffer & from, PODArray<char> & to, Buffers & buffers, 
     const char * pre = begin;
     String name;
 
-    JSON obj{begin, end};
+    SimpleJSON obj{begin, end};
     try
     {
         for (auto it = obj.begin(); it != obj.end(); ++it)

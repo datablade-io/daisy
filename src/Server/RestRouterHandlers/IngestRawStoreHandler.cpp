@@ -33,7 +33,7 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
 
     /// Parse JSON into ReadBuffers
     PODArray<char> parse_buf;
-    Buffers buffers;
+    JSONReadBuffers buffers;
     String error;
     if (!readIntoBuffers(input, parse_buf, buffers, error))
     {
@@ -110,19 +110,18 @@ bool IngestRawStoreHandler::handleEnrichment(ReadBuffer & buf, String & error) c
 {
     const char * begin = buf.internalBuffer().begin();
     const char * end = buf.internalBuffer().end();
-    String name;
     String time_extraction_type;
     String time_extraction_rule;
 
-    JSON obj{begin, end};
+    SimpleJSON obj{begin, end};
 
     for (auto it = obj.begin(); it != obj.end(); ++it)
     {
-        name = it.getName();
+        const auto & name = it.getName();
 
-        if (name == "time_extraction_type" && it.getType() == JSON::TYPE_NAME_VALUE_PAIR)
+        if (name == "time_extraction_type" && it.getType() == SimpleJSON::TYPE_NAME_VALUE_PAIR)
             time_extraction_type = it.getValue().getString();
-        else if (name == "time_extraction_rule" && it.getType() == JSON::TYPE_NAME_VALUE_PAIR)
+        else if (name == "time_extraction_rule" && it.getType() == SimpleJSON::TYPE_NAME_VALUE_PAIR)
             time_extraction_rule = it.getValue().getString();
     }
 

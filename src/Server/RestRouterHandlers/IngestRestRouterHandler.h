@@ -1,5 +1,6 @@
 #pragma once
 
+#include "JSONHelper.h"
 #include "RestRouterHandler.h"
 
 namespace DB
@@ -14,6 +15,8 @@ public:
 
 private:
     bool streaming() const override { return true; }
+
+    static inline bool parseColumns(JSONReadBuffers & buffers, String & cols, String & error) ;
 };
 
 }

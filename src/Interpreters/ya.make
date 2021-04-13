@@ -163,6 +163,7 @@ SRCS(
     evaluateConstantExpression.cpp
     executeDDLQueryOnCluster.cpp
     executeQuery.cpp
+    executeSelectQuery.cpp
     getClusterName.cpp
     getHeaderForProcessingStage.cpp
     getTableExpressions.cpp

@@ -1,9 +1,6 @@
 #include <IO/ReadBuffer.h>
-#include <IO/ReadBufferFromString.h>
-#include <IO/WriteBufferFromString.h>
 #include <IO/copyData.h>
-#include <Common/PODArray.h>
-#include <common/JSON.h>
+#include <common/SimpleJSON.h>
 
 #include <gtest/gtest.h>
 
@@ -15,7 +12,7 @@ using namespace std;
 
 using ExpectInfo = std::unordered_map<String, size_t>;
 
-void checkJSON(JSON & obj, ExpectInfo & info)
+void checkJSON(SimpleJSON & obj, ExpectInfo & info)
 {
     const char * end = obj.dataEnd();
     const char * begin = obj.data();
@@ -55,11 +52,11 @@ void checkJSON(JSON & obj, ExpectInfo & info)
 
 void checkJSON(String & req, ExpectInfo & info)
 {
-    JSON obj{req.c_str(), req.c_str() + req.size()};
+    SimpleJSON obj{req.c_str(), req.c_str() + req.size()};
     checkJSON(obj, info);
 }
 
-TEST(JSON, Search)
+TEST(SimpleJSON, Search)
 {
     /// white space in begin, end, before key, et al
     String req = "{\n"
