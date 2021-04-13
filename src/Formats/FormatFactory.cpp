@@ -113,6 +113,10 @@ FormatSettings getFormatSettings(ContextConstPtr context, const Settings & setti
     format_settings.values.interpret_expressions = settings.input_format_values_interpret_expressions;
     format_settings.with_names_use_header = settings.input_format_with_names_use_header;
     format_settings.write_statistics = settings.output_format_write_statistics;
+    /// Daisy : starts
+    format_settings.rawstore.rawstore_time_extraction_type = settings.rawstore_time_extraction_type;
+    format_settings.rawstore.rawstore_time_extraction_rule = settings.rawstore_time_extraction_rule;
+    /// Daisy : ends
 
     /// Validate avro_schema_registry_url with RemoteHostFilter when non-empty and in Server context
     if (format_settings.schema.is_server)
