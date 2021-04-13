@@ -38,7 +38,7 @@ private:
     String getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
     String getTimeColumn(const Poco::JSON::Object::Ptr & payload) const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
-    String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
+    String getPartitionExpr(const Poco::JSON::Object::Ptr & payload) const;
     String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
 };
 

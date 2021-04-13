@@ -66,10 +66,10 @@ std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
 };
 
 std::map<String, String> GRANULARITY_FUNC_MAPPING = {
-    {"M", "toYYYYMM({})"},
-    {"D", "toYYYYMMDD({})"},
-    {"H", "toStartOfHour({})"},
-    {"m", "toStartOfMinute({})"}
+    {"M", "toYYYYMM(`_time`)"},
+    {"D", "toYYYYMMDD(`_time`)"},
+    {"H", "toStartOfHour(`_time`)"},
+    {"m", "toStartOfMinute(`_time`)"}
 };
 }
 
@@ -238,17 +238,17 @@ inline String TableRestRouterHandler::getTimeColumn(const Poco::JSON::Object::Pt
     return payload->has("_time_column") ? payload->get("_time_column").toString() : "_time";
 }
 
-String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const
+String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload) const
 {
     const auto & partition_by_granularity
         = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : "M";
-    return fmt::format(GRANULARITY_FUNC_MAPPING[partition_by_granularity], time_column);
+    return GRANULARITY_FUNC_MAPPING[partition_by_granularity];
 }
 
 String TableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/) const
 {
     const auto & order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "D";
-    const auto & default_order_expr = fmt::format(GRANULARITY_FUNC_MAPPING[order_by_granularity], getTimeColumn(payload));
+    const auto & default_order_expr = GRANULARITY_FUNC_MAPPING[order_by_granularity];
     const auto & order_by_expression = payload->has("order_by_expression") ? payload->get("order_by_expression").toString() : String();
 
     if (order_by_expression.empty())
@@ -271,7 +271,7 @@ String TableRestRouterHandler::getTableCreationSQL(const Poco::JSON::Object::Ptr
     create_segments.push_back(getColumnsDefinition(payload));
     create_segments.push_back(")");
     create_segments.push_back("ENGINE = " + getEngineExpr(payload));
-    create_segments.push_back("PARTITION BY " + getPartitionExpr(payload, time_col));
+    create_segments.push_back("PARTITION BY " + getPartitionExpr(payload));
     create_segments.push_back("ORDER BY (" + getOrderbyExpr(payload, time_col) + ")");
 
     if (payload->has("ttl_expression"))
@@ -305,7 +305,7 @@ String TableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Pt
     std::copy(begin(column_definitions), end(column_definitions), std::ostream_iterator<String>(oss, ","));
     if (payload->has("_time_column"))
     {
-        return oss.str() + " `_time` DateTime64(3) ALIAS " + payload->get("_time_column").toString();
+        return oss.str() + " `_time` DateTime64(3) DEFAULT " + payload->get("_time_column").toString();
     }
     return oss.str() + " `_time` DateTime64(3, UTC) DEFAULT now64(3)";
 }
