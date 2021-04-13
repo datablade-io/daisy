@@ -5,7 +5,7 @@
 #include <common/StringRef.h>
 #include <common/types.h>
 
-/// It is a duplication of 'JSON.h' to isolate our changes and make merge process easier.
+/// Daisy : starts. It is a duplication of 'JSON.h' to isolate our changes and make merge process easier.
 
 /** Очень простой класс для чтения JSON (или его кусочков).
   * Представляет собой ссылку на кусок памяти, в котором содержится JSON (или его кусочек).
