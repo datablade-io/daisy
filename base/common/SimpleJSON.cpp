@@ -15,7 +15,7 @@
 #define JSON_MAX_DEPTH 100
 
 
-POCO_IMPLEMENT_EXCEPTION(JSONException, Poco::Exception, "JSONException")
+POCO_IMPLEMENT_EXCEPTION(SimpleJSONException, Poco::Exception, "SimpleJSONException")
 
 
 /// Прочитать беззнаковое целое в простом формате из не-0-terminated строки.
@@ -24,7 +24,7 @@ static UInt64 readUIntText(const char * buf, const char * end)
     UInt64 x = 0;
 
     if (buf == end)
-        throw JSONException("JSON: cannot parse unsigned integer: unexpected end of data.");
+        throw SimpleJSONException("JSON: cannot parse unsigned integer: unexpected end of data.");
 
     while (buf != end)
     {
@@ -62,7 +62,7 @@ static Int64 readIntText(const char * buf, const char * end)
     UInt64 x = 0;
 
     if (buf == end)
-        throw JSONException("JSON: cannot parse signed integer: unexpected end of data.");
+        throw SimpleJSONException("JSON: cannot parse signed integer: unexpected end of data.");
 
     bool run = true;
     while (buf != end && run)
@@ -107,7 +107,7 @@ static double readFloatText(const char * buf, const char * end)
     double power_of_ten = 1;
 
     if (buf == end)
-        throw JSONException("JSON: cannot parse floating point number: unexpected end of data.");
+        throw SimpleJSONException("JSON: cannot parse floating point number: unexpected end of data.");
 
     bool run = true;
     while (buf != end && run)
@@ -165,17 +165,17 @@ static double readFloatText(const char * buf, const char * end)
 }
 
 
-void JSON::checkInit() const
+void SimpleJSON::checkInit() const
 {
-    if (!(ptr_begin < ptr_end))
-        throw JSONException("JSON: begin >= end.");
+    if (ptr_begin >= ptr_end)
+        throw SimpleJSONException("JSON: begin >= end.");
 
     if (level > JSON_MAX_DEPTH)
-        throw JSONException("JSON: too deep.");
+        throw SimpleJSONException("JSON: too deep.");
 }
 
 
-JSON::ElementType JSON::getType() const
+SimpleJSON::ElementType SimpleJSON::getType() const
 {
     /// Daisy : starts
     Pos pos = skipWhitespaceIfAny();
@@ -184,7 +184,7 @@ JSON::ElementType JSON::getType() const
 }
 
 /// Daisy : starts
-JSON::ElementType JSON::getType(Pos pos) const
+SimpleJSON::ElementType SimpleJSON::getType(Pos pos) const
 {
     switch (*pos)
     {
@@ -219,19 +219,19 @@ JSON::ElementType JSON::getType(Pos pos) const
                 return TYPE_STRING;
         }
         default:
-            throw JSONException(std::string("JSON: unexpected char ") + *ptr_begin + ", expected one of '{[tfn-0123456789\"'");
+            throw SimpleJSONException(std::string("JSON: unexpected char ") + *ptr_begin + ", expected one of '{[tfn-0123456789\"'");
     }
 }
 /// Daisy : ends
 
-void JSON::checkPos(Pos pos) const
+void SimpleJSON::checkPos(Pos pos) const
 {
     if (pos >= ptr_end || ptr_begin == nullptr)
-        throw JSONException("JSON: unexpected end of data.");
+        throw SimpleJSONException("JSON: unexpected end of data.");
 }
 
 
-JSON::Pos JSON::skipString() const
+SimpleJSON::Pos SimpleJSON::skipString() const
 {
     //std::cerr << "skipString()\t" << data() << std::endl;
     /// Dasiy : starts
@@ -240,12 +240,12 @@ JSON::Pos JSON::skipString() const
 }
 
 /// Dasiy : starts
-JSON::Pos JSON::skipString(Pos start) const
+SimpleJSON::Pos SimpleJSON::skipString(Pos start) const
 {
     Pos pos = skipWhitespaceIfAny(start);
     checkPos(pos);
     if (*pos != '"')
-        throw JSONException(std::string("JSON: expected \", got ") + *pos);
+        throw SimpleJSONException(std::string("JSON: expected \", got ") + *pos);
     ++pos;
 
     /// fast path: находим следующую двойную кавычку. Если перед ней нет бэкслеша - значит это конец строки (при допущении корректности JSON).
@@ -271,14 +271,14 @@ JSON::Pos JSON::skipString(Pos start) const
 
     checkPos(pos);
     if (*pos != '"')
-        throw JSONException(std::string("JSON: expected \", got ") + *pos);
+        throw SimpleJSONException(std::string("JSON: expected \", got ") + *pos);
     ++pos;
 
     return pos;
 }
 /// Daisy : ends
 
-JSON::Pos JSON::skipNumber() const
+SimpleJSON::Pos SimpleJSON::skipNumber() const
 {
     /// Daisy : starts
     return skipNumber(ptr_begin);
@@ -286,7 +286,7 @@ JSON::Pos JSON::skipNumber() const
 }
 
 /// Daisy : starts
-JSON::Pos JSON::skipNumber(Pos begin) const
+SimpleJSON::Pos SimpleJSON::skipNumber(Pos begin) const
 {
     Pos pos = skipWhitespaceIfAny(begin);
 
@@ -330,7 +330,7 @@ SimpleJSON::Pos SimpleJSON::skipBool(Pos begin) const
     else if (*pos == 'f')
         pos += 5;
     else
-        throw JSONException("JSON: expected true or false.");
+        throw SimpleJSONException("JSON: expected true or false.");
 
     return pos;
 }
@@ -367,10 +367,10 @@ SimpleJSON::Pos SimpleJSON::skipNameValuePair(Pos begin) const
 
     pos = skipWhitespaceIfAny(pos);
     if (*pos != ':')
-        throw JSONException("JSON: expected :.");
+        throw SimpleJSONException("JSON: expected :.");
     ++pos;
 
-    return JSON(pos, ptr_end, level + 1).skipElement();
+    return SimpleJSON(pos, ptr_end, level + 1).skipElement();
 }
 /// Daisy : ends
 
@@ -388,7 +388,7 @@ SimpleJSON::Pos SimpleJSON::skipArray(Pos begin) const
     //std::cerr << "skipArray()\t" << data() << std::endl;
     Pos pos = skipWhitespaceIfAny(begin);
     if (!isArray(pos))
-        throw JSONException("JSON: expected [");
+        throw SimpleJSONException("JSON: expected [");
 
     ++pos;
     checkPos(pos);
@@ -409,7 +409,7 @@ SimpleJSON::Pos SimpleJSON::skipArray(Pos begin) const
             case ']':
                 return ++pos;
             default:
-                throw JSONException(std::string("JSON: expected one of ',]', got ") + *pos);
+                throw SimpleJSONException(std::string("JSON: expected one of ',]', got ") + *pos);
         }
     }
 }
@@ -428,7 +428,7 @@ SimpleJSON::Pos SimpleJSON::skipObject(const Pos begin) const
 {
     Pos pos = skipWhitespaceIfAny(begin);
     if (!isObject(pos))
-        throw JSONException("JSON: expected {");
+        throw SimpleJSONException("JSON: expected {");
 
     ++pos;
     checkPos(pos);
@@ -437,7 +437,7 @@ SimpleJSON::Pos SimpleJSON::skipObject(const Pos begin) const
 
     while (true)
     {
-        pos = JSON(pos, ptr_end, level + 1).skipNameValuePair();
+        pos = SimpleJSON(pos, ptr_end, level + 1).skipNameValuePair();
 
         checkPos(pos);
         pos = skipWhitespaceIfAny(pos);
@@ -450,7 +450,7 @@ SimpleJSON::Pos SimpleJSON::skipObject(const Pos begin) const
             case '}':
                 return ++pos;
             default:
-                throw JSONException(std::string("JSON: expected one of ',}', got ") + *pos);
+                throw SimpleJSONException(std::string("JSON: expected one of ',}', got ") + *pos);
         }
     }
 }
@@ -480,7 +480,7 @@ SimpleJSON::Pos SimpleJSON::skipElement() const
         case TYPE_OBJECT:
             return skipObject(pos);
         default:
-            throw JSONException("Logical error in JSON: unknown element type: " + std::to_string(type));
+            throw SimpleJSONException("Logical error in JSON: unknown element type: " + std::to_string(type));
     }
     /// Daisy : ends
 }
@@ -528,7 +528,7 @@ SimpleJSON SimpleJSON::operator[](size_t n) const
     ElementType type = getType();
 
     if (type != TYPE_ARRAY)
-        throw JSONException("JSON: not array when calling operator[](size_t) method.");
+        throw SimpleJSONException("JSON: not array when calling operator[](size_t) method.");
 
     Pos pos = ptr_begin;
     ++pos;
@@ -543,7 +543,7 @@ SimpleJSON SimpleJSON::operator[](size_t n) const
     }
 
     if (i != n)
-        throw JSONException("JSON: array index " + std::to_string(n) + " out of bounds.");
+        throw SimpleJSONException("JSON: array index " + std::to_string(n) + " out of bounds.");
 
     return *it;
 }
@@ -554,7 +554,7 @@ SimpleJSON::Pos SimpleJSON::searchField(const char * data, size_t size) const
     ElementType type = getType();
 
     if (type != TYPE_OBJECT)
-        throw JSONException("JSON: not object when calling operator[](const char *) or has(const char *) method.");
+        throw SimpleJSONException("JSON: not object when calling operator[](const char *) or has(const char *) method.");
 
     const_iterator it = begin();
     for (; it != end(); ++it)
@@ -591,7 +591,7 @@ bool SimpleJSON::hasEscapes() const
         return false;
     else if (*pos == '\\')
         return true;
-    throw JSONException("JSON: unexpected end of data.");
+    throw SimpleJSONException("JSON: unexpected end of data.");
 }
 
 
@@ -606,7 +606,7 @@ bool SimpleJSON::hasSpecialChars() const
         return false;
     else if (pos < ptr_end)
         return true;
-    throw JSONException("JSON: unexpected end of data.");
+    throw SimpleJSONException("JSON: unexpected end of data.");
 }
 
 
@@ -614,9 +614,9 @@ SimpleJSON SimpleJSON::operator[](const std::string & name) const
 {
     Pos pos = searchField(name);
     if (!pos)
-        throw JSONException("JSON: there is no element '" + std::string(name) + "' in object.");
+        throw SimpleJSONException("JSON: there is no element '" + std::string(name) + "' in object.");
 
-    return JSON(pos, ptr_end, level + 1).getValue();
+    return SimpleJSON(pos, ptr_end, level + 1).getValue();
 }
 
 
@@ -647,7 +647,7 @@ bool SimpleJSON::getBool() const
         return true;
     if (*ptr_begin == 'f')
         return false;
-    throw JSONException("JSON: cannot parse boolean.");
+    throw SimpleJSONException("JSON: cannot parse boolean.");
 }
 
 std::string SimpleJSON::getString() const
@@ -657,7 +657,7 @@ std::string SimpleJSON::getString() const
     /// Daisy : ends
 
     if (*s != '"')
-        throw JSONException(std::string("JSON: expected \", got ") + *s);
+        throw SimpleJSONException(std::string("JSON: expected \", got ") + *s);
     ++s;
     checkPos(s);
 
@@ -717,13 +717,13 @@ std::string SimpleJSON::getString() const
                         }
                         catch (const Poco::SyntaxException &)
                         {
-                            throw JSONException("JSON: incorrect syntax: incorrect HEX code.");
+                            throw SimpleJSONException("JSON: incorrect syntax: incorrect HEX code.");
                         }
                         buf.resize(buf.size() + 6); /// максимальный размер UTF8 многобайтовой последовательности
                         int res
                             = utf8.convert(unicode, reinterpret_cast<unsigned char *>(const_cast<char *>(buf.data())) + buf.size() - 6, 6);
                         if (!res)
-                            throw JSONException("JSON: cannot convert unicode " + std::to_string(unicode) + " to UTF8.");
+                            throw SimpleJSONException("JSON: cannot convert unicode " + std::to_string(unicode) + " to UTF8.");
                         buf.resize(buf.size() - 6 + res);
                         break;
                     }
@@ -736,10 +736,10 @@ std::string SimpleJSON::getString() const
             case '"':
                 return buf;
             default:
-                throw JSONException("find_first_symbols<...>() failed in unexpected way");
+                throw SimpleJSONException("find_first_symbols<...>() failed in unexpected way");
         }
     } while (s < ptr_end);
-    throw JSONException("JSON: incorrect syntax (expected end of string, found end of JSON).");
+    throw SimpleJSONException("JSON: incorrect syntax (expected end of string, found end of JSON).");
 }
 
 std::string SimpleJSON::getName() const
@@ -751,12 +751,12 @@ StringRef SimpleJSON::getRawString() const
 {
     Pos s = ptr_begin;
     if (*s != '"')
-        throw JSONException(std::string("JSON: expected \", got ") + *s);
+        throw SimpleJSONException(std::string("JSON: expected \", got ") + *s);
     while (++s != ptr_end && *s != '"')
         ;
     if (s != ptr_end)
         return StringRef(ptr_begin + 1, s - ptr_begin - 1);
-    throw JSONException("JSON: incorrect syntax (expected end of string, found end of JSON).");
+    throw SimpleJSONException("JSON: incorrect syntax (expected end of string, found end of JSON).");
 }
 
 StringRef SimpleJSON::getRawName() const
@@ -771,7 +771,7 @@ SimpleJSON SimpleJSON::getValue() const
     /// Daisy : starts
     pos = skipWhitespaceIfAny(pos);
     if (*pos != ':')
-        throw JSONException("JSON: expected :.");
+        throw SimpleJSONException("JSON: expected :.");
     ++pos;
     checkPos(pos);
     pos = skipWhitespaceIfAny(pos);
@@ -789,7 +789,7 @@ double SimpleJSON::toDouble() const
     else if (type == TYPE_STRING)
         return SimpleJSON(ptr_begin + 1, ptr_end, level + 1).getDouble();
     else
-        throw JSONException("JSON: cannot convert value to double.");
+        throw SimpleJSONException("JSON: cannot convert value to double.");
 }
 
 Int64 SimpleJSON::toInt() const
@@ -801,7 +801,7 @@ Int64 SimpleJSON::toInt() const
     else if (type == TYPE_STRING)
         return SimpleJSON(ptr_begin + 1, ptr_end, level + 1).getInt();
     else
-        throw JSONException("JSON: cannot convert value to signed integer.");
+        throw SimpleJSONException("JSON: cannot convert value to signed integer.");
 }
 
 UInt64 SimpleJSON::toUInt() const
@@ -813,7 +813,7 @@ UInt64 SimpleJSON::toUInt() const
     else if (type == TYPE_STRING)
         return SimpleJSON(ptr_begin + 1, ptr_end, level + 1).getUInt();
     else
-        throw JSONException("JSON: cannot convert value to unsigned integer.");
+        throw SimpleJSONException("JSON: cannot convert value to unsigned integer.");
 }
 
 std::string SimpleJSON::toString() const
@@ -838,7 +838,7 @@ SimpleJSON::iterator SimpleJSON::iterator::begin() const
     /// Daisy : ends
 
     if (type != TYPE_ARRAY && type != TYPE_OBJECT)
-        throw JSONException("JSON: not array or object when calling begin() method.");
+        throw SimpleJSONException("JSON: not array or object when calling begin() method.");
 
     //std::cerr << "begin()\t" << data() << std::endl;
     /// Daisy : starts
@@ -851,9 +851,9 @@ SimpleJSON::iterator SimpleJSON::iterator::begin() const
     return SimpleJSON(pos, ptr_end, level + 1);
 }
 
-SimpleJSON::iterator JSON::iterator::end() const
+SimpleJSON::iterator SimpleJSON::iterator::end() const
 {
-    return JSON(nullptr, ptr_end, level + 1);
+    return SimpleJSON(nullptr, ptr_end, level + 1);
 }
 
 SimpleJSON::iterator & SimpleJSON::iterator::operator++()
@@ -862,6 +862,7 @@ SimpleJSON::iterator & SimpleJSON::iterator::operator++()
     ptr_begin = skipWhitespaceIfAny();
     Pos pos = skipElement();
     /// Daisy : ends
+
     checkPos(pos);
 
     if (*pos != ',')
