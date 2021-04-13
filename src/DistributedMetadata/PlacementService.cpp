@@ -2,10 +2,11 @@
 
 #include "CatalogService.h"
 
-#include <common/ClockUtils.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <Interpreters/Context.h>
+#include <Interpreters/executeSelectQuery.h>
 #include <Storages/System/StorageSystemStoragePolicies.h>
+#include <common/ClockUtils.h>
 #include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
@@ -80,9 +81,6 @@ std::vector<NodeMetricsPtr> PlacementService::place(
                 node_metrics->last_update_time,
                 staleness);
         }
-        /// Update num of tables
-        auto tables = catalog.findTableByNode(node_identity);
-        node_metrics->num_of_tables = tables.size();
     }
 
     return strategy->qualifiedNodes(nodes_metrics, request);
@@ -121,7 +119,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
 
 void PlacementService::mergeMetrics(const String & key, const IDistributedWriteAheadLog::RecordPtr & record)
 {
-    for (const auto & item : {"_host", "_http_port", "_tcp_port"})
+    for (const auto & item : {"_host", "_http_port", "_tcp_port", "_tables"})
     {
         if (!record->headers.contains(item))
         {
@@ -133,6 +131,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     const String & host = record->headers["_host"];
     const String & http_port = record->headers["_http_port"];
     const String & tcp_port = record->headers["_tcp_port"];
+    const Int64 table_counts = std::stoll(record->headers["_tables"]);
     const auto broadcast_time = std::stoll(record->headers["_broadcast_time"]);
 
     DiskSpace disk_space;
@@ -188,23 +187,38 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     node_metrics->http_port = http_port;
     node_metrics->tcp_port = tcp_port;
     node_metrics->disk_space.swap(disk_space);
+    node_metrics->num_of_tables = table_counts;
     node_metrics->last_update_time = MonotonicMilliseconds::now();
 }
 
-void PlacementService::broadcast()
+void PlacementService::scheduleBroadcast()
 {
     if (!global_context.isDistributed())
     {
         return;
     }
 
-    auto task_holder = global_context.getSchedulePool().createTask("PlacementBroadcast", [this]() { this->broadcastTask(); });
+    /// Schedule the broadcast task
+    auto task_holder = global_context.getSchedulePool().createTask("PlacementBroadcast", [this]() { this->broadcast(); });
     broadcast_task = std::make_unique<BackgroundSchedulePoolTaskHolder>(std::move(task_holder));
     (*broadcast_task)->activate();
     (*broadcast_task)->schedule();
 }
 
-void PlacementService::broadcastTask()
+void PlacementService::broadcast()
+{
+    try
+    {
+        doBroadcast();
+    }
+    catch (...)
+    {
+        LOG_ERROR(log, "Failed to broadcast node metrics, error={}", getCurrentExceptionMessage(true, true));
+    }
+    (*broadcast_task)->scheduleAfter(RESCHEDULE_INTERNAL_MS);
+}
+
+void PlacementService::doBroadcast()
 {
     const DataTypeFactory & data_type_factory = DataTypeFactory::instance();
 
@@ -223,20 +237,29 @@ void PlacementService::broadcastTask()
         LOG_TRACE(log, "Append disk metrics {}, {}, {} GB.", global_context.getNodeIdentity(), policy_name, disk_space);
     }
 
-    Block block;
+    Block disk_block;
     ColumnWithTypeAndName policy_name_col_with_type(std::move(policy_name_col), string_type, "policy_name");
-    block.insert(policy_name_col_with_type);
+    disk_block.insert(policy_name_col_with_type);
     ColumnWithTypeAndName disk_space_col_with_type{std::move(disk_space_col), uint64_type, "disk_space"};
-    block.insert(disk_space_col_with_type);
+    disk_block.insert(disk_space_col_with_type);
 
-    IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
+    IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(disk_block)};
     record.partition_key = 0;
     record.setIdempotentKey(global_context.getNodeIdentity());
     record.headers["_host"] = THIS_HOST;
     record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
-    record.headers["_broadcast_time"] = std::to_string(UTCMilliseconds::now());
     record.headers["_version"] = "1";
+
+    const String table_count_query = "SELECT count(*) as table_counts FROM system.tables WHERE database != 'system'";
+    Context context = global_context;
+    context.makeQueryContext();
+    executeSelectQuery(table_count_query, context, [&record](Block && block) {
+        const auto & table_counts_col = block.findByName("table_counts")->column;
+        record.headers["_tables"] = std::to_string(table_counts_col->getUInt(0));
+    });
+
+    record.headers["_broadcast_time"] = std::to_string(UTCMilliseconds::now());
 
     const auto & result = dwal->append(record, dwal_append_ctx);
     if (result.err == ErrorCodes::OK)
@@ -247,8 +270,6 @@ void PlacementService::broadcastTask()
     {
         LOG_ERROR(log, "Failed to append node metrics block, error={}", result.err);
     }
-
-    (*broadcast_task)->scheduleAfter(RESCHEDULE_INTERNAL_MS);
 }
 
 }

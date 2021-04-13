@@ -19,12 +19,12 @@ public:
     explicit PlacementService(Context & global_context_, PlacementStrategyPtr strategy_);
     virtual ~PlacementService() override = default;
 
+    void scheduleBroadcast();
     std::vector<NodeMetricsPtr>
     place(Int32 shards, Int32 replication_factor, const String & storage_policy = "default", const String & colocated_table = "") const;
     std::vector<String> placed(const String & database, const String & table) const;
 
 private:
-    void postStartup() override { broadcast(); }
     void preShutdown() override
     {
         if (broadcast_task)
@@ -41,7 +41,7 @@ private:
 
     /// `broadcast` broadcasts the metrics of this node
     void broadcast();
-    void broadcastTask();
+    void doBroadcast();
 
 private:
     mutable std::shared_mutex rwlock;
