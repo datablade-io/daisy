@@ -22,6 +22,11 @@ struct NodeMetrics
     String http_port;
     String tcp_port;
 
+    Int64 last_update_time = -1;
+    Int64 num_of_tables = -1;
+
+    bool staled = false;
+
     explicit NodeMetrics(const String & host_) : host(host_) { }
 };
 using NodeMetricsPtr = std::shared_ptr<NodeMetrics>;
@@ -44,7 +49,7 @@ public:
 class DiskStrategy final : public PlacementStrategy
 {
 public:
-    virtual std::vector<NodeMetricsPtr> qualifiedNodes(const NodeMetricsContainer & nodes_metrics, const PlacementRequest & request) override;
+    std::vector<NodeMetricsPtr> qualifiedNodes(const NodeMetricsContainer & nodes_metrics, const PlacementRequest & request) override;
 };
 
 using PlacementStrategyPtr = std::shared_ptr<PlacementStrategy>;

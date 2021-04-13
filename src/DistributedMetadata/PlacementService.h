@@ -19,12 +19,12 @@ public:
     explicit PlacementService(Context & global_context_, PlacementStrategyPtr strategy_);
     virtual ~PlacementService() override = default;
 
+    void scheduleBroadcast();
     std::vector<NodeMetricsPtr>
     place(Int32 shards, Int32 replication_factor, const String & storage_policy = "default", const String & colocated_table = "") const;
     std::vector<String> placed(const String & database, const String & table) const;
 
 private:
-    void postStartup() override { broadcast(); }
     void preShutdown() override
     {
         if (broadcast_task)
@@ -37,11 +37,11 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(100, 500); }
 
 private:
-    void mergeMetrics(const String & key, const std::unordered_map<String, String> & headers, DiskSpace & disk_space);
+    void mergeMetrics(const String & key, const IDistributedWriteAheadLog::RecordPtr & record);
 
     /// `broadcast` broadcasts the metrics of this node
     void broadcast();
-    void broadcastTask();
+    void doBroadcast();
 
 private:
     mutable std::shared_mutex rwlock;
@@ -49,7 +49,9 @@ private:
     NodeMetricsContainer nodes_metrics;
     PlacementStrategyPtr strategy;
     std::unique_ptr<BackgroundSchedulePoolTaskHolder> broadcast_task;
-    static constexpr size_t reschedule_internal_ms = 5000;
+    static constexpr size_t RESCHEDULE_INTERNAL_MS = 5000;
+    static constexpr Int64 LATENCY_THRESHOLD_MS = 5000;
+    static constexpr Int64 STALENESS_THRESHOLD_MS = 10000;
 };
 
 }
