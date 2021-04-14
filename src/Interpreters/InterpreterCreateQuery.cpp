@@ -826,6 +826,12 @@ void InterpreterCreateQuery::assertOrSetUUID(ASTCreateQuery & create, const Data
 /// Daisy : starts
 bool InterpreterCreateQuery::createTableDistributed(const String & current_database, ASTCreateQuery & create)
 {
+    if (!create.storage || !create.storage->engine || create.storage->engine->name != "DistributedMergeTree")
+    {
+        /// We only support `DistributedMergeTree` table engine for now
+        return false;
+    }
+
     if (!context.isDistributed())
     {
         if (create.storage->engine->name == "DistributedMergeTree")
@@ -833,12 +839,6 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
             throw Exception(
                     "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
         }
-        return false;
-    }
-
-    if (create.storage == nullptr || create.storage->engine->name != "DistributedMergeTree")
-    {
-        /// We only support `DistributedMergeTree` table engine for now
         return false;
     }
 
