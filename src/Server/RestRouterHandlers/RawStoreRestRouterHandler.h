@@ -6,31 +6,10 @@
 
 namespace DB
 {
-namespace
-{
-std::map<String, std::map<String, String> > RAWSTORE_CREATE_SCHEMA = {
-    {"required",{
-                    {"name","string"}
-                }
-    },
-    {"optional", {
-                    {"shards", "int"},
-                    {"replication_factor", "int"},
-                    {"order_by_granularity", "string"},
-                    {"partition_by_granularity", "string"},
-                    {"ttl_expression", "string"}
-                }
-    }
-};
-}
-
 class RawStoreRestRouterHandler final : public TableRestRouterHandler
 {
 public:
-    explicit RawStoreRestRouterHandler(Context & query_context_) : TableRestRouterHandler(query_context_, "RawStore"){
-        create_schema = RAWSTORE_CREATE_SCHEMA;
-        query_context.setQueryParameter("table_type", "rawstore");
-    }
+    explicit RawStoreRestRouterHandler(Context & query_context_);
     ~RawStoreRestRouterHandler() override { }
 
 private:

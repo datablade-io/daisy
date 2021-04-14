@@ -13,10 +13,73 @@
 
 namespace DB
 {
+namespace
+{
+std::map<String, std::map<String, String> > CREATE_SCHEMA = {
+    {"required",{
+                    {"name","string"},
+                    {"columns", "array"}
+                }
+    },
+    {"optional", {
+                    {"shards", "int"},
+                    {"_time_column", "string"},
+                    {"replication_factor", "int"},
+                    {"order_by_expression", "string"},
+                    {"order_by_granularity", "string"},
+                    {"partition_by_granularity", "string"},
+                    {"ttl_expression", "string"}
+                }
+    }
+};
+
+std::map<String, std::map<String, String> > COLUMN_SCHEMA = {
+    {"required",{
+                    {"name","string"},
+                    {"type", "string"},
+                }
+    },
+    {"optional", {
+                    {"nullable", "bool"},
+                    {"default", "string"},
+                    {"compression_codec", "string"},
+                    {"ttl_expression", "string"},
+                    {"skipping_index_expression", "string"}
+                }
+    }
+};
+
+std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
+    {"required",{
+                }
+    },
+    {"optional", {
+                    {"ttl_expression", "string"}
+                }
+    }
+};
+
+std::map<String, String> GRANULARITY_FUNC_MAPPING= {
+    {"M", "toYYYYMM(`_time`)"},
+    {"D", "toYYYYMMDD(`_time`)"},
+    {"H", "toStartOfHour(`_time`)"},
+    {"m", "toStartOfMinute(`_time`)"}
+};
+}
+
 namespace ErrorCodes
 {
     extern const int CONFIG_ERROR;
     extern const int OK;
+}
+
+TableRestRouterHandler::TableRestRouterHandler(Context & query_context_, const String & router_name)
+    : RestRouterHandler(query_context_, router_name)
+    , create_schema(CREATE_SCHEMA)
+    , column_schema(COLUMN_SCHEMA)
+    , update_schema(UPDATE_SCHEMA)
+    , granularity_func_mapping(GRANULARITY_FUNC_MAPPING)
+{
 }
 
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const

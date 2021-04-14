@@ -9,6 +9,30 @@
 
 namespace DB
 {
+namespace
+{
+std::map<String, std::map<String, String> > RAWSTORE_CREATE_SCHEMA = {
+        {"required",{
+                            {"name","string"}
+                    }
+        },
+        {"optional", {
+                            {"shards", "int"},
+                            {"replication_factor", "int"},
+                            {"order_by_granularity", "string"},
+                            {"partition_by_granularity", "string"},
+                            {"ttl_expression", "string"}
+                    }
+        }
+};
+}
+
+RawStoreRestRouterHandler::RawStoreRestRouterHandler(Context & query_context_) : TableRestRouterHandler(query_context_, "RawStore")
+{
+    create_schema = RAWSTORE_CREATE_SCHEMA;
+    query_context.setQueryParameter("table_type", "rawstore");
+}
+
 String RawStoreRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status */) const
 {
     /// FIXME: Implement in another PR
