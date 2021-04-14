@@ -56,6 +56,13 @@ std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
                     }
         }
 };
+
+std::map<String, String> GRANULARITY_FUNC_MAPPING= {
+        {"M", "toYYYYMM(`_time`)"},
+        {"D", "toYYYYMMDD(`_time`)"},
+        {"H", "toStartOfHour(`_time`)"},
+        {"m", "toStartOfMinute(`_time`)"}
+};
 }
 
 class TableRestRouterHandler : public RestRouterHandler
@@ -66,6 +73,7 @@ public:
         , create_schema(CREATE_SCHEMA)
         , column_schema(COLUMN_SCHEMA)
         , update_schema(UPDATE_SCHEMA)
+        , granularity_func_mapping(GRANULARITY_FUNC_MAPPING)
     {
     }
     ~TableRestRouterHandler() override { }
@@ -84,11 +92,10 @@ private:
     String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
 
 protected:
-    static std::map<String, String> granularity_func_mapping;
-
     std::map<String, std::map<String, String> > & create_schema;
     std::map<String, std::map<String, String> > & column_schema;
     std::map<String, std::map<String, String> > & update_schema;
+    std::map<String, String> & granularity_func_mapping;
 
     String buildResponse() const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
@@ -99,8 +106,6 @@ protected:
     virtual String executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     virtual String executeDelete(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     virtual String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
-
-    virtual const std::map<String, std::map<String, String> > getCreateSchema() const;
 };
 
 }

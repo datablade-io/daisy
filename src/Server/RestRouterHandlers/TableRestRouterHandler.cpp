@@ -19,13 +19,6 @@ namespace ErrorCodes
     extern const int OK;
 }
 
-std::map<String, String> TableRestRouterHandler::granularity_func_mapping = {
-    {"M", "toYYYYMM(`_time`)"},
-    {"D", "toYYYYMMDD(`_time`)"},
-    {"H", "toStartOfHour(`_time`)"},
-    {"m", "toStartOfMinute(`_time`)"}
-};
-
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
     if (!validateSchema(create_schema, payload, error_msg))
@@ -302,8 +295,4 @@ String TableRestRouterHandler::getColumnDefinition(const Poco::JSON::Object::Ptr
     return boost::algorithm::join(create_segments, " ");
 }
 
-const std::map<String, std::map<String, String> > TableRestRouterHandler::getCreateSchema() const
-{
-    return create_schema;
-}
 }
