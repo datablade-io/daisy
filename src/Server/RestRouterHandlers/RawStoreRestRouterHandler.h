@@ -43,14 +43,11 @@ public:
         query_context.setQueryParameter("table_type", "rawstore");
     }
     ~RawStoreRestRouterHandler() override { }
+
 private:
     String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const override;
     String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload) const;
-
-    void buildTablesJson(Poco::JSON::Object & resp, const CatalogService::TablePtrs & tables) const;
-    void buildColumnsJson(Poco::JSON::Object & resp_table, const String & create_table_info) const;
-
 };
 
 }
