@@ -13,6 +13,12 @@
 
 namespace DB
 {
+namespace ErrorCodes
+{
+    extern const int CONFIG_ERROR;
+    extern const int OK;
+}
+
 namespace
 {
 std::map<String, std::map<String, String> > CREATE_SCHEMA = {
@@ -59,18 +65,12 @@ std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
     }
 };
 
-std::map<String, String> GRANULARITY_FUNC_MAPPING= {
+std::map<String, String> GRANULARITY_FUNC_MAPPING = {
     {"M", "toYYYYMM(`_time`)"},
     {"D", "toYYYYMMDD(`_time`)"},
     {"H", "toStartOfHour(`_time`)"},
     {"m", "toStartOfMinute(`_time`)"}
 };
-}
-
-namespace ErrorCodes
-{
-    extern const int CONFIG_ERROR;
-    extern const int OK;
 }
 
 TableRestRouterHandler::TableRestRouterHandler(Context & query_context_, const String & router_name)
