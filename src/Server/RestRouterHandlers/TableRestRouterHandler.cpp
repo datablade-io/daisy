@@ -19,79 +19,35 @@ namespace ErrorCodes
     extern const int OK;
 }
 
-namespace
-{
-    std::map<String, std::map<String, String> > CREATE_SCHEMA = {
-        {"required",{
-                        {"name","string"},
-                        {"columns", "array"}
-                    }
-        },
-        {"optional", {
-                        {"shards", "int"},
-                        {"_time_column", "string"},
-                        {"replication_factor", "int"},
-                        {"order_by_expression", "string"},
-                        {"order_by_granularity", "string"},
-                        {"partition_by_granularity", "string"},
-                        {"ttl_expression", "string"}
-                    }
-        }
-    };
-
-std::map<String, std::map<String, String> > COLUMN_SCHEMA= {
-    {"required",{
-                    {"name","string"},
-                    {"type", "string"},
-                }
-    },
-    {"optional", {
-                    {"nullable", "bool"},
-                    {"default", "string"},
-                    {"compression_codec", "string"},
-                    {"ttl_expression", "string"},
-                    {"skipping_index_expression", "string"}
-                }
-    }
-};
-
-std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
-    {"required",{
-                }
-    },
-    {"optional", {
-                    {"ttl_expression", "string"}
-                }
-    }
-};
-
-std::map<String, String> GRANULARITY_FUNC_MAPPING = {
+std::map<String, String> TableRestRouterHandler::granularity_func_mapping = {
     {"M", "toYYYYMM(`_time`)"},
     {"D", "toYYYYMMDD(`_time`)"},
     {"H", "toStartOfHour(`_time`)"},
     {"m", "toStartOfMinute(`_time`)"}
 };
-}
 
 bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    if (!validateSchema(CREATE_SCHEMA, payload, error_msg))
+    if (!validateSchema(create_schema, payload, error_msg))
     {
         return false;
     }
 
-    Poco::JSON::Array::Ptr columns = payload->getArray("columns");
-    for (const auto & col : *columns)
+    if (payload->has("columns"))
     {
-        if (!validateSchema(COLUMN_SCHEMA, col.extract<Poco::JSON::Object::Ptr>(), error_msg))
+        Poco::JSON::Array::Ptr columns = payload->getArray("columns");
+        for (const auto & col : *columns)
         {
-            return false;
+            if (!validateSchema(column_schema, col.extract<Poco::JSON::Object::Ptr>(), error_msg))
+            {
+                return false;
+            }
         }
     }
 
     if (payload->has("partition_by_granularity"))
     {
-        if (!GRANULARITY_FUNC_MAPPING.contains(payload->get("partition_by_granularity").toString()))
+        if (!granularity_func_mapping.contains(payload->get("partition_by_granularity").toString()))
         {
             error_msg = "Invalid partition_by_granularity, only `m, H, D, M` are supported";
             return false;
@@ -100,7 +56,7 @@ bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payloa
 
     if (payload->has("order_by_granularity"))
     {
-        if (!GRANULARITY_FUNC_MAPPING.contains(payload->get("order_by_granularity").toString()))
+        if (!granularity_func_mapping.contains(payload->get("order_by_granularity").toString()))
         {
             error_msg = "Invalid order_by_granularity, only `m, H, D, M` are supported";
             return false;
@@ -130,7 +86,7 @@ bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & /* payl
 
 bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    return validateSchema(UPDATE_SCHEMA, payload, error_msg);
+    return validateSchema(update_schema, payload, error_msg);
 }
 
 String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status*/) const
@@ -142,7 +98,7 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
 String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
     const auto & shard = getQueryParameter("shard");
-    const auto & query = getTableCreationSQL(payload, shard);
+    const auto & query = getCreationSQL(payload, shard);
 
     if (query_context.isDistributed() && getQueryParameter("distributed_ddl") != "false")
     {
@@ -237,17 +193,17 @@ inline String TableRestRouterHandler::getTimeColumn(const Poco::JSON::Object::Pt
     return payload->has("_time_column") ? payload->get("_time_column").toString() : "_time";
 }
 
-String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload) const
+String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & granularity) const
 {
     const auto & partition_by_granularity
-        = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : "M";
-    return GRANULARITY_FUNC_MAPPING[partition_by_granularity];
+        = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : granularity;
+    return granularity_func_mapping[partition_by_granularity];
 }
 
 String TableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/) const
 {
     const auto & order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "D";
-    const auto & default_order_expr = GRANULARITY_FUNC_MAPPING[order_by_granularity];
+    const auto & default_order_expr = granularity_func_mapping[order_by_granularity];
     const auto & order_by_expression = payload->has("order_by_expression") ? payload->get("order_by_expression").toString() : String();
 
     if (order_by_expression.empty())
@@ -260,7 +216,7 @@ String TableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & pa
     return default_order_expr + ", " + order_by_expression;
 }
 
-String TableRestRouterHandler::getTableCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
+String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
 {
     const auto & database_name = getPathParameter("database");
     const auto & time_col = getTimeColumn(payload);
@@ -346,4 +302,8 @@ String TableRestRouterHandler::getColumnDefinition(const Poco::JSON::Object::Ptr
     return boost::algorithm::join(create_segments, " ");
 }
 
+const std::map<String, std::map<String, String> > TableRestRouterHandler::getCreateSchema() const
+{
+    return create_schema;
+}
 }
