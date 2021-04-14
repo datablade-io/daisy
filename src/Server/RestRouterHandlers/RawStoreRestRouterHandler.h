@@ -22,16 +22,6 @@ std::map<String, std::map<String, String> > RAWSTORE_CREATE_SCHEMA = {
                 }
     }
 };
-
-std::map<String, std::map<String, String> > RAWSTORE_UPDATE_SCHEMA = {
-    {"required",{
-                }
-    },
-    {"optional", {
-                    {"ttl_expression", "string"}
-                }
-    }
-};
 }
 
 class RawStoreRestRouterHandler final : public TableRestRouterHandler
@@ -39,7 +29,6 @@ class RawStoreRestRouterHandler final : public TableRestRouterHandler
 public:
     explicit RawStoreRestRouterHandler(Context & query_context_) : TableRestRouterHandler(query_context_, "RawStore"){
         create_schema = RAWSTORE_CREATE_SCHEMA;
-        update_schema = RAWSTORE_UPDATE_SCHEMA;
         query_context.setQueryParameter("table_type", "rawstore");
     }
     ~RawStoreRestRouterHandler() override { }
