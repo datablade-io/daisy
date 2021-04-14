@@ -99,7 +99,7 @@ protected:
 
     String buildResponse() const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
-    String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & granularity="M") const;
+    String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & default_granularity) const;
     String processQuery(const String & query) const;
 
     virtual String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;

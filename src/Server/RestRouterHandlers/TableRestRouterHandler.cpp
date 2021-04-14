@@ -186,10 +186,10 @@ inline String TableRestRouterHandler::getTimeColumn(const Poco::JSON::Object::Pt
     return payload->has("_time_column") ? payload->get("_time_column").toString() : "_time";
 }
 
-String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & granularity) const
+String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & default_granularity) const
 {
     const auto & partition_by_granularity
-        = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : granularity;
+        = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : default_granularity;
     return granularity_func_mapping[partition_by_granularity];
 }
 
@@ -219,7 +219,7 @@ String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & pa
     create_segments.push_back(getColumnsDefinition(payload));
     create_segments.push_back(")");
     create_segments.push_back("ENGINE = " + getEngineExpr(payload));
-    create_segments.push_back("PARTITION BY " + getPartitionExpr(payload));
+    create_segments.push_back("PARTITION BY " + getPartitionExpr(payload, "M"));
     create_segments.push_back("ORDER BY (" + getOrderbyExpr(payload, time_col) + ")");
 
     if (payload->has("ttl_expression"))
