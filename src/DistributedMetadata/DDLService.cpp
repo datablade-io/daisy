@@ -312,7 +312,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         String hosts_val = block.getByName("hosts").column->getDataAt(0).toString();
         std::vector<String> hosts;
         boost::algorithm::split(hosts, hosts_val, boost::is_any_of(","));
-        assert(hosts.size() > 0);
+        assert(!hosts.empty());
 
         std::vector<Poco::URI> target_hosts{
             toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database, getURIEndpoint(record->headers)))};
@@ -462,7 +462,7 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         {
             mutateTable(record, Poco::Net::HTTPRequest::HTTP_DELETE);
 
-            /// delete DWAL
+            /// Delete DWAL
             String database = record->block.getByName("database").column->getDataAt(0).toString();
             String table = record->block.getByName("table").column->getDataAt(0).toString();
             std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table}};

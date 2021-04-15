@@ -1,4 +1,4 @@
-#include "RawStoreRestRouterHandler.h"
+#include "RawstoreTableRestRouterHandler.h"
 #include "SchemaValidator.h"
 
 #include <Core/Block.h>
@@ -9,43 +9,39 @@
 
 namespace DB
 {
-namespace
-{
-std::map<String, std::map<String, String> > RAWSTORE_CREATE_SCHEMA = {
-        {"required",{
-                            {"name","string"}
-                    }
-        },
-        {"optional", {
-                            {"shards", "int"},
-                            {"replication_factor", "int"},
-                            {"order_by_granularity", "string"},
-                            {"partition_by_granularity", "string"},
-                            {"ttl_expression", "string"}
-                    }
-        }
+std::map<String, std::map<String, String> > RawstoreTableRestRouterHandler::create_schema = {
+    {"required",{
+                        {"name","string"}
+                }
+    },
+    {"optional", {
+                        {"shards", "int"},
+                        {"replication_factor", "int"},
+                        {"order_by_granularity", "string"},
+                        {"partition_by_granularity", "string"},
+                        {"ttl_expression", "string"}
+                }
+    }
 };
-}
 
-RawStoreRestRouterHandler::RawStoreRestRouterHandler(Context & query_context_) : TableRestRouterHandler(query_context_, "RawStore")
+bool RawstoreTableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    create_schema = RAWSTORE_CREATE_SCHEMA;
-    query_context.setQueryParameter("table_type", "rawstore");
+    if (!validateSchema(create_schema, payload, error_msg))
+    {
+        return false;
+    }
+
+    return TableRestRouterHandler::validatePost(payload, error_msg);
 }
 
-String RawStoreRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status */) const
-{
-    /// FIXME: Implement in another PR
-    return "";
-}
 
-String RawStoreRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload) const
+String RawstoreTableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload) const
 {
     const auto & order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "m";
     return granularity_func_mapping[order_by_granularity] + ",  sourcetype";
 }
 
-String RawStoreRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
+String RawstoreTableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
 {
     const auto & database_name = getPathParameter("database");
 
@@ -76,4 +72,5 @@ String RawStoreRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr &
 
     return boost::algorithm::join(create_segments, " ");
 }
+
 }

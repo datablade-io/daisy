@@ -14,37 +14,33 @@ namespace DB
 class TableRestRouterHandler : public RestRouterHandler
 {
 public:
-    explicit TableRestRouterHandler(Context & query_context_, const String & router_name = "Table");
+    explicit TableRestRouterHandler(Context & query_context_, const String & router_name) : RestRouterHandler(query_context_, router_name)
+    {
+    }
     ~TableRestRouterHandler() override { }
 
 private:
-    virtual bool validateGet(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
-    virtual bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
-    virtual bool validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
-
-    String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const;
-    String getColumnDefinition(const Poco::JSON::Object::Ptr & column) const;
-
-    String getTimeColumn(const Poco::JSON::Object::Ptr & payload) const;
-
-    virtual String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
-    String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
+    virtual String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const = 0;
 
 protected:
-    std::map<String, std::map<String, String> > & create_schema;
-    std::map<String, std::map<String, String> > & column_schema;
-    std::map<String, std::map<String, String> > & update_schema;
-    std::map<String, String> & granularity_func_mapping;
+    static std::map<String, std::map<String, String> >  update_schema;
+    static std::map<String, String>  granularity_func_mapping;
+
+    static String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & default_granularity);
 
     String buildResponse() const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
-    String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & default_granularity) const;
+
     String processQuery(const String & query) const;
 
-    virtual String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
-    virtual String executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
-    virtual String executeDelete(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
-    virtual String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
+    bool validateGet(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
+    bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
+    bool validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
+
+    String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
+    String executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
+    String executeDelete(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
+    String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
 };
 
 }
