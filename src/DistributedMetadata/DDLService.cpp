@@ -66,6 +66,38 @@ namespace
         }
         return ErrorCodes::UNKNOWN_EXCEPTION;
     }
+
+    String getURIEndpoint(const std::unordered_map<String, String> & headers)
+    {
+        if (headers.contains("table_type") && headers.at("table_type") == "rawstore")
+        {
+            return "rawstores";
+        }
+        return "tables";
+    }
+
+    std::vector<Poco::URI> toURIs(const std::vector<String> & hosts, const String & path, const String & default_port)
+    {
+        std::vector<Poco::URI> uris;
+        uris.reserve(hosts.size());
+
+        for (auto host : hosts)
+        {
+            /// FIXME : HTTP for now
+            if (host.rfind(":") != String::npos)
+            {
+                /// `host` contains port information
+                uris.emplace_back("http://" + host + path);
+            }
+            else
+            {
+                uris.emplace_back("http://" + host + default_port + path);
+            }
+        }
+
+        return uris;
+    }
+
 }
 
 DDLService & DDLService::instance(Context & global_context_)
@@ -151,37 +183,6 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
         }
     }
     return true;
-}
-
-inline String DDLService::getURIEndpoint(const std::unordered_map<String, String> & headers) const
-{
-    if (headers.contains("table_type") && headers.at("table_type") == "rawstore")
-    {
-       return "rawstores";
-    }
-    return "tables";
-}
-
-std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts, const String & path) const
-{
-    std::vector<Poco::URI> uris;
-    uris.reserve(hosts.size());
-
-    for (const auto & host : hosts)
-    {
-        /// FIXME : HTTP for now
-        if (host.rfind(":") != String::npos)
-        {
-            /// `host` contains port information
-            uris.emplace_back("http://" + host + path);
-        }
-        else
-        {
-            uris.emplace_back("http://" + host + http_port + path);
-        }
-    }
-
-    return uris;
 }
 
 Int32 DDLService::sendRequest(
@@ -315,7 +316,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         assert(!hosts.empty());
 
         std::vector<Poco::URI> target_hosts{
-            toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database, getURIEndpoint(record->headers)))};
+            toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database, getURIEndpoint(record->headers)), http_port)};
 
         /// Create table on each target host accordign to placement
         for (Int32 i = 0; i < replication_factor; ++i)
@@ -403,7 +404,9 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
     String payload = block.getByName("payload").column->getDataAt(0).toString();
 
     std::vector<Poco::URI> target_hosts{toURIs(
-        placement.placed(database, table), fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, getURIEndpoint(record->headers), table))};
+        placement.placed(database, table),
+        fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, getURIEndpoint(record->headers), table),
+        http_port)};
 
     if (target_hosts.empty())
     {

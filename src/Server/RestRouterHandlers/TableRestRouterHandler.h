@@ -30,7 +30,6 @@ protected:
 
     String buildResponse() const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
-
     String processQuery(const String & query) const;
 
     bool validateGet(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;

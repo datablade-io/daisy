@@ -28,9 +28,6 @@ private:
     std::pair<Int32, Int32> batchSizeAndTimeout() const override { return std::make_pair(10, 200); }
 
 private:
-    std::vector<Poco::URI> toURIs(const std::vector<String> & hosts, const String & path) const;
-    String getURIEndpoint(const std::unordered_map<String, String> & headers) const;
-
     Int32 sendRequest(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
     Int32 doTable(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
     void createTable(IDistributedWriteAheadLog::RecordPtr record);

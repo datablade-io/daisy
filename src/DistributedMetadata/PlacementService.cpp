@@ -95,8 +95,14 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
 
     for (const auto & t : tables)
     {
-        /// FIXME: Needs to append the `port`
-        hosts.push_back(t->host);
+        if (nodes_metrics.contains(t->node_identity))
+        {
+            hosts.push_back(t->host + ":" + nodes_metrics.at(t->node_identity)->http_port);
+        }
+        else
+        {
+            hosts.push_back(t->host);
+        }
     }
     return hosts;
 }
