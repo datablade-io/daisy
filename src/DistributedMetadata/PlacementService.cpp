@@ -29,6 +29,7 @@ const String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retenti
 const String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
 
 const String THIS_HOST = getFQDNOrHostName();
+const String HOST_CHANNEL_ID = std::to_string(CityHash_v1_0_2::CityHash64WithSeed(THIS_HOST.data(), THIS_HOST.size(), 123));
 }
 
 PlacementService & PlacementService::instance(const ContextPtr & context)

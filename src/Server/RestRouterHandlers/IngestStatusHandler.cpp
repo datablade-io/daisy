@@ -201,7 +201,6 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, const Poco::JS
         request.add("X-ClickHouse-Query-Id", query_context->getCurrentQueryId());
         auto & ostr = session->sendRequest(request);
         ostr << req_body_stream.str();
-
         if (!ostr.good())
         {
             http_status = Poco::Net::HTTPResponse::HTTP_SERVICE_UNAVAILABLE;
@@ -209,6 +208,9 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, const Poco::JS
             LOG_ERROR(log, error);
             return jsonErrorResponse(error, ErrorCodes::SEND_POLL_REQ_ERROR);
         }
+
+        if (payload)
+            ostr << req_body_stream.str();
 
         Poco::Net::HTTPResponse response;
         auto & istr = session->receiveResponse(response);
