@@ -1,11 +1,13 @@
 #include "IngestStatusHandler.h"
 
+#include <DistributedMetadata/PlacementService.h>
 #include <IO/HTTPCommon.h>
 #include <Storages/StorageDistributedMergeTree.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Path.h>
 
+#include <numeric>
 #include <vector>
 
 
@@ -13,12 +15,16 @@ namespace DB
 {
 namespace ErrorCodes
 {
+    extern const int OK;
     extern const int UNKNOWN_TABLE;
     extern const int TYPE_MISMATCH;
     extern const int INVALID_POLL_ID;
     extern const int POLL_ID_NOT_EXIST;
     extern const int SEND_POLL_REQ_ERROR;
 }
+
+const String BATCH_URL = "http://{}:{}/dae/v1/ingest/statuses";
+const String POLL_URL = "http://{}:{}/dae/v1/ingest/statuses/{}";
 
 String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
 {
@@ -37,22 +43,16 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
 
     if (target_node == query_context->getNodeIdentity())
     {
-        StoragePtr storage = DatabaseCatalog::instance().getTable(StorageID(database_name, table_name), query_context);
+        String error;
+        int error_code = ErrorCodes::OK;
+        const StorageDistributedMergeTree * storage = getAndVerifyStorage(database_name, table_name, error, error_code);
         if (!storage)
         {
             http_status = Poco::Net::HTTPResponse::HTTP_NOT_ACCEPTABLE;
-            return jsonErrorResponse("table: " + database_name + "." + table_name + " does not exist", ErrorCodes::UNKNOWN_TABLE);
+            return jsonErrorResponse(error, error_code);
         }
 
-        if (storage->getName() != "DistributedMergeTree")
-        {
-            http_status = Poco::Net::HTTPResponse::HTTP_NOT_ACCEPTABLE;
-            return jsonErrorResponse(
-                "table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable", ErrorCodes::TYPE_MISMATCH);
-        }
-
-        const auto * distributed = static_cast<const StorageDistributedMergeTree *>(storage.get());
-        auto status = distributed->getIngestStatus(poll_id);
+        auto status = storage->getIngestStatus(poll_id);
         if (status.second < 0)
         {
             http_status = Poco::Net::HTTPResponse::HTTP_NOT_FOUND;
@@ -62,12 +62,101 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
     }
     else
     {
-        Poco::URI uri{"http://" + target_node + query_context->getConfigRef().getString("http_port") + "/dae/ingest/statuses/" + poll_id};
-        return forwardRequest(uri, http_status);
+        Poco::URI uri{fmt::format(POLL_URL, target_node, query_context->getConfigRef().getString("http_port"), poll_id)};
+        return forwardRequest(uri, nullptr, http_status);
     }
 }
 
-String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_status) const
+bool IngestStatusHandler::parsePollIds(std::vector<String> & poll_ids, TableQueries & queries, String & error) const
+{
+    String target_node;
+    error.clear();
+
+    for (auto & poll_id : poll_ids)
+    {
+        std::vector<String> components;
+        try
+        {
+            /// components: 0: query_id, 1: database, 2: table, 3: user, 5: timestamp
+            components = query_context->parseQueryStatusPollId(poll_id);
+        }
+        catch (Exception & e)
+        {
+            error = "Invalid query id: " + poll_id + " ErrorCode: " + std::to_string(e.code());
+            return false;
+        }
+        const auto & full_name = components[1] + "." + components[2];
+        auto & ids = queries[full_name];
+        ids.emplace_back(poll_id);
+    }
+
+    return true;
+}
+
+String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+{
+    String error;
+    PlacementService & placement = PlacementService::instance(query_context);
+    const String & channel_id = payload->get("channel_id").toString();
+    const String & target_node = placement.getNodeIdentityByChannelId(channel_id);
+
+    if (target_node.empty())
+    {
+        /// Invalid node
+        http_status = Poco::Net::HTTPResponse::HTTP_NOT_FOUND;
+        return jsonErrorResponse("Invalid channel_id", ErrorCodes::POLL_ID_NOT_EXIST);
+    }
+
+    if (target_node == query_context->getNodeIdentity())
+    {
+        const auto & arr = payload->getArray("poll_ids");
+        std::vector<String> poll_ids;
+        for (const auto & poll_id : *arr)
+            poll_ids.emplace_back(poll_id.extract<String>());
+        TableQueries queries;
+        if (!parsePollIds(poll_ids, queries, error))
+        {
+            http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+            return jsonErrorResponse(error, ErrorCodes::INVALID_POLL_ID);
+        }
+
+        std::vector<std::tuple<String, String, Int32>> statuses;
+        int error_code = ErrorCodes::OK;
+
+        for (auto & query : queries)
+        {
+            std::vector<String> names;
+            String sep = ".";
+            boost::algorithm::split(names, query.first, boost::is_any_of(sep));
+
+            const StorageDistributedMergeTree * storage = getAndVerifyStorage(names[0], names[1], error, error_code);
+            if (!storage)
+            {
+                LOG_ERROR(
+                    log,
+                    "{}, for poll_ids: {}",
+                    error,
+                    std::accumulate(query.second.begin(), query.second.end(), std::string{","}),
+                    error_code);
+                continue;
+            }
+            storage->getStatusInBatch(query.second, statuses);
+        }
+        if (statuses.empty())
+        {
+            http_status = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
+            return jsonErrorResponse("None of poll_id in 'poll_ids' is valid", ErrorCodes::INVALID_POLL_ID);
+        }
+        return makeBatchResponse(statuses);
+    }
+    else
+    {
+        Poco::URI uri{fmt::format(BATCH_URL, target_node, query_context->getConfigRef().getString("http_port"))};
+        return forwardRequest(uri, payload, http_status);
+    }
+}
+
+String IngestStatusHandler::forwardRequest(const Poco::URI & uri, const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
     LOG_DEBUG(log, "Send GET request to on uri={}", uri.toString());
 
@@ -82,15 +171,26 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_s
         Poco::Net::HTTPRequest request{Poco::Net::HTTPRequest::HTTP_GET, uri.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1};
         request.setHost(uri.getHost());
 
-        auto * ostr = &session->sendRequest(request);
-
-        if (!ostr->good())
+        std::stringstream req_body_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        if (payload)
+        {
+            payload->stringify(req_body_stream, 0);
+            request.setMethod(Poco::Net::HTTPRequest::HTTP_POST);
+            const String & body = req_body_stream.str();
+            request.setContentType("application/json");
+            request.setContentLength(body.length());
+        }
+        std::ostream & ostr = session->sendRequest(request);
+        if (!ostr.good())
         {
             http_status = Poco::Net::HTTPResponse::HTTP_SERVICE_UNAVAILABLE;
             error = "Failed on uri=" + uri.toString();
             LOG_ERROR(log, error);
             return jsonErrorResponse(error, ErrorCodes::SEND_POLL_REQ_ERROR);
         }
+
+        if (payload)
+            ostr << req_body_stream.str();
 
         Poco::Net::HTTPResponse response;
         auto & istr = session->receiveResponse(response);
@@ -120,11 +220,63 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_s
     return jsonErrorResponse(error, ErrorCodes::SEND_POLL_REQ_ERROR);
 }
 
+const StorageDistributedMergeTree *
+IngestStatusHandler::getAndVerifyStorage(const String & database_name, const String & table_name, String & error, int & error_code) const
+{
+    error.clear();
+    error_code = ErrorCodes::OK;
+
+    StoragePtr storage;
+    try
+    {
+        storage = DatabaseCatalog::instance().getTable(StorageID(database_name, table_name), query_context);
+    }
+    catch (Exception & e)
+    {
+        error = e.message();
+        error_code = e.code();
+        return nullptr;
+    }
+
+    if (!storage)
+    {
+        error = "table: " + database_name + "." + table_name + " does not exist";
+        error_code = ErrorCodes::UNKNOWN_TABLE;
+        return nullptr;
+    }
+
+    if (storage->getName() != "DistributedMergeTree")
+    {
+        error = "table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable";
+        error_code = ErrorCodes::TYPE_MISMATCH;
+        return nullptr;
+    }
+    return static_cast<const StorageDistributedMergeTree *>(storage.get());
+}
+
 String IngestStatusHandler::makeResponse(const std::pair<String, Int32> & status)
 {
     Poco::JSON::Object resp;
     resp.set("status", status.first);
     resp.set("progress", status.second);
+    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+    resp.stringify(resp_str_stream, 0);
+    return resp_str_stream.str();
+}
+
+String IngestStatusHandler::makeBatchResponse(const std::vector<std::tuple<String, String, Int32>> & statuses)
+{
+    Poco::JSON::Object resp;
+    Poco::JSON::Array json_statuses;
+    for (const auto & status : statuses)
+    {
+        Poco::JSON::Object::Ptr json(new Poco::JSON::Object());
+        json->set("poll_id", std::get<0>(status));
+        json->set("status", std::get<1>(status));
+        json->set("progress", std::get<2>(status));
+        json_statuses.add(json);
+    }
+    resp.set("status", json_statuses);
     std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     resp.stringify(resp_str_stream, 0);
     return resp_str_stream.str();

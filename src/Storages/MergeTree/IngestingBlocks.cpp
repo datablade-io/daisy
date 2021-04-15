@@ -132,6 +132,30 @@ std::pair<String, Int32> IngestingBlocks::status(const String & id) const
     return std::make_pair("Unknown", -1);
 }
 
+void IngestingBlocks::getStatusInBatch(const std::vector<String> & poll_ids, std::vector<std::tuple<String, String, Int32>> & statuses)
+{
+    std::shared_lock guard(rwlock);
+    for (auto & id : poll_ids)
+    {
+        auto iter = blockIds.find(id);
+        if (iter == blockIds.end())
+        {
+            statuses.emplace_back(std::make_tuple(id, "Unknown", -1));
+            continue;
+        }
+
+        Int32 progress = (iter->second.total - iter->second.ids.size()) * 100 / iter->second.total;
+
+        if (iter->second.err != 0)
+            statuses.emplace_back(std::make_tuple(id, "Failed", progress));
+
+        if (progress < 100)
+            statuses.emplace_back(std::make_tuple(id, "Processing", progress));
+        else
+            statuses.emplace_back(std::make_tuple(id, "Succeeded", progress));
+    }
+}
+
 size_t IngestingBlocks::outstandingBlocks() const
 {
     size_t total = 0;

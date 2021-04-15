@@ -86,6 +86,15 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
         return jsonErrorResponse("Invalid Request, missing 'data' field", ErrorCodes::INCORRECT_DATA);
     }
 
+    if (hasQueryParameter("mode"))
+    {
+        query_context->setIngestMode(getQueryParameter("mode"));
+    }
+    else
+    {
+        query_context->setIngestMode("async");
+    }
+
     String dummy_string;
     WriteBufferFromString out(dummy_string);
 
@@ -99,6 +108,7 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
     if (!poll_id.empty())
     {
         resp.set("poll_id", poll_id);
+        resp.set("channel_id", query_context->getChannelId());
     }
     std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     resp.stringify(resp_str_stream, 0);

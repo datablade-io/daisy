@@ -156,6 +156,7 @@ public:
     size_t getRandomShardIndex();
     Int32 currentShard() const { return shard; }
     std::pair<String, Int32> getIngestStatus(const String & poll_id) const { return ingesting_blocks.status(poll_id); }
+    void getStatusInBatch(const std::vector<String> & poll_ids, std::vector<std::tuple<String, String, Int32>> & status) const { return ingesting_blocks.getStatusInBatch(poll_ids, status); }
 
     IDistributedWriteAheadLog::RecordSequenceNumber lastSequenceNumber() const;
 

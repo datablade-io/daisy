@@ -57,6 +57,13 @@ public:
             });
 
         factory.registerRouterHandler(
+            "/dae/v1/ingest/statuses",
+            "POST",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<IngestStatusHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/tables(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
