@@ -25,7 +25,6 @@ private:
 
     String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const;
     String getColumnDefinition(const Poco::JSON::Object::Ptr & column) const;
-    String getTimeColumn(const Poco::JSON::Object::Ptr & payload) const;
     String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const override;
     String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & time_column) const;
 };

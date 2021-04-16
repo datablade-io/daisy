@@ -71,16 +71,11 @@ bool TabularTableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr &
     return TableRestRouterHandler::validatePost(payload, error_msg);
 }
 
-inline String TabularTableRestRouterHandler::getTimeColumn(const Poco::JSON::Object::Ptr & payload) const
-{
-    return payload->has("_time_column") ? payload->get("_time_column").toString() : "_time";
-}
-
 String TabularTableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/) const
 {
-    const auto & order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "D";
+    const auto & order_by_granularity = getStringPayloadElement(payload, "order_by_granularity", "D");
     const auto & default_order_expr = granularity_func_mapping[order_by_granularity];
-    const auto & order_by_expression = payload->has("order_by_expression") ? payload->get("order_by_expression").toString() : String();
+    const auto & order_by_expression = getStringPayloadElement(payload, "order_by_expression", String());
 
     if (order_by_expression.empty())
     {
@@ -95,7 +90,7 @@ String TabularTableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::P
 String TabularTableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
 {
     const auto & database_name = getPathParameter("database");
-    const auto & time_col = getTimeColumn(payload);
+    const auto & time_col = getStringPayloadElement(payload, "_time_column", "_time");
     std::vector<String> create_segments;
     create_segments.push_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
     create_segments.push_back("(");

@@ -37,7 +37,7 @@ bool RawstoreTableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr 
 
 String RawstoreTableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload) const
 {
-    const auto & order_by_granularity = payload->has("order_by_granularity") ? payload->get("order_by_granularity").toString() : "m";
+    const auto & order_by_granularity = getStringPayloadElement(payload, "order_by_granularity", "m");
     return granularity_func_mapping[order_by_granularity] + ",  sourcetype";
 }
 

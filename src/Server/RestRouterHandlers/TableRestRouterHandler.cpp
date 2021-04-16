@@ -171,11 +171,11 @@ String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & pay
     {
         if (getQueryParameter("distributed") != "false")
         {
-            return fmt::format(
-                "DistributedMergeTree({}, {}, {})",
-                payload->get("replication_factor").toString(),
-                payload->get("shards").toString(),
-                payload->get("shard_by_expression").toString());
+            const auto & shards = getStringPayloadElement(payload, "shards", "1");
+            const auto & replication_factor = getStringPayloadElement(payload, "replication_factor", "1");
+            const auto & shard_by_expression = getStringPayloadElement(payload, "shard_by_expression", "rand()");
+
+            return fmt::format("DistributedMergeTree({}, {}, {})", replication_factor, shards, shard_by_expression);
         }
     }
 
@@ -184,8 +184,14 @@ String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & pay
 
 String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & default_granularity)
 {
-    const auto & partition_by_granularity
-        = payload->has("partition_by_granularity") ? payload->get("partition_by_granularity").toString() : default_granularity;
+    const auto & partition_by_granularity = getStringPayloadElement(payload, "partition_by_granularity", default_granularity);
     return granularity_func_mapping[partition_by_granularity];
 }
+
+String
+TableRestRouterHandler::getStringPayloadElement(const Poco::JSON::Object::Ptr & payload, const String & key, const String & default_value)
+{
+    return payload->has(key) ? payload->get(key).toString() : default_value;
+}
+
 }

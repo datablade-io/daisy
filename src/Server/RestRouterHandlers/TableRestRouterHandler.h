@@ -27,6 +27,7 @@ protected:
     static std::map<String, String>  granularity_func_mapping;
 
     static String getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & default_granularity);
+    static String getStringPayloadElement(const Poco::JSON::Object::Ptr & payload, const String & key, const String & default_value);
 
     String buildResponse() const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
