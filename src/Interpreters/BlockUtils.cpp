@@ -1,6 +1,7 @@
 #include "BlockUtils.h"
 
 #include <Core/Types.h>
+#include <Common/typeid_cast.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeString.h>
 #include <Databases/DatabaseFactory.h>
@@ -60,7 +61,44 @@ Block buildBlock(
     return block;
 }
 
-void appendBlock(Block && block, ContextPtr context, IDistributedWriteAheadLog::OpCode opCode, const Poco::Logger * log)
+Block buildBlock(
+    const std::vector<std::pair<String, std::vector<String>>> & string_cols,
+    const std::vector<std::pair<String, std::vector<Int64>>> & int64_cols)
+{
+    Block block;
+    const DataTypeFactory & data_type_factory = DataTypeFactory::instance();
+
+    auto string_type = data_type_factory.get(getTypeName(TypeIndex::String));
+    for (const auto & p : string_cols)
+    {
+        auto col = string_type->createColumn();
+        for(auto v = p.second.begin(); v != p.second.end(); ++v)
+        {
+            col->insertData(v->data(), v->size());
+        }
+        
+        ColumnWithTypeAndName col_with_type(std::move(col), string_type, p.first);
+        block.insert(col_with_type);
+    }
+
+    auto int64_type = data_type_factory.get(getTypeName(TypeIndex::Int64));
+    for (const auto & p : int64_cols)
+    {
+        auto col = int64_type->createColumn();
+        auto int64_col = typeid_cast<ColumnInt64 *>(col.get());
+        for(auto v = p.second.begin(); v != p.second.end(); ++v)
+        {
+            int64_col->insertValue(*v);
+        }
+        
+        ColumnWithTypeAndName col_with_type(std::move(col), int64_type, p.first);
+        block.insert(col_with_type);
+    }
+
+    return block;
+}
+
+void appendBlock(Block && block, Context & context, IDistributedWriteAheadLog::OpCode opCode, const Poco::Logger * log)
 {
     IDistributedWriteAheadLog::Record record{opCode, std::move(block)};
     record.headers["_version"] = "1";
