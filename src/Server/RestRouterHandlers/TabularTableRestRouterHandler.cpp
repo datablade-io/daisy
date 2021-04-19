@@ -1,11 +1,6 @@
 #include "TabularTableRestRouterHandler.h"
 #include "SchemaValidator.h"
 
-#include <Core/Block.h>
-#include <DataTypes/DataTypeFactory.h>
-#include <DataTypes/DataTypeString.h>
-#include <Databases/DatabaseFactory.h>
-
 #include <boost/algorithm/string/join.hpp>
 
 #include <vector>
@@ -71,11 +66,12 @@ bool TabularTableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr &
     return TableRestRouterHandler::validatePost(payload, error_msg);
 }
 
-String TabularTableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/) const
+const String TabularTableRestRouterHandler::getOrderByExpr(
+    const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/, const String & default_order_by_granularity) const
 {
-    const auto & order_by_granularity = getStringPayloadElement(payload, "order_by_granularity", "D");
+    const auto & order_by_granularity = getStringValueFrom(payload, "order_by_granularity", default_order_by_granularity);
     const auto & default_order_expr = granularity_func_mapping[order_by_granularity];
-    const auto & order_by_expression = getStringPayloadElement(payload, "order_by_expression", String());
+    const auto & order_by_expression = getStringValueFrom(payload, "order_by_expression", String());
 
     if (order_by_expression.empty())
     {
@@ -87,90 +83,73 @@ String TabularTableRestRouterHandler::getOrderbyExpr(const Poco::JSON::Object::P
     return default_order_expr + ", " + order_by_expression;
 }
 
-String TabularTableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
-{
-    const auto & database_name = getPathParameter("database");
-    const auto & time_col = getStringPayloadElement(payload, "_time_column", "_time");
-    std::vector<String> create_segments;
-    create_segments.push_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
-    create_segments.push_back("(");
-    create_segments.push_back(getColumnsDefinition(payload));
-    create_segments.push_back(")");
-    create_segments.push_back("ENGINE = " + getEngineExpr(payload));
-    create_segments.push_back("PARTITION BY " + getPartitionExpr(payload, "M"));
-    create_segments.push_back("ORDER BY (" + getOrderbyExpr(payload, time_col) + ")");
-
-    if (payload->has("ttl_expression"))
-    {
-        /// FIXME  Enforce time based TTL only
-        create_segments.push_back("TTL " + payload->get("ttl_expression").toString());
-    }
-
-    if (!shard.empty())
-    {
-        create_segments.push_back("SETTINGS shard=" + shard);
-    }
-
-    return boost::algorithm::join(create_segments, " ");
-}
-
-String TabularTableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const
+const String TabularTableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const
 {
     const auto & columns = payload->getArray("columns");
 
-    std::ostringstream oss; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    using std::begin;
-    using std::end;
-    std::vector<String> column_definitions;
-
+    std::vector<String> columns_definition;
     for (const auto & col : *columns)
     {
-        column_definitions.push_back(getColumnDefinition(col.extract<Poco::JSON::Object::Ptr>()));
+        columns_definition.push_back(getColumnDefinition(col.extract<Poco::JSON::Object::Ptr>()));
     }
 
-    std::copy(begin(column_definitions), end(column_definitions), std::ostream_iterator<String>(oss, ","));
     if (payload->has("_time_column"))
     {
-        return oss.str() + " `_time` DateTime64(3) DEFAULT " + payload->get("_time_column").toString();
+        columns_definition.push_back("`_time` DateTime64(3) DEFAULT " + payload->get("_time_column").toString());
     }
-    return oss.str() + " `_time` DateTime64(3, UTC) DEFAULT now64(3)";
+    else
+    {
+        columns_definition.push_back("`_time` DateTime64(3, UTC) DEFAULT now64(3)");
+    }
+
+    return boost::algorithm::join(columns_definition, ",");
 }
 
 String TabularTableRestRouterHandler::getColumnDefinition(const Poco::JSON::Object::Ptr & column) const
 {
-    std::vector<String> create_segments;
+    std::vector<String> column_definition;
 
-    create_segments.push_back(column->get("name").toString());
+    column_definition.push_back(column->get("name").toString());
     if (column->has("nullable") && column->get("nullable"))
     {
-        create_segments.push_back(" Nullable(" + column->get("type").toString() + ")");
+        column_definition.push_back(" Nullable(" + column->get("type").toString() + ")");
     }
     else
     {
-        create_segments.push_back(" " + column->get("type").toString());
+        column_definition.push_back(" " + column->get("type").toString());
     }
 
     if (column->has("default"))
     {
-        create_segments.push_back(" DEFAULT " + column->get("default").toString());
+        column_definition.push_back(" DEFAULT " + column->get("default").toString());
     }
 
     if (column->has("compression_codec"))
     {
-        create_segments.push_back(" CODEC(" + column->get("compression_codec").toString() + ")");
+        column_definition.push_back(" CODEC(" + column->get("compression_codec").toString() + ")");
     }
 
     if (column->has("ttl_expression"))
     {
-        create_segments.push_back(" TTL " + column->get("ttl_expression").toString());
+        column_definition.push_back(" TTL " + column->get("ttl_expression").toString());
     }
 
     if (column->has("skipping_index_expression"))
     {
-        create_segments.push_back(", " + column->get("skipping_index_expression").toString());
+        column_definition.push_back(", " + column->get("skipping_index_expression").toString());
     }
 
-    return boost::algorithm::join(create_segments, " ");
+    return boost::algorithm::join(column_definition, " ");
+}
+
+const String TabularTableRestRouterHandler::getDefaultPartitionGranularity() const
+{
+    return "M";
+}
+
+const String TabularTableRestRouterHandler::getDefaultOrderByGranularity() const
+{
+    return "D";
 }
 
 }

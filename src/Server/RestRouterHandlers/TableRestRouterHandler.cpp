@@ -2,9 +2,6 @@
 #include "SchemaValidator.h"
 
 #include <Core/Block.h>
-#include <DataTypes/DataTypeFactory.h>
-#include <DataTypes/DataTypeString.h>
-#include <Databases/DatabaseFactory.h>
 #include <Interpreters/executeQuery.h>
 
 #include <boost/algorithm/string/join.hpp>
@@ -171,9 +168,9 @@ String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & pay
     {
         if (getQueryParameter("distributed") != "false")
         {
-            const auto & shards = getStringPayloadElement(payload, "shards", "1");
-            const auto & replication_factor = getStringPayloadElement(payload, "replication_factor", "1");
-            const auto & shard_by_expression = getStringPayloadElement(payload, "shard_by_expression", "rand()");
+            const auto & shards = getStringValueFrom(payload, "shards", "1");
+            const auto & replication_factor = getStringValueFrom(payload, "replication_factor", "1");
+            const auto & shard_by_expression = getStringValueFrom(payload, "shard_by_expression", "rand()");
 
             return fmt::format("DistributedMergeTree({}, {}, {})", replication_factor, shards, shard_by_expression);
         }
@@ -184,14 +181,40 @@ String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & pay
 
 String TableRestRouterHandler::getPartitionExpr(const Poco::JSON::Object::Ptr & payload, const String & default_granularity)
 {
-    const auto & partition_by_granularity = getStringPayloadElement(payload, "partition_by_granularity", default_granularity);
+    const auto & partition_by_granularity = getStringValueFrom(payload, "partition_by_granularity", default_granularity);
     return granularity_func_mapping[partition_by_granularity];
 }
 
-String
-TableRestRouterHandler::getStringPayloadElement(const Poco::JSON::Object::Ptr & payload, const String & key, const String & default_value)
+String TableRestRouterHandler::getStringValueFrom(const Poco::JSON::Object::Ptr & payload, const String & key, const String & default_value)
 {
     return payload->has(key) ? payload->get(key).toString() : default_value;
+}
+
+const String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
+{
+    const auto & database_name = getPathParameter("database");
+    const auto & time_col = getStringValueFrom(payload, "_time_column", "_time");
+    std::vector<String> create_segments;
+    create_segments.push_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
+    create_segments.push_back("(");
+    create_segments.push_back(getColumnsDefinition(payload));
+    create_segments.push_back(")");
+    create_segments.push_back("ENGINE = " + getEngineExpr(payload));
+    create_segments.push_back("PARTITION BY " + getPartitionExpr(payload, getDefaultPartitionGranularity()));
+    create_segments.push_back("ORDER BY (" + getOrderByExpr(payload, time_col, getDefaultOrderByGranularity()) + ")");
+
+    if (payload->has("ttl_expression"))
+    {
+        /// FIXME  Enforce time based TTL only
+        create_segments.push_back("TTL " + payload->get("ttl_expression").toString());
+    }
+
+    if (!shard.empty())
+    {
+        create_segments.push_back("SETTINGS shard=" + shard);
+    }
+
+    return boost::algorithm::join(create_segments, " ");
 }
 
 }

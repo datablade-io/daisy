@@ -93,6 +93,8 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
     std::vector<String> hosts;
     hosts.reserve(tables.size());
 
+    std::unique_lock guard(rwlock);
+
     for (const auto & t : tables)
     {
         if (nodes_metrics.contains(t->node_identity))

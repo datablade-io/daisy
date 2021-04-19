@@ -2,8 +2,6 @@
 
 #include "TableRestRouterHandler.h"
 
-#include <DistributedMetadata/CatalogService.h>
-
 namespace DB
 {
 class RawstoreTableRestRouterHandler final : public TableRestRouterHandler
@@ -20,8 +18,11 @@ private:
 
     bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
 
-    String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const override;
-    String getOrderbyExpr(const Poco::JSON::Object::Ptr & payload) const;
+    const String getDefaultPartitionGranularity() const override;
+    const String getDefaultOrderByGranularity() const override;
+    const String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const override;
+    const String getOrderByExpr(
+        const Poco::JSON::Object::Ptr & payload, const String & time_column, const String & default_order_by_granularity) const override;
 };
 
 }
