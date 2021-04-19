@@ -3,9 +3,10 @@
 #include "IngestRawStoreHandler.h"
 #include "IngestRestRouterHandler.h"
 #include "IngestStatusHandler.h"
+#include "RawstoreTableRestRouterHandler.h"
 #include "RestRouterHandler.h"
 #include "SQLAnalyzerRestRouterHandler.h"
-#include "TableRestRouterHandler.h"
+#include "TabularTableRestRouterHandler.h"
 
 #include <re2/re2.h>
 
@@ -58,14 +59,28 @@ public:
             "/dae/v1/ddl/(?P<database>\\w+)/tables(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
             [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-                return std::make_shared<TableRestRouterHandler>(query_context);
+                return std::make_shared<TabularTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)(\\?[\\w\\-=&#]+){0,1}",
             "PATCH/DELETE",
             [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-                return std::make_shared<TableRestRouterHandler>(query_context);
+                return std::make_shared<TabularTableRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/(?P<database>\\w+)/rawstores(\\?[\\w\\-=&#]+){0,1}",
+            "GET/POST",
+            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<RawstoreTableRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/(?P<database>\\w+)/rawstores/(?P<table>\\w+)(\\?[\\w\\-=&#]+){0,1}",
+            "PATCH/DELETE",
+            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<RawstoreTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(

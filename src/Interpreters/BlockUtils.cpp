@@ -64,6 +64,10 @@ void appendBlock(Block && block, Context & context, IDistributedWriteAheadLog::O
 {
     IDistributedWriteAheadLog::Record record{opCode, std::move(block)};
     record.headers["_version"] = "1";
+    if (context.getQueryParameters().contains("table_type"))
+    {
+        record.headers["table_type"] = context.getQueryParameters().at("table_type");
+    }
 
     auto wal = DistributedWriteAheadLogPool::instance(context.getGlobalContext()).getDefault();
     if (!wal)
