@@ -93,9 +93,18 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
     std::vector<String> hosts;
     hosts.reserve(tables.size());
 
+    std::shared_lock guard(rwlock);
+
     for (const auto & t : tables)
     {
-        hosts.push_back(t->host);
+        if (nodes_metrics.contains(t->node_identity))
+        {
+            hosts.push_back(t->host + ":" + nodes_metrics.at(t->node_identity)->http_port);
+        }
+        else
+        {
+            hosts.push_back(t->host);
+        }
     }
     return hosts;
 }

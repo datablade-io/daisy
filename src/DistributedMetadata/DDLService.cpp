@@ -38,8 +38,8 @@ namespace
     const String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";
     const String DDL_DEFAULT_TOPIC = "__system_ddls";
 
-    const String DDL_TABLE_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/tables/{}";
-    const String DDL_TABLE_POST_API_PATH_FMT = "/dae/v1/ddl/{}/tables";
+    const String DDL_TABLE_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/{}/{}";
+    const String DDL_TABLE_POST_API_PATH_FMT = "/dae/v1/ddl/{}/{}";
 
     int toErrorCode(std::istream & istr)
     {
@@ -66,6 +66,38 @@ namespace
         }
         return ErrorCodes::UNKNOWN_EXCEPTION;
     }
+
+    String getURIEndpoint(const std::unordered_map<String, String> & headers)
+    {
+        if (headers.contains("table_type") && headers.at("table_type") == "rawstore")
+        {
+            return "rawstores";
+        }
+        return "tables";
+    }
+
+    std::vector<Poco::URI> toURIs(const std::vector<String> & hosts, const String & path, const String & default_port)
+    {
+        std::vector<Poco::URI> uris;
+        uris.reserve(hosts.size());
+
+        for (auto host : hosts)
+        {
+            /// FIXME : HTTP for now
+            if (host.rfind(":") != String::npos)
+            {
+                /// `host` contains port information
+                uris.emplace_back("http://" + host + path);
+            }
+            else
+            {
+                uris.emplace_back("http://" + host + default_port + path);
+            }
+        }
+
+        return uris;
+    }
+
 }
 
 DDLService & DDLService::instance(Context & global_context_)
@@ -151,28 +183,6 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
         }
     }
     return true;
-}
-
-std::vector<Poco::URI> DDLService::toURIs(const std::vector<String> & hosts, const String & path) const
-{
-    std::vector<Poco::URI> uris;
-    uris.reserve(hosts.size());
-
-    for (const auto & host : hosts)
-    {
-        /// FIXME : HTTP for now
-        if (host.rfind(":") != String::npos)
-        {
-            /// `host` contains port information
-            uris.emplace_back("http://" + host + path);
-        }
-        else
-        {
-            uris.emplace_back("http://" + host + http_port + path);
-        }
-    }
-
-    return uris;
 }
 
 Int32 DDLService::sendRequest(
@@ -303,9 +313,10 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         String hosts_val = block.getByName("hosts").column->getDataAt(0).toString();
         std::vector<String> hosts;
         boost::algorithm::split(hosts, hosts_val, boost::is_any_of(","));
-        assert(hosts.size() > 0);
+        assert(!hosts.empty());
 
-        std::vector<Poco::URI> target_hosts{toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database))};
+        std::vector<Poco::URI> target_hosts{
+            toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database, getURIEndpoint(record->headers)), http_port)};
 
         /// Create table on each target host accordign to placement
         for (Int32 i = 0; i < replication_factor; ++i)
@@ -376,8 +387,9 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     }
 }
 
-void DDLService::mutateTable(const Block & block, const String & method) const
+void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const String & method) const
 {
+    Block & block = record->block;
     assert(block.has("query_id"));
 
     if (!validateSchema(block, {"payload", "database", "table", "timestamp", "query_id", "user"}))
@@ -391,8 +403,10 @@ void DDLService::mutateTable(const Block & block, const String & method) const
     String user = block.getByName("user").column->getDataAt(0).toString();
     String payload = block.getByName("payload").column->getDataAt(0).toString();
 
-    std::vector<Poco::URI> target_hosts{
-        toURIs(placement.placed(database, table), fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, table))};
+    std::vector<Poco::URI> target_hosts{toURIs(
+        placement.placed(database, table),
+        fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, getURIEndpoint(record->headers), table),
+        http_port)};
 
     if (target_hosts.empty())
     {
@@ -449,9 +463,9 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
         {
-            mutateTable(record->block, Poco::Net::HTTPRequest::HTTP_DELETE);
+            mutateTable(record, Poco::Net::HTTPRequest::HTTP_DELETE);
 
-            /// delete DWAL
+            /// Delete DWAL
             String database = record->block.getByName("database").column->getDataAt(0).toString();
             String table = record->block.getByName("table").column->getDataAt(0).toString();
             std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table}};
@@ -459,7 +473,7 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
         {
-            mutateTable(record->block, Poco::Net::HTTPRequest::HTTP_PATCH);
+            mutateTable(record, Poco::Net::HTTPRequest::HTTP_PATCH);
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_DATABASE)
         {
