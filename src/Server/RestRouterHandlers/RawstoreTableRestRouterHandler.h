@@ -18,10 +18,10 @@ private:
 
     bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
 
-    const String getDefaultPartitionGranularity() const override;
-    const String getDefaultOrderByGranularity() const override;
-    const String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const override;
-    const String getOrderByExpr(
+    String getDefaultPartitionGranularity() const override;
+    String getDefaultOrderByGranularity() const override;
+    String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const override;
+    String getOrderByExpr(
         const Poco::JSON::Object::Ptr & payload, const String & time_column, const String & default_order_by_granularity) const override;
 };
 

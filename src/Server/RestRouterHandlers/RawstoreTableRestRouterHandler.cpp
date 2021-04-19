@@ -32,14 +32,14 @@ bool RawstoreTableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr 
     return TableRestRouterHandler::validatePost(payload, error_msg);
 }
 
-const String RawstoreTableRestRouterHandler::getOrderByExpr(
+String RawstoreTableRestRouterHandler::getOrderByExpr(
     const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/, const String & default_order_by_granularity) const
 {
     const auto & order_by_granularity = getStringValueFrom(payload, "order_by_granularity", default_order_by_granularity);
     return granularity_func_mapping[order_by_granularity] + ",  sourcetype";
 }
 
-const String RawstoreTableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Ptr & /*payload*/) const
+String RawstoreTableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Ptr & /*payload*/) const
 {
     std::vector<String> columns_definition;
     columns_definition.push_back("`_raw` String COMMENT 'rawstore'");
@@ -52,12 +52,12 @@ const String RawstoreTableRestRouterHandler::getColumnsDefinition(const Poco::JS
     return boost::algorithm::join(columns_definition, ",");
 }
 
-const String RawstoreTableRestRouterHandler::getDefaultPartitionGranularity() const
+String RawstoreTableRestRouterHandler::getDefaultPartitionGranularity() const
 {
     return "D";
 }
 
-const String RawstoreTableRestRouterHandler::getDefaultOrderByGranularity() const
+String RawstoreTableRestRouterHandler::getDefaultOrderByGranularity() const
 {
     return "m";
 }

@@ -21,7 +21,7 @@ protected:
     String buildResponse() const;
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
     String processQuery(const String & query) const;
-    const String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
+    String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
 
     bool validateGet(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
     bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
@@ -32,10 +32,10 @@ protected:
     String executeDelete(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
     String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
 
-    virtual const String getDefaultPartitionGranularity() const = 0;
-    virtual const String getDefaultOrderByGranularity() const = 0;
-    virtual const String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const = 0;
-    virtual const String getOrderByExpr(
+    virtual String getDefaultPartitionGranularity() const = 0;
+    virtual String getDefaultOrderByGranularity() const = 0;
+    virtual String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const = 0;
+    virtual String getOrderByExpr(
         const Poco::JSON::Object::Ptr & payload, const String & time_column, const String & default_order_by_granularity) const = 0;
 };
 

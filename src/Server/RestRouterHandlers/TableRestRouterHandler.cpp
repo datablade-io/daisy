@@ -190,7 +190,7 @@ String TableRestRouterHandler::getStringValueFrom(const Poco::JSON::Object::Ptr 
     return payload->has(key) ? payload->get(key).toString() : default_value;
 }
 
-const String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
+String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
 {
     const auto & database_name = getPathParameter("database");
     const auto & time_col = getStringValueFrom(payload, "_time_column", "_time");

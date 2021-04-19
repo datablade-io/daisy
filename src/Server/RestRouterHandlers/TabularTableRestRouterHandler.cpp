@@ -66,7 +66,7 @@ bool TabularTableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr &
     return TableRestRouterHandler::validatePost(payload, error_msg);
 }
 
-const String TabularTableRestRouterHandler::getOrderByExpr(
+String TabularTableRestRouterHandler::getOrderByExpr(
     const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/, const String & default_order_by_granularity) const
 {
     const auto & order_by_granularity = getStringValueFrom(payload, "order_by_granularity", default_order_by_granularity);
@@ -83,7 +83,7 @@ const String TabularTableRestRouterHandler::getOrderByExpr(
     return default_order_expr + ", " + order_by_expression;
 }
 
-const String TabularTableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const
+String TabularTableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const
 {
     const auto & columns = payload->getArray("columns");
 
@@ -142,12 +142,12 @@ String TabularTableRestRouterHandler::getColumnDefinition(const Poco::JSON::Obje
     return boost::algorithm::join(column_definition, " ");
 }
 
-const String TabularTableRestRouterHandler::getDefaultPartitionGranularity() const
+String TabularTableRestRouterHandler::getDefaultPartitionGranularity() const
 {
     return "M";
 }
 
-const String TabularTableRestRouterHandler::getDefaultOrderByGranularity() const
+String TabularTableRestRouterHandler::getDefaultOrderByGranularity() const
 {
     return "D";
 }
