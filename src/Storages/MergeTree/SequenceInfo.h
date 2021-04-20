@@ -33,7 +33,7 @@ namespace DB
 /// Please note since step b above happens in parallel for performance, the sequence numbers committed
 /// in local file system can be out of order and may have gap, when replaying the data from the
 /// distributed write ahead log, and re-do step b and c, we need re-check if some part of the data is already
-/// committed / coverred, if that is the case, we will skip the committed data.
+/// committed / covered, if that is the case, we will skip the committed data.
 ///
 /// Here is one example. Please note that we are assuming `partition by` expression didn't get
 /// changed during the this cause. If it does, nothing holds. One solution to prevent this situation from happening is
@@ -49,10 +49,10 @@ namespace DB
 ///      the missing data. There are sub-cases here as [201, 299] can be splitted into several partitions (although in
 ///      normal circumenstances, they will be in one partition) and hence resulting several blocks and some blocks may
 ///      be committed in local file system and some doesn't. The code needs honor these sub-cases as well.
-///   g. The code also notices sequence [300, 600] is already commmitted, the tailing process just discard this data
+///   g. The code also notices sequence [300, 600] is already committed, the tailing process just discard this data
 ///
 /// 2. Consistent query. When shards are replicated, there will be lagging among shard replicas even they are tailing the
-///    same Distributed Write Ahead Log. When a query is targeted for a shard, we need choose one shard replica to fullfill the request.
+///    same Distributed Write Ahead Log. When a query is targeted for a shard, we need choose one shard replica to fulfill the request.
 ///    The sequence numbers checkpointing can guide us which shard to choose.
 /// Here is one example.
 ///   a. Assume one shard has 3 replica : replica1, replica2 and replica3

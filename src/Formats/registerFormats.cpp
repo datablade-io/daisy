@@ -86,7 +86,6 @@ void registerInputFormatProcessorRawStoreEachRow(FormatFactory & factory);
 /// Daisy : ends
 
 
-
 void registerFormats()
 {
     auto & factory = FormatFactory::instance();

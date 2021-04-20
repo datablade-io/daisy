@@ -13,7 +13,6 @@
 #include <Parsers/ASTAlterQuery.h>
 #include <Parsers/ASTAssignment.h>
 #include <Parsers/queryToString.h>
-#include <Storages/IStorage.h>
 #include <Storages/AlterCommands.h>
 #include <Storages/IStorage.h>
 #include <Storages/LiveView/LiveViewCommands.h>
@@ -22,9 +21,6 @@
 #include <Storages/PartitionCommands.h>
 #include <Common/typeid_cast.h>
 
-#include <Databases/IDatabase.h>
-#include <Databases/DatabaseReplicated.h>
-#include <Databases/DatabaseFactory.h>
 #include <DistributedMetadata/CatalogService.h>
 
 #include <boost/range/algorithm_ext/push_back.hpp>
@@ -41,8 +37,7 @@ namespace ErrorCodes
     extern const int INCORRECT_QUERY;
     extern const int NOT_IMPLEMENTED;
     /// Daisy : start
-    extern const int CONFIG_ERROR;
-    extern const int OK;
+    extern const int UNKNOWN_TABLE;
     /// Daisy : end
 }
 
@@ -171,12 +166,13 @@ BlockIO InterpreterAlterQuery::execute()
 /// Daisy : start
 bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
 {
-    if (!context.isDistributed())
+    auto ctx = getContext();
+    if (!ctx->isDistributed())
     {
         return false;
     }
 
-    if (!context.getQueryParameters().contains("_payload"))
+    if (!ctx->getQueryParameters().contains("_payload"))
     {
         /// FIXME:
         /// Build json payload here from SQL statement
@@ -184,9 +180,9 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
         return false;
     }
 
-    if (context.isDistributedDDLOperation())
+    if (ctx->isDistributedDDLOperation())
     {
-        const auto & catalog_service = CatalogService::instance(context);
+        const auto & catalog_service = CatalogService::instance(ctx);
         auto tables = catalog_service.findTableByName(query.database, query.table);
         if (tables.empty())
         {
@@ -199,19 +195,19 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
             return false;
         }
 
-        assert(!context.getCurrentQueryId().empty());
+        assert(!ctx->getCurrentQueryId().empty());
 
         auto * log = &Poco::Logger::get("InterpreterAlterQuery");
 
         auto query_str = queryToString(query);
-        LOG_INFO(log, "Altering DistributedMergeTree query={} query_id={}", query_str, context.getCurrentQueryId());
+        LOG_INFO(log, "Altering DistributedMergeTree query={} query_id={}", query_str, ctx->getCurrentQueryId());
 
         std::vector<std::pair<String, String>> string_cols
-            = {{"payload", context.getQueryParameters().at("_payload")},
+            = {{"payload", ctx->getQueryParameters().at("_payload")},
                {"database", query.database},
                {"table", query.table},
-               {"query_id", context.getCurrentQueryId()},
-               {"user", context.getUserName()}};
+               {"query_id", ctx->getCurrentQueryId()},
+               {"user", ctx->getUserName()}};
 
         std::vector<std::pair<String, Int32>> int32_cols;
 
@@ -221,13 +217,13 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
             std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
         };
 
+        /// Schema: (payload, database, table, timestamp, query_id, user)
         Block block = buildBlock(string_cols, int32_cols, uint64_cols);
-        /// Schema: (payload,  database, table, timestamp, query_id, user)
 
-        appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::ALTER_TABLE, log);
+        appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::ALTER_TABLE, log);
 
         LOG_INFO(
-            log, "Request of altering DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
+            log, "Request of altering DistributedMergeTree query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
 
         /// FIXME, project tasks status
         return true;

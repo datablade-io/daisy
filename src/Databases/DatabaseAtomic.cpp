@@ -596,16 +596,16 @@ void DatabaseAtomic::waitDetachedTableNotInUse(const UUID & uuid)
 }
 
 /// Daisy : starts
-StoragePtr DatabaseAtomic::tryGetTable(const String & table_name, const Context & context) const
+StoragePtr DatabaseAtomic::tryGetTable(const String & table_name, ContextPtr ctx) const
 {
-    auto storage = DatabaseOrdinary::tryGetTable(table_name, context);
+    auto storage = DatabaseOrdinary::tryGetTable(table_name, ctx);
     if (storage)
     {
         return storage;
     }
 
     /// Try `CatalogService`
-    auto & catalog_service = CatalogService::instance(*const_cast<Context *>(&global_context));
+    auto & catalog_service = CatalogService::instance(getContext());
     auto [table, table_storage] = catalog_service.findTableStorageByName(getDatabaseName(), table_name);
 
     if (table_storage != nullptr)

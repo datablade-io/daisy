@@ -7,12 +7,6 @@
 
 namespace DB
 {
-namespace ErrorCodes
-{
-    extern const int CONFIG_ERROR;
-    extern const int OK;
-}
-
 std::map<String, std::map<String, String> > TabularTableRestRouterHandler::create_schema= {
     {"required",{
                     {"name","string"},

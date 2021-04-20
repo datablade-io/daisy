@@ -201,7 +201,7 @@ void DatabaseCatalog::shutdownImpl()
 /// Daisy : starts
 DatabaseAndTable DatabaseCatalog::tryGetByUUIDFromCatalogService(const UUID & uuid) const
 {
-    auto & catalog_service = CatalogService::instance(global_context);
+    auto & catalog_service = CatalogService::instance(getContext());
     auto [table, storage] = catalog_service.findTableStorageById(uuid);
     /// Table doesn't exist in CatalogService neither
     if (table == nullptr)

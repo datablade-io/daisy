@@ -31,6 +31,7 @@ SRCS(
     ArrayJoinAction.cpp
     AsynchronousMetricLog.cpp
     AsynchronousMetrics.cpp
+    BlockUtils.cpp
     BloomFilter.cpp
     CatBoostModel.cpp
     ClientInfo.cpp

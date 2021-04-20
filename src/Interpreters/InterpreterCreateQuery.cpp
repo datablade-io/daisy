@@ -17,7 +17,6 @@
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnsNumber.h>
 #include <DataTypes/DataTypeString.h>
-#include <DataTypes/DataTypesNumber.h>
 
 #include <IO/WriteBufferFromFile.h>
 #include <IO/WriteHelpers.h>
@@ -102,7 +101,6 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
     extern const int UNKNOWN_TABLE;
     extern const int CONFIG_ERROR;
-    extern const int OK;
 }
 
 namespace fs = std::filesystem;
@@ -826,13 +824,14 @@ void InterpreterCreateQuery::assertOrSetUUID(ASTCreateQuery & create, const Data
 /// Daisy : starts
 bool InterpreterCreateQuery::createTableDistributed(const String & current_database, ASTCreateQuery & create)
 {
+    auto ctx = getContext();
     if (!create.storage || !create.storage->engine || create.storage->engine->name != "DistributedMergeTree")
     {
         /// We only support `DistributedMergeTree` table engine for now
         return false;
     }
 
-    if (!context.isDistributed())
+    if (!ctx->isDistributed())
     {
         if (create.storage->engine->name == "DistributedMergeTree")
         {
@@ -842,7 +841,7 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
         return false;
     }
 
-    assert(!context.getCurrentQueryId().empty());
+    assert(!ctx->getCurrentQueryId().empty());
 
     auto * log = &Poco::Logger::get("InterpreterCreateQuery");
 
@@ -857,7 +856,7 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
     /// `relative_data_path = ""` means the table is virtual which doesn't
     /// bind to any file system data / metadata
     auto res = StorageFactory::instance().get(
-        create, "" /* virtual */, context, context.getGlobalContext(), properties.columns, properties.constraints, false);
+        create, "" /* virtual */, ctx, ctx->getGlobalContext(), properties.columns, properties.constraints, false);
 
     auto storage = static_cast<StorageDistributedMergeTree *>(res.get());
     if (storage->currentShard() >= 0)
@@ -868,10 +867,10 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
     }
 
     auto query = queryToString(create);
-    LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, context.getCurrentQueryId());
+    LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, ctx->getCurrentQueryId());
 
 
-    if(!context.getQueryParameters().contains("_payload"))
+    if (!ctx->getQueryParameters().contains("_payload"))
     {
         /// FIXME:
         /// Build json payload here from SQL statement
@@ -879,17 +878,17 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
         return false;
     }
 
-    if (!context.isDistributedDDLOperation())
+    if (!ctx->isDistributedDDLOperation())
     {
         return false;
     }
 
     std::vector<std::pair<String, String>> string_cols
-        = {{"payload", context.getQueryParameters().at("_payload")},
+        = {{"payload", ctx->getQueryParameters().at("_payload")},
            {"database", current_database},
            {"table", create.table},
-           {"query_id", context.getCurrentQueryId()},
-           {"user", context.getUserName()}};
+           {"query_id", ctx->getCurrentQueryId()},
+           {"user", ctx->getUserName()}};
 
     Int32 shards = storage->getShards();
     Int32 replication_factor = storage->getReplicationFactor();
@@ -903,12 +902,12 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
         {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()}
     };
 
+    /// Schema: (payload, database, table, timestamp, query_id, user, shards, replication_factor)
     Block  block = buildBlock(string_cols, int32_cols, uint64_cols);
-    /// Schema: (payload,  database, table, timestamp, query_id, user, shards, replication_factor)
 
-    appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::CREATE_TABLE, log);
+    appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::CREATE_TABLE, log);
 
-    LOG_INFO(log, "Request of creating DistributedMergeTree query={} query_id={} has been accepted", query, context.getCurrentQueryId());
+    LOG_INFO(log, "Request of creating DistributedMergeTree query={} query_id={} has been accepted", query, ctx->getCurrentQueryId());
 
     /// FIXME, project tasks status
     return true;

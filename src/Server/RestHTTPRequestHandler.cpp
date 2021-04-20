@@ -118,7 +118,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
 
     /// Should be initialized before anything,
     /// For correct memory accounting.
-    Context context = server.context();
+    auto context = Context::createCopy(server.context());
 
     HTMLForm params(request);
     LOG_TRACE(log, "Request uri: {}", request.getURI());
@@ -163,7 +163,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     }
 
     /// Set client info. It will be used for quota accounting parameters in 'setUser' method.
-    ClientInfo & client_info = context.getClientInfo();
+    ClientInfo & client_info = context->getClientInfo();
     client_info.query_kind = ClientInfo::QueryKind::INITIAL_QUERY;
     client_info.interface = ClientInfo::Interface::HTTP;
 
@@ -183,16 +183,16 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     client_info.forwarded_for = request.get("X-Forwarded-For", "");
 
     /// This will also set client_info.current_user and current_address
-    context.setUser(user, password, request.clientAddress());
+    context->setUser(user, password, request.clientAddress());
     if (!quota_key.empty())
-        context.setQuotaKey(quota_key);
+        context->setQuotaKey(quota_key);
 
     /// Query sent through HTTP interface is initial.
     client_info.initial_user = client_info.current_user;
     client_info.initial_address = client_info.current_address;
 
     /// Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
-    context.setCurrentQueryId(params.get("query_id", request.get("X-ClickHouse-Query-Id", "")));
+    context->setCurrentQueryId(params.get("query_id", request.get("X-ClickHouse-Query-Id", "")));
     client_info.initial_query_id = client_info.current_query_id;
 
     /// Setup idemopotent key if it is passed by user
@@ -204,13 +204,13 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
 
     if (!idem_key.empty())
     {
-        context.setIdempotentKey(idem_key);
+        context->setIdempotentKey(idem_key);
     }
 
     CurrentThread::QueryScope query_scope{context};
     /// Setup common response headers etc
     response.setContentType("application/json; charset=UTF-8");
-    response.add("X-ClickHouse-Query-Id", context.getCurrentQueryId());
+    response.add("X-ClickHouse-Query-Id", context->getCurrentQueryId());
     Int32 http_status = HTTPResponse::HTTP_OK;
 
     try

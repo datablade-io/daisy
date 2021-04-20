@@ -12,7 +12,6 @@ namespace DB
 {
 namespace ErrorCodes
 {
-    extern const int OK;
     extern const int INCORRECT_DATA;
     extern const int INVALID_CONFIG_PARAMETER;
 }
@@ -90,12 +89,12 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
     String dummy_string;
     WriteBufferFromString out(dummy_string);
 
-    query_context.setSetting("output_format_parallel_formatting", false);
+    query_context->setSetting("output_format_parallel_formatting", false);
     executeQuery(*in, out, /* allow_into_outfile = */ false, query_context, {});
 
     Poco::JSON::Object resp;
-    resp.set("query_id", query_context.getClientInfo().current_query_id);
-    const auto & poll_id = query_context.getQueryStatusPollId();
+    resp.set("query_id", query_context->getClientInfo().current_query_id);
+    const auto & poll_id = query_context->getQueryStatusPollId();
     if (!poll_id.empty())
     {
         resp.set("poll_id", poll_id);
@@ -129,8 +128,8 @@ bool IngestRawStoreHandler::handleEnrichment(ReadBuffer & buf, String & error) c
     {
         if (time_extraction_type == "json_path" || time_extraction_type == "regex")
         {
-            query_context.setSetting("rawstore_time_extraction_type", time_extraction_type);
-            query_context.setSetting("rawstore_time_extraction_rule", time_extraction_rule);
+            query_context->setSetting("rawstore_time_extraction_type", time_extraction_type);
+            query_context->setSetting("rawstore_time_extraction_rule", time_extraction_rule);
             return true;
         }
         else

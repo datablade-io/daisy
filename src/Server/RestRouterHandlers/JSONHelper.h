@@ -1,7 +1,6 @@
 #pragma once
 
 #include <IO/ReadBufferFromMemory.h>
-#include <IO/ReadBufferFromMemory.h>
 #include <IO/WriteBufferFromString.h>
 #include <IO/copyData.h>
 #include <Common/PODArray.h>

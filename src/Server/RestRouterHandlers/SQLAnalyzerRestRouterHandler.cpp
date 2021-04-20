@@ -45,7 +45,7 @@ namespace DB
 
 namespace ErrorCodes
 {
-    extern int INCORRECT_QUERY;
+    extern const int INCORRECT_QUERY;
 }
 
 namespace
@@ -209,8 +209,8 @@ String SQLAnalyzerRestRouterHandler::executePost(const Poco::JSON::Object::Ptr &
     const auto & query = payload->get("query").toString();
     ParserQuery parser(query.c_str() + query.size());
 
-    query_context.setCollectRequiredColumns(true);
-    auto & settings = query_context.getSettingsRef();
+    query_context->setCollectRequiredColumns(true);
+    auto & settings = query_context->getSettingsRef();
 
     String error_msg;
     auto res = rewriteQueryPipeAndParse(
@@ -220,7 +220,7 @@ String SQLAnalyzerRestRouterHandler::executePost(const Poco::JSON::Object::Ptr &
     {
         auto & [rewritten_query, ast] = res;
 
-        LOG_DEBUG(log, "Query rewrite, query_id={} rewritten={}", query_context.getCurrentQueryId(), rewritten_query);
+        LOG_DEBUG(log, "Query rewrite, query_id={} rewritten={}", query_context->getCurrentQueryId(), rewritten_query);
 
         QueryProfileMatcher::Data profile;
         QueryProfileVisitor visitor(profile);
@@ -239,11 +239,11 @@ String SQLAnalyzerRestRouterHandler::executePost(const Poco::JSON::Object::Ptr &
         }
 
         auto query_type = queryType(ast);
-        return buildResponse(query, rewritten_query, query_type, profile, block, query_context.requiredColumns());
+        return buildResponse(query, rewritten_query, query_type, profile, block, query_context->requiredColumns());
     }
     else
     {
-        LOG_ERROR(log, "Query rewrite, query_id={} error_msg={}", query_context.getCurrentQueryId(), error_msg);
+        LOG_ERROR(log, "Query rewrite, query_id={} error_msg={}", query_context->getCurrentQueryId(), error_msg);
 
         http_status = Poco::Net::HTTPResponse::HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse("Invalid query", ErrorCodes::INCORRECT_QUERY);

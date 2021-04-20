@@ -21,13 +21,13 @@ const String TaskStatusService::TaskStatus::SUCCEEDED = "SUCCEEDED";
 const String TaskStatusService::TaskStatus::FAILED = "FAILED";
 
 
-TaskStatusService & TaskStatusService::instance(Context & global_context_)
+TaskStatusService & TaskStatusService::instance(const ContextPtr & global_context_)
 {
     static TaskStatusService task_status_service{global_context_};
     return task_status_service;
 }
 
-TaskStatusService::TaskStatusService(Context & global_context_) : MetadataService(global_context_, "TaskStatusService")
+TaskStatusService::TaskStatusService(const ContextPtr & global_context_) : MetadataService(global_context_, "TaskStatusService")
 {
 }
 

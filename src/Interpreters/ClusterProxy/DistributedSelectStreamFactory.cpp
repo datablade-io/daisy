@@ -40,9 +40,8 @@ DistributedSelectStreamFactory::DistributedSelectStreamFactory(
 
 void DistributedSelectStreamFactory::createForShard(
     const Cluster::ShardInfo & shard_info,
-    const String &,
     const ASTPtr & query_ast,
-    const std::shared_ptr<Context> & context_ptr,
+    ContextPtr context,
     const ThrottlerPtr & throttler,
     const SelectQueryInfo &,
     std::vector<QueryPlanPtr> & /* plans */,
@@ -50,17 +49,15 @@ void DistributedSelectStreamFactory::createForShard(
     Pipes & /* delayed_pipes */,
     Poco::Logger * log)
 {
-    const auto & context = *context_ptr;
-
     bool add_agg_info = processed_stage == QueryProcessingStage::WithMergeableState;
     bool add_totals = false;
     bool add_extremes = false;
-    bool async_read = context_ptr->getSettingsRef().async_socket_for_remote;
+    bool async_read = context->getSettingsRef().async_socket_for_remote;
 
     if (processed_stage == QueryProcessingStage::Complete)
     {
         add_totals = query_ast->as<ASTSelectQuery &>().group_by_with_totals;
-        add_extremes = context.getSettingsRef().extremes;
+        add_extremes = context->getSettingsRef().extremes;
     }
 
     String query = formattedAST(query_ast);
@@ -73,7 +70,7 @@ void DistributedSelectStreamFactory::createForShard(
     remote_query_executor->setMainTable(main_table);
 
     remote_pipes.emplace_back(createRemoteSourcePipe(remote_query_executor, add_agg_info, add_totals, add_extremes, async_read));
-    remote_pipes.back().addInterpreterContext(context_ptr);
+    remote_pipes.back().addInterpreterContext(context);
 }
 }
 }

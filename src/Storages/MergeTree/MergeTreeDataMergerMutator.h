@@ -252,7 +252,7 @@ private:
 
     /// Daisy : starts
     /// Merge sequence info of parts in a partition
-    SequenceInfoPtr mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, const Context & context);
+    SequenceInfoPtr mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, ContextPtr context);
     /// Daisy : ends
 
 private:

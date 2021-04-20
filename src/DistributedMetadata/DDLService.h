@@ -16,9 +16,9 @@ class TaskStatusService;
 class DDLService final : public MetadataService
 {
 public:
-    static DDLService & instance(Context & global_context_);
+    static DDLService & instance(const ContextPtr & global_context_);
 
-    explicit DDLService(Context & glboal_context_);
+    explicit DDLService(const ContextPtr & glboal_context_);
     virtual ~DDLService() override = default;
 
 private:

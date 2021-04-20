@@ -7,7 +7,7 @@ namespace DB
 class SQLAnalyzerRestRouterHandler final : public RestRouterHandler
 {
 public:
-    explicit SQLAnalyzerRestRouterHandler(Context & query_context_) : RestRouterHandler(query_context_, "SQLAnalyzer") { }
+    explicit SQLAnalyzerRestRouterHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "SQLAnalyzer") { }
     ~SQLAnalyzerRestRouterHandler() override { }
 
     String executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;

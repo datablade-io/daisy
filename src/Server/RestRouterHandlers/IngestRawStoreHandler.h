@@ -7,7 +7,7 @@ namespace DB
 class IngestRawStoreHandler final : public RestRouterHandler
 {
 public:
-    explicit IngestRawStoreHandler(Context & query_context_) : RestRouterHandler(query_context_, "IngestRawStore") { }
+    explicit IngestRawStoreHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "IngestRawStore") { }
     ~IngestRawStoreHandler() override = default;
 
     String execute(ReadBuffer & input, HTTPServerResponse & response, Int32 & http_status) const override;

@@ -30,12 +30,12 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
     }
 
     /// components: 0: query_id, 1: database, 2: table, 3: user, 4: node_identity, 5: timestamp
-    std::vector<String> components = query_context.parseQueryStatusPollId(poll_id);
+    std::vector<String> components = query_context->parseQueryStatusPollId(poll_id);
     const auto & target_node = components[4];
     const auto & database_name = components[1];
     const auto & table_name = components[2];
 
-    if (target_node == query_context.getNodeIdentity())
+    if (target_node == query_context->getNodeIdentity())
     {
         StoragePtr storage = DatabaseCatalog::instance().getTable(StorageID(database_name, table_name), query_context);
         if (!storage)
@@ -62,7 +62,7 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
     }
     else
     {
-        Poco::URI uri{"http://" + target_node + query_context.getConfigRef().getString("http_port") + "/dae/ingest/statuses/" + poll_id};
+        Poco::URI uri{"http://" + target_node + query_context->getConfigRef().getString("http_port") + "/dae/ingest/statuses/" + poll_id};
         return forwardRequest(uri, http_status);
     }
 }

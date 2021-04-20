@@ -309,7 +309,7 @@ InterpreterSelectQuery::InterpreterSelectQuery(
         ApplyWithSubqueryVisitor().visit(query_ptr);
     }
 
-    JoinedTables joined_tables(getSubqueryContext(*context), getSelectQuery());
+    JoinedTables joined_tables(getSubqueryContext(context), getSelectQuery());
 
     bool got_storage_from_query = false;
     if (!has_input && !storage)

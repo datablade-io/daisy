@@ -7,16 +7,15 @@
 
 namespace DB
 {
-class Context;
 class CatalogService;
 
 class PlacementService final : public MetadataService
 {
 public:
-    static PlacementService & instance(Context & global_context);
+    static PlacementService & instance(const ContextPtr & global_context);
 
-    explicit PlacementService(Context & global_context_);
-    explicit PlacementService(Context & global_context_, PlacementStrategyPtr strategy_);
+    explicit PlacementService(const ContextPtr & global_context_);
+    PlacementService(const ContextPtr & global_context_, PlacementStrategyPtr strategy_);
     virtual ~PlacementService() override = default;
 
     void scheduleBroadcast();

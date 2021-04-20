@@ -11,6 +11,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int BAD_REQUEST_PARAMETER;
+    extern const int INCORRECT_DATA;
 }
 
 String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse & /* response */, Int32 & http_status) const
@@ -26,14 +27,14 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
 
     if (hasQueryParameter("mode"))
     {
-        query_context.setIngestMode(getQueryParameter("mode"));
+        query_context->setIngestMode(getQueryParameter("mode"));
     }
     else
     {
-        query_context.setIngestMode("async");
+        query_context->setIngestMode("async");
     }
 
-    query_context.setSetting("output_format_parallel_formatting", false);
+    query_context->setSetting("output_format_parallel_formatting", false);
 
     /// Parse JSON into ReadBuffers
     PODArray<char> parse_buf;
@@ -95,8 +96,8 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
 
     /// Send back ingest response
     Poco::JSON::Object resp;
-    resp.set("query_id", query_context.getCurrentQueryId());
-    const auto & poll_id = query_context.getQueryStatusPollId();
+    resp.set("query_id", query_context->getCurrentQueryId());
+    const auto & poll_id = query_context->getQueryStatusPollId();
     if (!poll_id.empty())
     {
         resp.set("poll_id", poll_id);

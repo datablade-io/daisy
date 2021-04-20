@@ -471,9 +471,7 @@ struct ContextSharedPart
             schedule_pool.reset();
             distributed_schedule_pool.reset();
             message_broker_schedule_pool.reset();
-	    /// Daisy : starts
-            part_commit_pool.reset();
-	    /// Daisy : ends 
+            part_commit_pool.reset(); /// Daisy :
             ddl_worker.reset();
 
             /// Stop trace collector if any

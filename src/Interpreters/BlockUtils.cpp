@@ -60,27 +60,27 @@ Block buildBlock(
     return block;
 }
 
-void appendBlock(Block && block, Context & context, IDistributedWriteAheadLog::OpCode opCode, const Poco::Logger * log)
+void appendBlock(Block && block, ContextPtr context, IDistributedWriteAheadLog::OpCode opCode, const Poco::Logger * log)
 {
     IDistributedWriteAheadLog::Record record{opCode, std::move(block)};
     record.headers["_version"] = "1";
-    if (context.getQueryParameters().contains("table_type"))
+    if (context->getQueryParameters().contains("table_type"))
     {
-        record.headers["table_type"] = context.getQueryParameters().at("table_type");
+        record.headers["table_type"] = context->getQueryParameters().at("table_type");
     }
 
-    auto wal = DistributedWriteAheadLogPool::instance(context.getGlobalContext()).getDefault();
+    auto wal = DistributedWriteAheadLogPool::instance(context->getGlobalContext()).getDefault();
     if (!wal)
     {
         LOG_ERROR(
             log,
             "Distributed environment is not setup. Unable to operate with DistributedMergeTree engine. query_id={} ",
-            context.getCurrentQueryId());
+            context->getCurrentQueryId());
         throw Exception(
             "Distributed environment is not setup. Unable to operate with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
     }
 
-    const auto & config = context.getGlobalContext().getConfigRef();
+    const auto & config = context->getGlobalContext()->getConfigRef();
     auto topic = config.getString("system_settings.system_ddl_dwal.name");
     std::any ctx{DistributedWriteAheadLogKafkaContext{topic}};
 
@@ -88,7 +88,7 @@ void appendBlock(Block && block, Context & context, IDistributedWriteAheadLog::O
     if (result.err != ErrorCodes::OK)
     {
         LOG_ERROR(
-            log, "Failed to append record to DistributedWriteAheadLog, query_id={}, error={}", context.getCurrentQueryId(), result.err);
+            log, "Failed to append record to DistributedWriteAheadLog, query_id={}, error={}", context->getCurrentQueryId(), result.err);
         throw Exception("Failed to append record to DistributedWriteAheadLog, error={}", result.err);
     }
 }

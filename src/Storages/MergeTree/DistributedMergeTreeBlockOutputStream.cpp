@@ -16,7 +16,7 @@ namespace ErrorCodes
 }
 
 DistributedMergeTreeBlockOutputStream::DistributedMergeTreeBlockOutputStream(
-    StorageDistributedMergeTree & storage_, const StorageMetadataPtr metadata_snapshot_, const Context & query_context_)
+    StorageDistributedMergeTree & storage_, const StorageMetadataPtr metadata_snapshot_, ContextPtr query_context_)
     : storage(storage_), metadata_snapshot(metadata_snapshot_), query_context(query_context_)
 {
 }
@@ -95,7 +95,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
     /// FIXME, if one block is too large in size (bigger than max size of a Kafka record can have),
     /// further split the bock
 
-    const auto & ingest_mode = query_context.getIngestMode();
+    const auto & ingest_mode = query_context->getIngestMode();
 
     /// 2) Commit each sharded block to corresponding Kafka partition
     /// we failed the whole insert whenever single block failed
@@ -103,9 +103,9 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
     {
         IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(current_block.block)};
         record.partition_key = current_block.shard;
-        if (!query_context.getIdempotentKey().empty())
+        if (!query_context->getIdempotentKey().empty())
         {
-            record.setIdempotentKey(query_context.getIdempotentKey());
+            record.setIdempotentKey(query_context->getIdempotentKey());
         }
 
         if (ingest_mode == "sync")
@@ -131,7 +131,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
             auto ret = storage.dwal->append(
                 record,
                 &StorageDistributedMergeTree::writeCallback,
-                storage.writeCallbackData(query_context.getQueryStatusPollId(), outstanding),
+                storage.writeCallbackData(query_context->getQueryStatusPollId(), outstanding),
                 storage.dwal_append_ctx);
             if (ret != 0)
             {
@@ -161,7 +161,7 @@ void DistributedMergeTreeBlockOutputStream::writeCallback(const IDistributedWrit
 
 void DistributedMergeTreeBlockOutputStream::flush()
 {
-    if (query_context.getIngestMode() != "sync")
+    if (query_context->getIngestMode() != "sync")
     {
         return;
     }

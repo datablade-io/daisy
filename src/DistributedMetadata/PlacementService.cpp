@@ -30,17 +30,17 @@ const String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
 const String THIS_HOST = getFQDNOrHostName();
 }
 
-PlacementService & PlacementService::instance(Context & context)
+PlacementService & PlacementService::instance(const ContextPtr & context)
 {
     static PlacementService placement{context};
     return placement;
 }
 
-PlacementService::PlacementService(Context & global_context_) : PlacementService(global_context_, std::make_shared<DiskStrategy>())
+PlacementService::PlacementService(const ContextPtr & global_context_) : PlacementService(global_context_, std::make_shared<DiskStrategy>())
 {
 }
 
-PlacementService::PlacementService(Context & global_context_, PlacementStrategyPtr strategy_)
+PlacementService::PlacementService(const ContextPtr & global_context_, PlacementStrategyPtr strategy_)
     : MetadataService(global_context_, "PlacementService"), catalog(CatalogService::instance(global_context_)), strategy(strategy_)
 {
 }
@@ -202,13 +202,13 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
 
 void PlacementService::scheduleBroadcast()
 {
-    if (!global_context.isDistributed())
+    if (!global_context->isDistributed())
     {
         return;
     }
 
     /// Schedule the broadcast task
-    auto task_holder = global_context.getSchedulePool().createTask("PlacementBroadcast", [this]() { this->broadcast(); });
+    auto task_holder = global_context->getSchedulePool().createTask("PlacementBroadcast", [this]() { this->broadcast(); });
     broadcast_task = std::make_unique<BackgroundSchedulePoolTaskHolder>(std::move(task_holder));
     (*broadcast_task)->activate();
     (*broadcast_task)->schedule();
@@ -238,12 +238,12 @@ void PlacementService::doBroadcast()
     auto disk_space_col = uint64_type->createColumn();
     auto * disk_space_col_inner = typeid_cast<ColumnUInt64 *>(disk_space_col.get());
 
-    for (const auto & [policy_name, policy_ptr] : global_context.getPoliciesMap())
+    for (const auto & [policy_name, policy_ptr] : global_context->getPoliciesMap())
     {
         const auto disk_space = policy_ptr->getMaxUnreservedFreeSpace() / (1024 * 1024 * 1024);
         policy_name_col->insertData(policy_name.data(), policy_name.size());
         disk_space_col_inner->insertValue(disk_space);
-        LOG_TRACE(log, "Append disk metrics {}, {}, {} GB.", global_context.getNodeIdentity(), policy_name, disk_space);
+        LOG_TRACE(log, "Append disk metrics {}, {}, {} GB.", global_context->getNodeIdentity(), policy_name, disk_space);
     }
 
     Block disk_block;
@@ -254,15 +254,17 @@ void PlacementService::doBroadcast()
 
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(disk_block)};
     record.partition_key = 0;
-    record.setIdempotentKey(global_context.getNodeIdentity());
+    record.setIdempotentKey(global_context->getNodeIdentity());
     record.headers["_host"] = THIS_HOST;
-    record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
-    record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
+    record.headers["_http_port"] = global_context->getConfigRef().getString("http_port", "8123");
+    record.headers["_tcp_port"] = global_context->getConfigRef().getString("tcp_port", "9000");
     record.headers["_version"] = "1";
 
     const String table_count_query = "SELECT count(*) as table_counts FROM system.tables WHERE database != 'system'";
-    Context context = global_context;
-    context.makeQueryContext();
+
+    /// FIXME, QueryScope
+    auto context = Context::createCopy(global_context);
+    context->makeQueryContext();
     executeSelectQuery(table_count_query, context, [&record](Block && block) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
         const auto & table_counts_col = block.findByName("table_counts")->column;
         record.headers["_tables"] = std::to_string(table_counts_col->getUInt(0));

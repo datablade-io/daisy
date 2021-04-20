@@ -25,7 +25,7 @@ class DistributedMergeTreeBlockOutputStream final : public IBlockOutputStream
 {
 public:
     DistributedMergeTreeBlockOutputStream(
-        StorageDistributedMergeTree & storage_, const StorageMetadataPtr metadata_snapshot_, const Context & query_context_);
+        StorageDistributedMergeTree & storage_, const StorageMetadataPtr metadata_snapshot_, ContextPtr query_context_);
 
 
     Block getHeader() const override;
@@ -44,7 +44,7 @@ private:
 private:
     StorageDistributedMergeTree & storage;
     StorageMetadataPtr metadata_snapshot;
-    const Context & query_context;
+    ContextPtr query_context;
 
     /// for writeCallback
     std::atomic_uint32_t committed = 0;

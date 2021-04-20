@@ -31,8 +31,6 @@ private:
 
     ASTPtr query_ptr;
     /// Daisy : start
-    Context & context;
-
     bool alterTableDistributed(const ASTAlterQuery & query);
     /// Daisy : end
 };
