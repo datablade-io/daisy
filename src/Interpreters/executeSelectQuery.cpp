@@ -45,7 +45,7 @@ void executeQueryWithoutProcessor(DB::BlockInputStreamPtr & in, const std::funct
 
 namespace DB
 {
-void executeSelectQuery(const String & query, Context & query_context, const std::function<void(Block &&)> & callback)
+void executeSelectQuery(const String & query, ContextPtr query_context, const std::function<void(Block &&)> & callback)
 {
     BlockIO io{executeQuery(query, query_context, true /* internal */)};
 

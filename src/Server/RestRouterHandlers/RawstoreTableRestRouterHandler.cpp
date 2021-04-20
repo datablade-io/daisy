@@ -36,7 +36,7 @@ String RawstoreTableRestRouterHandler::getOrderByExpr(
     const Poco::JSON::Object::Ptr & payload, const String & /*time_column*/, const String & default_order_by_granularity) const
 {
     const auto & order_by_granularity = getStringValueFrom(payload, "order_by_granularity", default_order_by_granularity);
-    return granularity_func_mapping[order_by_granularity] + ",  sourcetype";
+    return granularity_func_mapping[order_by_granularity] + ", sourcetype";
 }
 
 String RawstoreTableRestRouterHandler::getColumnsDefinition(const Poco::JSON::Object::Ptr & /*payload*/) const

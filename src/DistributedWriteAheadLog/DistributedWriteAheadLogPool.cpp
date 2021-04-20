@@ -21,13 +21,13 @@ namespace
     const String SYSTEM_DWALS_KEY_PREFIX = "system_settings.system_dwals.";
 }
 
-DistributedWriteAheadLogPool & DistributedWriteAheadLogPool::instance(Context & global_context)
+DistributedWriteAheadLogPool & DistributedWriteAheadLogPool::instance(ContextPtr global_context)
 {
     static DistributedWriteAheadLogPool pool{global_context};
     return pool;
 }
 
-DistributedWriteAheadLogPool::DistributedWriteAheadLogPool(Context & global_context_)
+DistributedWriteAheadLogPool::DistributedWriteAheadLogPool(ContextPtr global_context_)
     : global_context(global_context_), log(&Poco::Logger::get("DistributedWriteAheadLogPool"))
 {
 }
@@ -47,7 +47,7 @@ void DistributedWriteAheadLogPool::startup()
 
     LOG_INFO(log, "Starting");
 
-    const auto & config = global_context.getConfigRef();
+    const auto & config = global_context->getConfigRef();
 
     Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
     config.keys(SYSTEM_DWALS_KEY, sys_dwal_keys);
@@ -90,7 +90,7 @@ void DistributedWriteAheadLogPool::init(const String & key)
     /// FIXME; for now, we only support kafka, so assume it is kafka
     /// assert(key.startswith("system_kafka"));
 
-    const auto & config = global_context.getConfigRef();
+    const auto & config = global_context->getConfigRef();
 
     DistributedWriteAheadLogKafkaSettings kafka_settings;
     Int32 dwal_pool_size = 0;
@@ -161,7 +161,7 @@ void DistributedWriteAheadLogPool::init(const String & key)
     if (kafka_settings.group_id.empty())
     {
         /// FIXME
-        kafka_settings.group_id = global_context.getNodeIdentity();
+        kafka_settings.group_id = global_context->getNodeIdentity();
     }
 
     if (wals.contains(kafka_settings.cluster_id))

@@ -45,7 +45,7 @@ public:
         const Names & column_names,
         const StorageMetadataPtr & /*metadata_snapshot*/,
         SelectQueryInfo & query_info,
-        const Context & context,
+        ContextPtr context,
         QueryProcessingStage::Enum processed_stage,
         size_t max_block_size,
         unsigned num_streams) override;
@@ -55,16 +55,16 @@ public:
         const Names & column_names,
         const StorageMetadataPtr & /*metadata_snapshot*/,
         SelectQueryInfo & query_info,
-        const Context & context,
+        ContextPtr context,
         QueryProcessingStage::Enum processed_stage,
         size_t max_block_size,
         unsigned num_streams) override;
 
     std::optional<UInt64> totalRows(const Settings &) const override;
-    std::optional<UInt64> totalRowsByPartitionPredicate(const SelectQueryInfo &, const Context &) const override;
+    std::optional<UInt64> totalRowsByPartitionPredicate(const SelectQueryInfo &, ContextPtr) const override;
     std::optional<UInt64> totalBytes(const Settings &) const override;
 
-    BlockOutputStreamPtr write(const ASTPtr & query, const StorageMetadataPtr & /*metadata_snapshot*/, const Context & context) override;
+    BlockOutputStreamPtr write(const ASTPtr & query, const StorageMetadataPtr & /*metadata_snapshot*/, ContextPtr context) override;
 
     NamesAndTypesList getVirtuals() const override;
 
@@ -77,9 +77,9 @@ public:
         bool final,
         bool deduplicate,
         const Names & deduplicate_by_columns,
-        const Context & context) override;
+        ContextPtr context) override;
 
-    void mutate(const MutationCommands & commands, const Context & context) override;
+    void mutate(const MutationCommands & commands, ContextPtr context) override;
 
     /// Return introspection information about currently processing or recently processed mutations.
     std::vector<MergeTreeMutationStatus> getMutationsStatus() const override;
@@ -87,9 +87,9 @@ public:
     CancellationCode killMutation(const String & mutation_id) override;
 
     void drop() override;
-    void truncate(const ASTPtr &, const StorageMetadataPtr &, const Context &, TableExclusiveLockHolder &) override;
+    void truncate(const ASTPtr &, const StorageMetadataPtr &, ContextPtr, TableExclusiveLockHolder &) override;
 
-    void alter(const AlterCommands & commands, const Context & context, TableLockHolder & table_lock_holder) override;
+    void alter(const AlterCommands & commands, ContextPtr context, TableLockHolder & table_lock_holder) override;
 
     void checkTableCanBeDropped() const override;
 
@@ -97,23 +97,23 @@ public:
 
     void onActionLockRemove(StorageActionBlockType action_type) override;
 
-    CheckResults checkData(const ASTPtr & query, const Context & context) override;
+    CheckResults checkData(const ASTPtr & query, ContextPtr context) override;
 
     std::optional<JobAndPool> getDataProcessingJob() override;
 
     QueryProcessingStage::Enum
-    getQueryProcessingStage(const Context &, QueryProcessingStage::Enum to_stage, SelectQueryInfo &) const override;
+    getQueryProcessingStage(ContextPtr, QueryProcessingStage::Enum to_stage, SelectQueryInfo &) const override;
 
 private:
     /// Partition helpers
 
-    void dropPartition(const ASTPtr & partition, bool detach, bool drop_part, const Context & context, bool throw_if_noop = true) override;
+    void dropPartition(const ASTPtr & partition, bool detach, bool drop_part, ContextPtr context, bool throw_if_noop = true) override;
 
-    PartitionCommandsResultInfo attachPartition(const ASTPtr & partition, const StorageMetadataPtr & metadata_snapshot, bool part, const Context & context) override;
+    PartitionCommandsResultInfo attachPartition(const ASTPtr & partition, const StorageMetadataPtr & metadata_snapshot, bool part, ContextPtr context) override;
 
-    void replacePartitionFrom(const StoragePtr & source_table, const ASTPtr & partition, bool replace, const Context & context) override;
+    void replacePartitionFrom(const StoragePtr & source_table, const ASTPtr & partition, bool replace, ContextPtr context) override;
 
-    void movePartitionToTable(const StoragePtr & dest_table, const ASTPtr & partition, const Context & context) override;
+    void movePartitionToTable(const StoragePtr & dest_table, const ASTPtr & partition, ContextPtr context) override;
 
     /// If part is assigned to merge or mutation (possibly replicated)
     /// Should be overridden by children, because they can have different
@@ -130,17 +130,17 @@ private:
 
     /// Distributed query
     QueryProcessingStage::Enum
-    getQueryProcessingStageRemote(const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const;
+    getQueryProcessingStageRemote(ContextPtr context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const;
 
-    ClusterPtr getOptimizedCluster(const Context & context, const StorageMetadataPtr & metadata_snapshot, const ASTPtr & query_ptr) const;
+    ClusterPtr getOptimizedCluster(ContextPtr context, const StorageMetadataPtr & metadata_snapshot, const ASTPtr & query_ptr) const;
 
     ClusterPtr getCluster() const;
 
     ClusterPtr skipUnusedShards(
-        ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, const Context & context) const;
+        ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, ContextPtr context) const;
 
     void
-    readRemote(QueryPlan & query_plan, SelectQueryInfo & query_info, const Context & context, QueryProcessingStage::Enum processed_stage);
+    readRemote(QueryPlan & query_plan, SelectQueryInfo & query_info, ContextPtr context, QueryProcessingStage::Enum processed_stage);
 
 public:
     IColumn::Selector createSelector(const ColumnWithTypeAndName & result) const;
@@ -171,7 +171,7 @@ protected:
         const String & relative_data_path_,
         const StorageInMemoryMetadata & metadata,
         bool attach_,
-        Context & context_,
+        ContextPtr context_,
         const String & date_column_name_,
         const MergingParams & merging_params_,
         std::unique_ptr<MergeTreeSettings> settings_,
@@ -227,7 +227,7 @@ private:
 
     /// From table settings for consumer
     String dwal_auto_offset_reset = "earliest";
-    /// Current shard. DWAL partion and table shard is 1:1 mapped
+    /// Current shard. DWAL partition and table shard is 1:1 mapped
     Int32 shard = -1;
 
     /// For sharding
@@ -241,7 +241,7 @@ private:
     DistributedWriteAheadLogPtr dwal;
     IngestingBlocks & ingesting_blocks;
 
-    /// Local checkpoint threshhold timer
+    /// Local checkpoint threshold timer
     std::chrono::time_point<std::chrono::steady_clock> last_commit_ts = std::chrono::steady_clock::now();
 
     /// Forwarding storage if it is not virtual

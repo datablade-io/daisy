@@ -29,7 +29,7 @@ std::pair<String, StoragePtr> createTableFromAST(
     ASTCreateQuery ast_create_query,
     const String & database_name,
     const String & table_data_path_relative,
-    Context & context,
+    ContextPtr context,
     bool has_force_restore_data_flag);
 
 namespace ErrorCodes
@@ -63,14 +63,14 @@ Int32 parseShard(const String & engine_full)
 }
 }
 
-CatalogService & CatalogService::instance(Context & context)
+CatalogService & CatalogService::instance(const ContextPtr & context)
 {
     static CatalogService catalog{context};
     return catalog;
 }
 
 
-CatalogService::CatalogService(Context & global_context_) : MetadataService(global_context_, "CatalogService")
+CatalogService::CatalogService(const ContextPtr & global_context_) : MetadataService(global_context_, "CatalogService")
 {
 }
 
@@ -90,7 +90,7 @@ MetadataService::ConfigSettings CatalogService::configSettings() const
 
 void CatalogService::broadcast()
 {
-    if (!global_context.isDistributed())
+    if (!global_context->isDistributed())
     {
         return;
     }
@@ -113,9 +113,10 @@ void CatalogService::doBroadcast()
     /// all tables on a single node
     String query = "SELECT * FROM system.tables WHERE (database != 'system') OR (database = 'system' AND name='tables')";
 
+    /// FIXME, QueryScope
     /// CurrentThread::attachQueryContext(context);
-    Context context = global_context;
-    context.makeQueryContext();
+    auto context = Context::createCopy(global_context);
+    context->makeQueryContext();
     BlockIO io{executeQuery(query, context, true /* internal */)};
 
     if (io.pipeline.initialized())
@@ -175,10 +176,10 @@ void CatalogService::append(Block && block)
 {
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(block)};
     record.partition_key = 0;
-    record.setIdempotentKey(global_context.getNodeIdentity());
+    record.setIdempotentKey(global_context->getNodeIdentity());
     record.headers["_host"] = THIS_HOST;
-    record.headers["_http_port"] = global_context.getConfigRef().getString("http_port", "8123");
-    record.headers["_tcp_port"] = global_context.getConfigRef().getString("tcp_port", "9000");
+    record.headers["_http_port"] = global_context->getConfigRef().getString("http_port", "8123");
+    record.headers["_tcp_port"] = global_context->getConfigRef().getString("tcp_port", "9000");
     record.headers["_version"] = "1";
 
     /// FIXME : reschedule
@@ -283,7 +284,7 @@ StoragePtr CatalogService::createVirtualTableStorage(const String & query, const
         assert(uuid != UUIDHelpers::Nil);
     }
 
-    auto settings = global_context.getSettingsRef();
+    auto settings = global_context->getSettingsRef();
     ParserCreateQuery parser;
     const char * pos = query.data();
     String error_message;
@@ -488,7 +489,7 @@ ClusterPtr CatalogService::tableCluster(const String & database, const String & 
 
     /// FIXME, user/password etc
     auto table_cluster = std::make_shared<Cluster>(
-        global_context.getSettingsRef(),
+        global_context->getSettingsRef(),
         host_ports,
         /* username = */ "",
         /* password = */ "",
@@ -544,7 +545,7 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
                 {
                     /// String array
                     WriteBufferFromOwnString buffer;
-                    col.type->serializeAsText(*col.column, row, buffer, FormatSettings{});
+                    col.type->getDefaultSerialization()->serializeText(*col.column, row, buffer, FormatSettings{});
                     *static_cast<String *>(it->second) = buffer.str();
                 }
                 else if (col.name == "uuid")

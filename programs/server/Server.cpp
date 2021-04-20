@@ -200,7 +200,7 @@ int waitServersToFinish(std::vector<DB::ProtocolServerAdapter> & servers, size_t
 }
 
 /// Daisy : starts
-void initDistributedMetadataServices(DB::Context & global_context)
+void initDistributedMetadataServices(DB::ContextPtr & global_context)
 {
     /// Init DWAL pool
     auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
@@ -219,7 +219,7 @@ void initDistributedMetadataServices(DB::Context & global_context)
     ddl_service.startup();
 }
 
-void deinitDistributedMetadataServices(DB::Context & global_context)
+void deinitDistributedMetadataServices(DB::ContextPtr & global_context)
 {
     auto & ddl_service = DB::DDLService::instance(global_context);
     ddl_service.shutdown();
@@ -1025,7 +1025,7 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
     /// Daisy: start. init Distributed metadata services for DistributedMergeTree table engine
     global_context->setupNodeIdentity();
-    initDistributedMetadataServices(*global_context);
+    initDistributedMetadataServices(global_context);
     /// Daisy: end.
 
     try
@@ -1050,8 +1050,8 @@ int Server::main(const std::vector<std::string> & /*args*/)
     LOG_DEBUG(log, "Loaded metadata.");
 
     /// Daisy : start.
-    DB::CatalogService::instance(*global_context).broadcast();
-    DB::PlacementService::instance(*global_context).scheduleBroadcast();
+    DB::CatalogService::instance(global_context).broadcast();
+    DB::PlacementService::instance(global_context).scheduleBroadcast();
     /// Daisy : end.
 
     /// Init trace collector only after trace_log system table was created
@@ -1458,7 +1458,7 @@ int Server::main(const std::vector<std::string> & /*args*/)
                 LOG_INFO(log, "Closed connections.");
 
             /// Daisy : start.
-            deinitDistributedMetadataServices(*global_context);
+            deinitDistributedMetadataServices(global_context);
             /// Daisy : end.
 
             dns_cache_updater.reset();

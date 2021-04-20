@@ -10,11 +10,6 @@
 
 namespace DB
 {
-namespace ErrorCodes
-{
-    extern const int CONFIG_ERROR;
-    extern const int OK;
-}
 
 std::map<String, std::map<String, String> > TableRestRouterHandler::update_schema = {
     {"required",{
@@ -55,7 +50,7 @@ bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payloa
     }
 
     /// For non-distributed env or user force to create a `local` MergeTree table
-    if (!query_context.isDistributed() || getQueryParameter("distributed") == "false")
+    if (!query_context->isDistributed() || getQueryParameter("distributed") == "false")
     {
         int shards = payload->has("shards") ? payload->get("shards").convert<Int32>() : 1;
         int replication_factor = payload->has("replication_factor") ? payload->get("replication_factor").convert<Int32>() : 1;
@@ -91,12 +86,12 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
     const auto & shard = getQueryParameter("shard");
     const auto & query = getCreationSQL(payload, shard);
 
-    if (query_context.isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
     {
         std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         payload->stringify(payload_str_stream, 0);
-        query_context.setQueryParameter("_payload", payload_str_stream.str());
-        query_context.setDistributedDDLOperation(true);
+        query_context->setQueryParameter("_payload", payload_str_stream.str());
+        query_context->setDistributedDDLOperation(true);
     }
 
     return processQuery(query);
@@ -104,10 +99,10 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
 {
-    if (query_context.isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
     {
-        query_context.setDistributedDDLOperation(true);
-        query_context.setQueryParameter("_payload", "{}");
+        query_context->setDistributedDDLOperation(true);
+        query_context->setQueryParameter("_payload", "{}");
     }
 
     const String & database_name = getPathParameter("database");
@@ -127,13 +122,13 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
 
     const String & query = boost::algorithm::join(create_segments, " ");
 
-    if (query_context.isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
     {
-        query_context.setDistributedDDLOperation(true);
+        query_context->setDistributedDDLOperation(true);
 
         std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
         payload->stringify(payload_str_stream, 0);
-        query_context.setQueryParameter("_payload", payload_str_stream.str());
+        query_context->setQueryParameter("_payload", payload_str_stream.str());
     }
 
     return processQuery(query);
@@ -142,7 +137,7 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
 String TableRestRouterHandler::buildResponse() const
 {
     Poco::JSON::Object resp;
-    resp.set("query_id", query_context.getCurrentQueryId());
+    resp.set("query_id", query_context->getCurrentQueryId());
     std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     resp.stringify(resp_str_stream, 0);
 
@@ -164,7 +159,7 @@ String TableRestRouterHandler::processQuery(const String & query) const
 
 String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & payload) const
 {
-    if (query_context.isDistributed())
+    if (query_context->isDistributed())
     {
         if (getQueryParameter("distributed") != "false")
         {

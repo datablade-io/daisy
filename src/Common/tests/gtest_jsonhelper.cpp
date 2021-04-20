@@ -105,7 +105,7 @@ TEST(SimpleJSON, Search)
 "arr_string": ["a", "b", "c", 132],
 "arr_number": [1, -1, 2.4, 0, -2.3, "ab"],
 "arr_bool": [true, false, true],
-"arr_null": [ null,  null,null  ],
+"arr_null": [ null, null, null],
 "arr_empty": [],
 "arr_arr": [[1,2], [3,4]],
 "arr_obj": [{"prop1": "a"}, {"propb": 123}]
@@ -122,13 +122,13 @@ TEST(SimpleJSON, Search)
 
     /// Object Check
     req = R"###({
-	"obj": {
-		"field1": {
-			"a": 1,
-			"b": "abc"
-		}
-	}
-})###";
+        "obj": {
+          "field1": {
+            "a": 1,
+            "b": "abc"
+          }
+       }
+    })###";
     info.emplace("obj", 49);
     checkJSON(req, info);
 }

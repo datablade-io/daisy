@@ -55,6 +55,7 @@ SRCS(
     Formats/Impl/ProtobufRowOutputFormat.cpp
     Formats/Impl/RawBLOBRowInputFormat.cpp
     Formats/Impl/RawBLOBRowOutputFormat.cpp
+    Formats/Impl/RawStoreInputFormat.cpp
     Formats/Impl/RegexpRowInputFormat.cpp
     Formats/Impl/TSKVRowInputFormat.cpp
     Formats/Impl/TSKVRowOutputFormat.cpp

@@ -1586,7 +1586,7 @@ Int64 StorageMergeTree::loadSN() const
 
 void StorageMergeTree::commitSN(Int64 sn)
 {
-    /// This funtion is always invoked by single thread
+    /// This function is always invoked by single thread
     auto tmpfile = sn_file.first + ".tmp";
     sn_file.second->removeFileIfExists(tmpfile);
 
@@ -1666,7 +1666,7 @@ void StorageMergeTree::populateCommittedSNFromParts()
     missing_sequence_ranges.swap(missing_ranges);
 
     /// Collect last N idempotent keys
-    auto max_keys = global_context.getSettingsRef().max_idempotent_ids;
+    auto max_keys = getContext()->getSettingsRef().max_idempotent_ids;
     auto keys_iter = idempotent_keys.begin();
 
     if (idempotent_keys.size() > max_keys)

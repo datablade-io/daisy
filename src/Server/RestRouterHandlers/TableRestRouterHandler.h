@@ -8,7 +8,7 @@ namespace DB
 class TableRestRouterHandler : public RestRouterHandler
 {
 public:
-    TableRestRouterHandler(Context & query_context_, const String & router_name) : RestRouterHandler(query_context_, router_name) { }
+    TableRestRouterHandler(ContextPtr query_context_, const String & router_name) : RestRouterHandler(query_context_, router_name) { }
     ~TableRestRouterHandler() override { }
 
 protected:

@@ -37,62 +37,62 @@ public:
         factory.registerRouterHandler(
             "/dae/v1/ingest/(?P<database>\\w+)/tables/(?P<table>\\w+)(\\?mode=\\w+){0,1}",
             "POST",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<IngestRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/ingest/(?P<database>\\w+)/rawstores/(?P<rawstore>\\w+)",
             "POST",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<IngestRawStoreHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/ingest/statuses/(?P<poll_id>.+)",
             "GET",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<IngestStatusHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/tables(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<TabularTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)(\\?[\\w\\-=&#]+){0,1}",
             "PATCH/DELETE",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<TabularTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/rawstores(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<RawstoreTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/ddl/(?P<database>\\w+)/rawstores/(?P<table>\\w+)(\\?[\\w\\-=&#]+){0,1}",
             "PATCH/DELETE",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<RawstoreTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
             "/dae/v1/sqlanalyzer",
             "POST",
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<SQLAnalyzerRestRouterHandler>(query_context);
             });
     }
 
 public:
-    RestRouterHandlerPtr get(const String & url, const String & method, Context & query_context) const
+    RestRouterHandlerPtr get(const String & url, const String & method, ContextPtr query_context) const
     {
         for (auto & router_handler : router_handlers)
         {
@@ -128,7 +128,7 @@ public:
         return nullptr;
     }
 
-    void registerRouterHandler(const String & route, const String & method, std::function<RestRouterHandlerPtr(Context &)> func)
+    void registerRouterHandler(const String & route, const String & method, std::function<RestRouterHandlerPtr(ContextPtr)> func)
     {
         auto regex = compileRegex(route);
         router_handlers.emplace_back(RouterHandler(method, regex, func));
@@ -154,9 +154,9 @@ private:
     {
         String method;
         CompiledRegexPtr regex;
-        std::function<RestRouterHandlerPtr(Context &)> handler;
+        std::function<RestRouterHandlerPtr(ContextPtr)> handler;
 
-        RouterHandler(const String & method_, const CompiledRegexPtr & regex_, std::function<RestRouterHandlerPtr(Context &)> handler_)
+        RouterHandler(const String & method_, const CompiledRegexPtr & regex_, std::function<RestRouterHandlerPtr(ContextPtr)> handler_)
             : method(method_), regex(regex_), handler(handler_)
         {
         }

@@ -1918,7 +1918,7 @@ bool MergeTreeDataMergerMutator::checkOperationIsNotCanceled(const MergeListEntr
 
 /// Daisy : starts
 /// Merge sequence info from parts in a partition to new part
-SequenceInfoPtr MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, const Context & context)
+SequenceInfoPtr MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, ContextPtr context)
 {
     std::vector<SequenceInfoPtr> sequences;
 
@@ -1933,7 +1933,7 @@ SequenceInfoPtr MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeDat
         }
     }
 
-    return DB::mergeSequenceInfo(sequences, data.committedSN(), context.getSettingsRef().max_idempotent_ids, log);
+    return DB::mergeSequenceInfo(sequences, data.committedSN(), context->getSettingsRef().max_idempotent_ids, log);
 }
 /// Daisy : ends
 }

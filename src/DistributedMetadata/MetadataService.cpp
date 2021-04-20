@@ -24,7 +24,7 @@ namespace
     const String SYSTEM_ROLES_KEY = "system_settings.system_roles";
 }
 
-MetadataService::MetadataService(Context & global_context_, const String & service_name)
+MetadataService::MetadataService(const ContextPtr & global_context_, const String & service_name)
     : global_context(global_context_)
     , dwal(DistributedWriteAheadLogPool::instance(global_context_).getDefault())
     , log(&Poco::Logger::get(service_name))
@@ -156,7 +156,7 @@ void MetadataService::tailingRecords()
 
 void MetadataService::startup()
 {
-    const auto & config = global_context.getConfigRef();
+    const auto & config = global_context->getConfigRef();
 
     /// If this node has `target` role, start background thread tailing records
     Poco::Util::AbstractConfiguration::Keys role_keys;

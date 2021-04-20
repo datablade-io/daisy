@@ -37,8 +37,6 @@ namespace ErrorCodes
     extern const int UNKNOWN_DICTIONARY;
     extern const int NOT_IMPLEMENTED;
     extern const int INCORRECT_QUERY;
-    extern const int CONFIG_ERROR;
-    extern const int OK;
 }
 
 
@@ -92,12 +90,13 @@ void InterpreterDropQuery::waitForTableToBeActuallyDroppedOrDetached(const ASTDr
 /// Daisy : start
 bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
 {
-    if (!context.isDistributed())
+    auto ctx = getContext();
+    if (!ctx->isDistributed())
     {
         return false;
     }
 
-    if (!context.getQueryParameters().contains("_payload"))
+    if (!ctx->getQueryParameters().contains("_payload"))
     {
         /// FIXME:
         /// Build json payload here from SQL statement
@@ -105,9 +104,9 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
         return false;
     }
 
-    if(context.isDistributedDDLOperation())
+    if (ctx->isDistributedDDLOperation())
     {
-        const auto & catalog_service = CatalogService::instance(context);
+        const auto & catalog_service = CatalogService::instance(ctx);
         auto tables = catalog_service.findTableByName(query.database, query.table);
         if (tables.empty())
         {
@@ -122,14 +121,14 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
         auto * log = &Poco::Logger::get("InterpreterDropQuery");
 
         auto query_str = queryToString(query);
-        LOG_INFO(log, "Drop DistributedMergeTree query={} query_id={}", query_str, context.getCurrentQueryId());
+        LOG_INFO(log, "Drop DistributedMergeTree query={} query_id={}", query_str, ctx->getCurrentQueryId());
 
         std::vector<std::pair<String, String>> string_cols = {
-            {"payload", context.getQueryParameters().at("_payload")},
+            {"payload", ctx->getQueryParameters().at("_payload")},
             {"database", query.database},
             {"table", query.table},
-            {"query_id", context.getCurrentQueryId()},
-            {"user", context.getUserName()}
+            {"query_id", ctx->getCurrentQueryId()},
+            {"user", ctx->getUserName()}
         };
 
         std::vector<std::pair<String, Int32>> int32_cols;
@@ -143,10 +142,10 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
         Block block = buildBlock(string_cols, int32_cols, uint64_cols);
         /// Schema: (payload, database, table, timestamp, query_id, user)
 
-        appendBlock(std::move(block), context, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
+        appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
 
         LOG_INFO(
-            log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, context.getCurrentQueryId());
+            log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
 
         /// FIXME, project tasks status
         return true;

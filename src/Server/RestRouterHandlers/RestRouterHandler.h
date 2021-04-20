@@ -27,7 +27,7 @@ namespace ErrorCodes
 class RestRouterHandler : private boost::noncopyable
 {
 public:
-    RestRouterHandler(Context & query_context_, const String & router_name)
+    RestRouterHandler(ContextPtr query_context_, const String & router_name)
         : query_context(query_context_), log(&Poco::Logger::get(router_name))
     {
     }
@@ -103,7 +103,7 @@ public:
 protected:
     String jsonErrorResponse(const String & error_msg, int error_code) const
     {
-        return jsonErrorResponse(error_msg, error_code, query_context.getCurrentQueryId());
+        return jsonErrorResponse(error_msg, error_code, query_context->getCurrentQueryId());
     }
 
 private:
@@ -124,7 +124,7 @@ private:
 
     String execute(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
     {
-        const auto & client_info = query_context.getClientInfo();
+        const auto & client_info = query_context->getClientInfo();
 
         if (client_info.http_method == ClientInfo::HTTPMethod::GET)
         {
@@ -186,7 +186,7 @@ private:
     void setupQueryParams(const HTTPServerRequest & request) { query_parameters = std::make_unique<HTMLForm>(request); }
 
 protected:
-    Context & query_context;
+    ContextPtr query_context;
     Poco::Logger * log;
 
     std::unordered_map<String, String> path_parameters;

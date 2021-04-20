@@ -7,9 +7,9 @@ namespace DB
 class RawstoreTableRestRouterHandler final : public TableRestRouterHandler
 {
 public:
-    explicit RawstoreTableRestRouterHandler(Context & query_context_) : TableRestRouterHandler(query_context_, "RawStore")
+    explicit RawstoreTableRestRouterHandler(ContextPtr query_context_) : TableRestRouterHandler(query_context_, "RawStore")
     {
-        query_context.setQueryParameter("table_type", "rawstore");
+        query_context->setQueryParameter("table_type", "rawstore");
     }
     ~RawstoreTableRestRouterHandler() override { }
 

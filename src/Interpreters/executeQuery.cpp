@@ -51,9 +51,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/ProcessList.h>
 #include <Interpreters/QueryLog.h>
-#include <Interpreters/InterpreterSetQuery.h>
 #include <Interpreters/AddTimeParamVisitor.h>
-#include <Interpreters/ApplyWithGlobalVisitor.h>
 #include <Interpreters/ReplaceQueryParameterVisitor.h>
 #include <Interpreters/SelectQueryOptions.h>
 #include <Interpreters/executeQuery.h>
@@ -93,11 +91,11 @@ namespace
 /// Daisy : starts
 /// If there are any table definition changes locally on the node
 /// broadcast the table definitions to notify all CatalogService
-void broadcastCatalogIfNecessary(const ASTPtr & ast, Context & context)
+void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextPtr & context)
 {
     if (auto create = ast->as<ASTCreateQuery>())
     {
-        if (!create->database.empty() && !create->table.empty() && !context.isDistributedDDLOperation())
+        if (!create->database.empty() && !create->table.empty() && !context->isDistributedDDLOperation())
         {
             CatalogService::instance(context).broadcast();
         }
@@ -105,7 +103,7 @@ void broadcastCatalogIfNecessary(const ASTPtr & ast, Context & context)
 
     if (ast->as<ASTDropQuery>() || ast->as<ASTAlterQuery>())
     {
-        CatalogService::instance(context.getGlobalContext()).broadcast();
+        CatalogService::instance(context->getGlobalContext()).broadcast();
     }
 }
 /// Daisy : ends
@@ -532,7 +530,7 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
         NormalizeSelectWithUnionQueryVisitor{data}.visit(ast);
 
         /// Daisy : starts. Add time param into AST
-        if (!context.getTimeParam().empty())
+        if (!context->getTimeParam().empty())
         {
             AddTimeParamVisitor visitor(context);
             visitor.visit(ast);
@@ -621,12 +619,12 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
             if (!table_id.empty())
                 context->setInsertionTable(std::move(table_id));
             {
-                context.setInsertionTable(std::move(table_id));
+                context->setInsertionTable(std::move(table_id));
                 /// Daisy : starts
                 /// Setup poll ID for ingestion status querying
-                if (context.getIngestMode() == "async")
+                if (context->getIngestMode() == "async")
                 {
-                    context.getQueryContext().setupQueryStatusPollId();
+                    context->getQueryContext()->setupQueryStatusPollId();
                 }
                 /// Daisy : ends
             }

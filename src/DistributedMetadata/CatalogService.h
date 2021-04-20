@@ -91,9 +91,9 @@ public:
     using NodePtr = std::shared_ptr<Node>;
 
 public:
-    static CatalogService & instance(Context & context_);
+    static CatalogService & instance(const ContextPtr & context_);
 
-    explicit CatalogService(Context & context_);
+    explicit CatalogService(const ContextPtr & context_);
     virtual ~CatalogService() override = default;
 
     /// `broadcast` broadcasts the table catalog metadata on this node

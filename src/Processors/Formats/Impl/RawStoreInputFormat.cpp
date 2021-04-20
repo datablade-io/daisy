@@ -2,6 +2,7 @@
 #include <IO/ReadHelpers.h>
 
 #include <DataTypes/DataTypeNullable.h>
+#include <DataTypes/Serializations/SerializationNullable.h>
 #include <DataTypes/NestedUtils.h>
 #include <Formats/FormatFactory.h>
 #include <Formats/JSONEachRowUtils.h>
@@ -166,6 +167,7 @@ void RawStoreInputFormat::readField(size_t index, MutableColumns & columns)
     {
         seen_columns[index] = read_columns[index] = true;
         const auto & type = getPort().getHeader().getByPosition(index).type;
+        const auto & serialization = serializations[index];
 
         if (yield_strings)
         {
@@ -175,16 +177,16 @@ void RawStoreInputFormat::readField(size_t index, MutableColumns & columns)
             ReadBufferFromString buf(str);
 
             if (format_settings.null_as_default && !type->isNullable())
-                read_columns[index] = DataTypeNullable::deserializeWholeText(*columns[index], buf, format_settings, type);
+                read_columns[index] = SerializationNullable::deserializeWholeTextImpl(*columns[index], buf, format_settings, serialization);
             else
-                type->deserializeAsWholeText(*columns[index], buf, format_settings);
+                serialization->deserializeWholeText(*columns[index], buf, format_settings);
         }
         else
         {
             if (format_settings.null_as_default && !type->isNullable())
-                read_columns[index] = DataTypeNullable::deserializeTextJSON(*columns[index], in, format_settings, type);
+                read_columns[index] = SerializationNullable::deserializeTextJSONImpl(*columns[index], in, format_settings, serialization);
             else
-                type->deserializeAsTextJSON(*columns[index], in, format_settings);
+                serialization->deserializeTextJSON(*columns[index], in, format_settings);
         }
     }
     catch (Exception & e)
@@ -300,7 +302,7 @@ void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn &
             "extract _time from _raw failed with rule: " + format_settings.rawstore.rawstore_time_extraction_rule,
             ErrorCodes::INCORRECT_DATA);
 
-    /// Wrap the time with \" to allow deserializeAsTextJSON to get the correct value
+    /// Wrap the time with \" to allow deserializeTextJSON to get the correct value
     String s;
     s.append("\"");
     s.append(time);
@@ -308,8 +310,7 @@ void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn &
 
     ReadBufferFromString buf(s);
 
-    const auto & type = getPort().getHeader().getByPosition(time_col_idx).type;
-    type->deserializeAsTextJSON(time_col, buf, format_settings);
+    serializations[time_col_idx]->deserializeTextJSON(time_col, buf, format_settings);
 }
 
 void RawStoreInputFormat::extractTimeFromRawByRegex(IColumn & time_col, IColumn & raw_col)
@@ -336,8 +337,7 @@ void RawStoreInputFormat::extractTimeFromRawByRegex(IColumn & time_col, IColumn 
     s.append("\"");
     ReadBufferFromString buf(s);
 
-    const auto & type = getPort().getHeader().getByPosition(time_col_idx).type;
-    type->deserializeAsTextJSON(time_col, buf, format_settings);
+    serializations[time_col_idx]->deserializeTextJSON(time_col, buf, format_settings);
 }
 
 bool RawStoreInputFormat::readRow(MutableColumns & columns, RowReadExtension & ext)
@@ -439,7 +439,7 @@ void RawStoreInputFormat::readSuffix()
 void registerInputFormatProcessorRawStoreEachRow(FormatFactory & factory)
 {
     factory.registerInputFormatProcessor(
-        "RawStoreEachRow", [](ReadBuffer & buf, const Block & sample, IRowInputFormat::Params params, const FormatSettings & settings) {
+        "RawStoreEachRow", [](ReadBuffer & buf, const Block & sample, IRowInputFormat::Params params, const FormatSettings & settings) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
             return std::make_shared<RawStoreInputFormat>(buf, sample, std::move(params), settings, false);
         });
 }

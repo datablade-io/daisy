@@ -100,15 +100,15 @@ namespace
 
 }
 
-DDLService & DDLService::instance(Context & global_context_)
+DDLService & DDLService::instance(const ContextPtr & global_context_)
 {
     static DDLService ddl_service{global_context_};
     return ddl_service;
 }
 
-DDLService::DDLService(Context & global_context_)
+DDLService::DDLService(const ContextPtr & global_context_)
     : MetadataService(global_context_, "DDLService")
-    , http_port(":" + global_context_.getConfigRef().getString("http_port"))
+    , http_port(":" + global_context_->getConfigRef().getString("http_port"))
     , catalog(CatalogService::instance(global_context_))
     , placement(PlacementService::instance(global_context_))
     , task(TaskStatusService::instance(global_context_))

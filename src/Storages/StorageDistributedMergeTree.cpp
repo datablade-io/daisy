@@ -32,6 +32,7 @@ namespace ErrorCodes
     extern const int OK;
     extern const int UNABLE_TO_SKIP_UNUSED_SHARDS;
     extern const int TOO_MANY_ROWS;
+    extern const int ARGUMENT_OUT_OF_BOUND;
 }
 
 namespace
@@ -41,7 +42,7 @@ const UInt64 FORCE_OPTIMIZE_SKIP_UNUSED_SHARDS_ALWAYS = 2;
 const UInt64 DISTRIBUTED_GROUP_BY_NO_MERGE_AFTER_AGGREGATION = 2;
 
 ExpressionActionsPtr
-buildShardingKeyExpression(const ASTPtr & sharding_key, const Context & context, const NamesAndTypesList & columns, bool project)
+buildShardingKeyExpression(const ASTPtr & sharding_key, ContextPtr context, const NamesAndTypesList & columns, bool project)
 {
     ASTPtr query = sharding_key;
     auto syntax_result = TreeRewriter(context).analyze(query, columns);
@@ -90,7 +91,7 @@ public:
 
 void replaceConstantExpressions(
     ASTPtr & node,
-    const Context & context,
+    ContextPtr context,
     const NamesAndTypesList & columns,
     ConstStoragePtr storage,
     const StorageMetadataPtr & metadata_snapshot)
@@ -206,7 +207,7 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     const String & relative_data_path_,
     const StorageInMemoryMetadata & metadata_,
     bool attach_,
-    Context & context_,
+    ContextPtr context_,
     const String & date_column_name_,
     const MergingParams & merging_params_,
     std::unique_ptr<MergeTreeSettings> settings_,
@@ -224,7 +225,7 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     , replication_factor(replication_factor_)
     , shards(shards_)
     , ingesting_blocks(IngestingBlocks::instance())
-    , part_commit_pool(context_.getPartCommitPool())
+    , part_commit_pool(context_->getPartCommitPool())
     , rng(randomSeed())
 {
     if (!relative_data_path_.empty())
@@ -262,22 +263,24 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
 
     if (sharding_key_)
     {
-        sharding_key_expr = buildShardingKeyExpression(sharding_key_, global_context, metadata_.getColumns().getAllPhysical(), false);
+        sharding_key_expr = buildShardingKeyExpression(sharding_key_, getContext(), metadata_.getColumns().getAllPhysical(), false);
         sharding_key_is_deterministic = isExpressionActionsDeterministics(sharding_key_expr);
         sharding_key_column_name = sharding_key_->getColumnName();
     }
 }
 
 void StorageDistributedMergeTree::readRemote(
-    QueryPlan & query_plan, SelectQueryInfo & query_info, const Context & context, QueryProcessingStage::Enum processed_stage)
+    QueryPlan & query_plan, SelectQueryInfo & query_info, ContextPtr context_, QueryProcessingStage::Enum processed_stage)
 {
-    Block header = InterpreterSelectQuery(query_info.query, context, SelectQueryOptions(processed_stage)).getSampleBlock();
-    const Scalars & scalars = context.hasQueryContext() ? context.getQueryContext().getScalars() : Scalars{};
+    Block header = InterpreterSelectQuery(query_info.query, context_, SelectQueryOptions(processed_stage)).getSampleBlock();
+    const Scalars & scalars = context_->hasQueryContext() ? context_->getQueryContext()->getScalars() : Scalars{};
 
     ClusterProxy::DistributedSelectStreamFactory select_stream_factory
-        = ClusterProxy::DistributedSelectStreamFactory(header, processed_stage, getStorageID(), scalars, context.getExternalTables());
+        = ClusterProxy::DistributedSelectStreamFactory(header, processed_stage, getStorageID(), scalars, context_->getExternalTables());
 
-    ClusterProxy::executeQuery(query_plan, select_stream_factory, log, query_info.query, context, query_info);
+    (void) query_plan;
+    /// FIXME : changed
+    /// ClusterProxy::executeQuery(query_plan, select_stream_factory, log, query_info.query, context_, query_info);
 }
 
 void StorageDistributedMergeTree::read(
@@ -285,7 +288,7 @@ void StorageDistributedMergeTree::read(
     const Names & column_names,
     const StorageMetadataPtr & metadata_snapshot,
     SelectQueryInfo & query_info,
-    const Context & context,
+    ContextPtr context_,
     QueryProcessingStage::Enum processed_stage,
     size_t max_block_size,
     unsigned num_streams)
@@ -293,11 +296,11 @@ void StorageDistributedMergeTree::read(
     if (isRemote())
     {
         /// This is a distributed query
-        readRemote(query_plan, query_info, context, processed_stage);
+        readRemote(query_plan, query_info, context_, processed_stage);
     }
     else
     {
-        storage->read(query_plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+        storage->read(query_plan, column_names, metadata_snapshot, query_info, context_, processed_stage, max_block_size, num_streams);
     }
 }
 
@@ -305,14 +308,14 @@ Pipe StorageDistributedMergeTree::read(
     const Names & column_names,
     const StorageMetadataPtr & metadata_snapshot,
     SelectQueryInfo & query_info,
-    const Context & context,
+    ContextPtr context_,
     QueryProcessingStage::Enum processed_stage,
     size_t max_block_size,
     unsigned num_streams)
 {
     QueryPlan plan;
-    read(plan, column_names, metadata_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
-    return plan.convertToPipe(QueryPlanOptimizationSettings::fromContext(context), BuildQueryPipelineSettings::fromContext(context));
+    read(plan, column_names, metadata_snapshot, query_info, context_, processed_stage, max_block_size, num_streams);
+    return plan.convertToPipe(QueryPlanOptimizationSettings::fromContext(context_), BuildQueryPipelineSettings::fromContext(context_));
 }
 
 void StorageDistributedMergeTree::startup()
@@ -368,9 +371,9 @@ std::optional<UInt64> StorageDistributedMergeTree::totalRows(const Settings & se
 }
 
 std::optional<UInt64>
-StorageDistributedMergeTree::totalRowsByPartitionPredicate(const SelectQueryInfo & query_info, const Context & context) const
+StorageDistributedMergeTree::totalRowsByPartitionPredicate(const SelectQueryInfo & query_info, ContextPtr context_) const
 {
-    return storage->totalRowsByPartitionPredicate(query_info, context);
+    return storage->totalRowsByPartitionPredicate(query_info, context_);
 }
 
 std::optional<UInt64> StorageDistributedMergeTree::totalBytes(const Settings & settings) const
@@ -379,9 +382,9 @@ std::optional<UInt64> StorageDistributedMergeTree::totalBytes(const Settings & s
 }
 
 BlockOutputStreamPtr
-StorageDistributedMergeTree::write(const ASTPtr & /*query*/, const StorageMetadataPtr & metadata_snapshot, const Context & context)
+StorageDistributedMergeTree::write(const ASTPtr & /*query*/, const StorageMetadataPtr & metadata_snapshot, ContextPtr context_)
 {
-    return std::make_shared<DistributedMergeTreeBlockOutputStream>(*this, metadata_snapshot, context);
+    return std::make_shared<DistributedMergeTreeBlockOutputStream>(*this, metadata_snapshot, context_);
 }
 
 void StorageDistributedMergeTree::checkTableCanBeDropped() const
@@ -395,14 +398,14 @@ void StorageDistributedMergeTree::drop()
     storage->drop();
 }
 
-void StorageDistributedMergeTree::truncate(const ASTPtr & query, const StorageMetadataPtr & metadata_snapshot, const Context & context, TableExclusiveLockHolder & holder)
+void StorageDistributedMergeTree::truncate(const ASTPtr & query, const StorageMetadataPtr & metadata_snapshot, ContextPtr context_, TableExclusiveLockHolder & holder)
 {
-    storage->truncate(query, metadata_snapshot, context, holder);
+    storage->truncate(query, metadata_snapshot, context_, holder);
 }
 
-void StorageDistributedMergeTree::alter(const AlterCommands & commands, const Context & context, TableLockHolder & table_lock_holder)
+void StorageDistributedMergeTree::alter(const AlterCommands & commands, ContextPtr context_, TableLockHolder & table_lock_holder)
 {
-    storage->alter(commands, context, table_lock_holder);
+    storage->alter(commands, context_, table_lock_holder);
 }
 
 NamesAndTypesList StorageDistributedMergeTree::getVirtuals() const
@@ -417,14 +420,14 @@ bool StorageDistributedMergeTree::optimize(
     bool finall,
     bool deduplicate,
     const Names & deduplicate_by_columns,
-    const Context & context)
+    ContextPtr context_)
 {
-    return storage->optimize(query, metadata_snapshot, partition, finall, deduplicate, deduplicate_by_columns, context);
+    return storage->optimize(query, metadata_snapshot, partition, finall, deduplicate, deduplicate_by_columns, context_);
 }
 
-void StorageDistributedMergeTree::mutate(const MutationCommands & commands, const Context & context)
+void StorageDistributedMergeTree::mutate(const MutationCommands & commands, ContextPtr context_)
 {
-    storage->mutate(commands, context);
+    storage->mutate(commands, context_);
 }
 
 /// Return introspection information about currently processing or recently processed mutations.
@@ -448,9 +451,9 @@ void StorageDistributedMergeTree::onActionLockRemove(StorageActionBlockType acti
     storage->onActionLockRemove(action_type);
 }
 
-CheckResults StorageDistributedMergeTree::checkData(const ASTPtr & query, const Context & context)
+CheckResults StorageDistributedMergeTree::checkData(const ASTPtr & query, ContextPtr context_)
 {
-    return storage->checkData(query, context);
+    return storage->checkData(query, context_);
 }
 
 std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
@@ -459,37 +462,37 @@ std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
 }
 
 QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStage(
-    const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
+    ContextPtr context_, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
 {
     if (isRemote())
     {
-        return getQueryProcessingStageRemote(context, to_stage, query_info);
+        return getQueryProcessingStageRemote(context_, to_stage, query_info);
     }
     else
     {
-        return storage->getQueryProcessingStage(context, to_stage, query_info);
+        return storage->getQueryProcessingStage(context_, to_stage, query_info);
     }
 }
 
-void StorageDistributedMergeTree::dropPartition(const ASTPtr & partition, bool detach, bool drop_part, const Context & context, bool throw_if_noop)
+void StorageDistributedMergeTree::dropPartition(const ASTPtr & partition, bool detach, bool drop_part, ContextPtr context_, bool throw_if_noop)
 {
-    storage->dropPartition(partition, detach, drop_part, context, throw_if_noop);
+    storage->dropPartition(partition, detach, drop_part, context_, throw_if_noop);
 }
 
 PartitionCommandsResultInfo StorageDistributedMergeTree::attachPartition(
-    const ASTPtr & partition, const StorageMetadataPtr & metadata_snapshot, bool part, const Context & context)
+    const ASTPtr & partition, const StorageMetadataPtr & metadata_snapshot, bool part, ContextPtr context_)
 {
-    return storage->attachPartition(partition, metadata_snapshot, part, context);
+    return storage->attachPartition(partition, metadata_snapshot, part, context_);
 }
 
-void StorageDistributedMergeTree::replacePartitionFrom(const StoragePtr & source_table, const ASTPtr & partition, bool replace, const Context & context)
+void StorageDistributedMergeTree::replacePartitionFrom(const StoragePtr & source_table, const ASTPtr & partition, bool replace, ContextPtr context_)
 {
-    storage->replacePartitionFrom(source_table, partition, replace, context);
+    storage->replacePartitionFrom(source_table, partition, replace, context_);
 }
 
-void StorageDistributedMergeTree::movePartitionToTable(const StoragePtr & dest_table, const ASTPtr & partition, const Context & context)
+void StorageDistributedMergeTree::movePartitionToTable(const StoragePtr & dest_table, const ASTPtr & partition, ContextPtr context_)
 {
-    storage->movePartitionToTable(dest_table, partition, context);
+    storage->movePartitionToTable(dest_table, partition, context_);
 }
 
 /// If part is assigned to merge or mutation (possibly replicated)
@@ -519,13 +522,13 @@ void StorageDistributedMergeTree::startBackgroundMovesIfNeeded()
 ClusterPtr StorageDistributedMergeTree::getCluster() const
 {
     auto sid = getStorageID();
-    return CatalogService::instance(global_context).tableCluster(sid.database_name, sid.table_name, replication_factor, shards);
+    return CatalogService::instance(getContext()).tableCluster(sid.database_name, sid.table_name, replication_factor, shards);
 }
 
 /// Returns a new cluster with fewer shards if constant folding for `sharding_key_expr` is possible
 /// using constraints from "PREWHERE" and "WHERE" conditions, otherwise returns `nullptr`
 ClusterPtr StorageDistributedMergeTree::skipUnusedShards(
-    ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, const Context & context) const
+    ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, ContextPtr context_) const
 {
     const auto & select = query_ptr->as<ASTSelectQuery &>();
 
@@ -544,8 +547,24 @@ ClusterPtr StorageDistributedMergeTree::skipUnusedShards(
         condition_ast = select.prewhere() ? select.prewhere()->clone() : select.where()->clone();
     }
 
-    replaceConstantExpressions(condition_ast, context, metadata_snapshot->getColumns().getAll(), shared_from_this(), metadata_snapshot);
-    const auto blocks = evaluateExpressionOverConstantCondition(condition_ast, sharding_key_expr);
+    replaceConstantExpressions(condition_ast, context_, metadata_snapshot->getColumns().getAll(), shared_from_this(), metadata_snapshot);
+
+    size_t limit = context_->getSettingsRef().optimize_skip_unused_shards_limit;
+    if (!limit || limit > LONG_MAX)
+    {
+        throw Exception("optimize_skip_unused_shards_limit out of range (0, {}]", ErrorCodes::ARGUMENT_OUT_OF_BOUND, LONG_MAX);
+    }
+    ++limit;
+    const auto blocks = evaluateExpressionOverConstantCondition(condition_ast, sharding_key_expr, limit);
+
+    if (!limit)
+    {
+        LOG_TRACE(log,
+            "Number of values for sharding key exceeds optimize_skip_unused_shards_limit={}, "
+            "try to increase it, but note that this may increase query processing time.",
+            context_->getSettingsRef().optimize_skip_unused_shards_limit);
+        return nullptr;
+    }
 
     /// Can't get definite answer if we can skip any shards
     if (!blocks)
@@ -572,16 +591,16 @@ ClusterPtr StorageDistributedMergeTree::skipUnusedShards(
 }
 
 ClusterPtr StorageDistributedMergeTree::getOptimizedCluster(
-    const Context & context, const StorageMetadataPtr & metadata_snapshot, const ASTPtr & query_ptr) const
+    ContextPtr context_, const StorageMetadataPtr & metadata_snapshot, const ASTPtr & query_ptr) const
 {
     ClusterPtr cluster = getCluster();
-    const Settings & settings = context.getSettingsRef();
+    const Settings & settings = context_->getSettingsRef();
 
     bool sharding_key_is_usable = settings.allow_nondeterministic_optimize_skip_unused_shards || sharding_key_is_deterministic;
 
     if (sharding_key_expr && sharding_key_is_usable)
     {
-        ClusterPtr optimized = skipUnusedShards(cluster, query_ptr, metadata_snapshot, context);
+        ClusterPtr optimized = skipUnusedShards(cluster, query_ptr, metadata_snapshot, context_);
         if (optimized)
         {
             return optimized;
@@ -620,9 +639,9 @@ ClusterPtr StorageDistributedMergeTree::getOptimizedCluster(
 }
 
 QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageRemote(
-    const Context & context, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
+    ContextPtr context_, QueryProcessingStage::Enum to_stage, SelectQueryInfo & query_info) const
 {
-    const auto & settings = context.getSettingsRef();
+    const auto & settings = context_->getSettingsRef();
 
     ClusterPtr cluster = getCluster();
     query_info.cluster = cluster;
@@ -631,7 +650,7 @@ QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageR
     if (settings.optimize_skip_unused_shards)
     {
         auto metadata_snapshot = getInMemoryMetadataPtr();
-        ClusterPtr optimized_cluster = getOptimizedCluster(context, metadata_snapshot, query_info.query);
+        ClusterPtr optimized_cluster = getOptimizedCluster(context_, metadata_snapshot, query_info.query);
         if (optimized_cluster)
         {
             LOG_DEBUG(log, "Skipping irrelevant shards - the query will be sent to the following shards of the cluster (shard numbers): {}", makeFormattedListOfShards(optimized_cluster));
@@ -970,7 +989,7 @@ void StorageDistributedMergeTree::doCommit(
         {
             try
             {
-                auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), global_context);
+                auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), getContext());
 
                 /// Setup sequence numbers to persistent them to file system
                 static_cast<MergeTreeBlockOutputStream *>(output_stream.get())
@@ -1016,7 +1035,7 @@ void StorageDistributedMergeTree::buildIdempotentKeysIndex(const std::deque<std:
 /// Add with lock held
 inline void StorageDistributedMergeTree::addIdempotentKey(const String & key)
 {
-    if (idempotent_keys.size() >= global_context.getSettingsRef().max_idempotent_ids)
+    if (idempotent_keys.size() >= getContext()->getSettingsRef().max_idempotent_ids)
     {
         auto removed = idempotent_keys_index.erase(*idempotent_keys.front());
         (void)removed;
@@ -1290,11 +1309,11 @@ void StorageDistributedMergeTree::initWal()
 
     if (ssettings->dwal_cluster_id.value.empty())
     {
-        dwal = DistributedWriteAheadLogPool::instance(global_context).getDefault();
+        dwal = DistributedWriteAheadLogPool::instance(getContext()).getDefault();
     }
     else
     {
-        dwal = DistributedWriteAheadLogPool::instance(global_context).get(ssettings->dwal_cluster_id.value);
+        dwal = DistributedWriteAheadLogPool::instance(getContext()).get(ssettings->dwal_cluster_id.value);
     }
 
     if (!dwal)

@@ -262,7 +262,7 @@ If you use the Replicated version of engines, see https://clickhouse.tech/docs/e
 }
 
 /// Daisy : starts
-static ExpressionActionsPtr buildShardingKeyExpression(const ASTPtr & sharding_key, const Context & context, const NamesAndTypesList & columns, bool project)
+static ExpressionActionsPtr buildShardingKeyExpression(const ASTPtr & sharding_key, ContextPtr context, const NamesAndTypesList & columns, bool project)
 {
     ASTPtr query = sharding_key;
     auto syntax_result = TreeRewriter(context).analyze(query, columns);
@@ -305,7 +305,7 @@ static std::tuple<UInt64, UInt64, ASTPtr> distributedParameters(const StorageFac
     const auto & sharding_key = engine_args[2];
     if (sharding_key)
     {
-        auto sharding_expr = buildShardingKeyExpression(sharding_key, args.context, args.columns.getAllPhysical(), true);
+        auto sharding_expr = buildShardingKeyExpression(sharding_key, args.getLocalContext(), args.columns.getAllPhysical(), true);
         const Block & block = sharding_expr->getSampleBlock();
 
         if (block.columns() != 1)
@@ -325,7 +325,7 @@ static std::tuple<UInt64, UInt64, ASTPtr> distributedParameters(const StorageFac
 
     return {replication_factor, shards, engine_args[2]};
 }
-/// Daisy : ends 
+/// Daisy : ends
 
 static StoragePtr create(const StorageFactory::Arguments & args)
 {
@@ -902,7 +902,7 @@ static StoragePtr create(const StorageFactory::Arguments & args)
             args.relative_data_path,
             metadata,
             args.attach,
-            args.context,
+            args.getContext(),
             date_column_name,
             merging_params,
             std::move(storage_settings),

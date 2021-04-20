@@ -61,7 +61,7 @@ public:
     void setDetachedTableNotInUseForce(const UUID & uuid);
 
     /// Daisy : starts
-    StoragePtr tryGetTable(const String & table_name, const Context &) const override;
+    StoragePtr tryGetTable(const String & table_name, ContextPtr context) const override;
     /// Daisy : ends
 
 protected:
