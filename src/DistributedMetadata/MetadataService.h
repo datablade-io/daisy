@@ -24,6 +24,7 @@ public:
 
 private:
     void tailingRecords();
+    void doTailingRecords();
     virtual void postStartup() {}
     virtual void preShutdown() {}
     virtual void processRecords(const IDistributedWriteAheadLog::RecordPtrs & records) = 0;
@@ -31,8 +32,9 @@ private:
     virtual String cleanupPolicy() const { return "delete"; }
     virtual std::pair<Int32, Int32> batchSizeAndTimeout() const { return std::make_pair(100, 500); }
 
-    /// create DWal on server
+    /// Create DWal on server
     void createDWal();
+    void waitUntilDWalReady(std::any & ctx);
 
 protected:
     void doCreateDWal(std::any & ctx);
@@ -52,6 +54,7 @@ protected:
         Int32 request_timeout_ms = 10000;
         /// Consumer
         String auto_offset_reset = "earliest";
+        Int64 initial_default_offset = -2;
     };
     virtual ConfigSettings configSettings() const = 0;
 

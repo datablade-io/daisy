@@ -56,6 +56,7 @@ MetadataService::ConfigSettings PlacementService::configSettings() const
         .request_required_acks = 1,
         .request_timeout_ms = 10000,
         .auto_offset_reset = "earliest",
+        .initial_default_offset = -2,
     };
 }
 
@@ -202,6 +203,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
 
 void PlacementService::scheduleBroadcast()
 {
+#if 0
     if (!global_context->isDistributed())
     {
         return;
@@ -212,6 +214,7 @@ void PlacementService::scheduleBroadcast()
     broadcast_task = std::make_unique<BackgroundSchedulePoolTaskHolder>(std::move(task_holder));
     (*broadcast_task)->activate();
     (*broadcast_task)->schedule();
+#endif
 }
 
 void PlacementService::broadcast()
