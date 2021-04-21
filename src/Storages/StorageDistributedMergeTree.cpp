@@ -15,6 +15,8 @@
 #include <Processors/Pipe.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
+#include <Processors/QueryPlan/ReadFromPreparedSource.h>
+#include <Processors/Sources/NullSource.h>
 #include <Storages/MergeTree/DistributedMergeTreeBlockOutputStream.h>
 #include <Storages/MergeTree/MergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
@@ -273,14 +275,32 @@ void StorageDistributedMergeTree::readRemote(
     QueryPlan & query_plan, SelectQueryInfo & query_info, ContextPtr context_, QueryProcessingStage::Enum processed_stage)
 {
     Block header = InterpreterSelectQuery(query_info.query, context_, SelectQueryOptions(processed_stage)).getSampleBlock();
+
+    /// Return directly (with correct header) if no shard to query.
+    if (query_info.getCluster()->getShardsInfo().empty())
+    {
+        Pipe pipe(std::make_shared<NullSource>(header));
+        auto read_from_pipe = std::make_unique<ReadFromPreparedSource>(std::move(pipe));
+        read_from_pipe->setStepDescription("Read from NullSource (Distributed)");
+        query_plan.addStep(std::move(read_from_pipe));
+        return;
+    }
+
     const Scalars & scalars = context_->hasQueryContext() ? context_->getQueryContext()->getScalars() : Scalars{};
 
     ClusterProxy::DistributedSelectStreamFactory select_stream_factory
         = ClusterProxy::DistributedSelectStreamFactory(header, processed_stage, getStorageID(), scalars, context_->getExternalTables());
 
-    (void) query_plan;
-    /// FIXME : changed
-    /// ClusterProxy::executeQuery(query_plan, select_stream_factory, log, query_info.query, context_, query_info);
+    ClusterProxy::executeQuery(
+        query_plan,
+        select_stream_factory,
+        log,
+        query_info.query,
+        context_,
+        query_info,
+        sharding_key_expr,
+        sharding_key_column_name,
+        query_info.cluster);
 }
 
 void StorageDistributedMergeTree::read(
@@ -518,7 +538,7 @@ void StorageDistributedMergeTree::startBackgroundMovesIfNeeded()
 }
 
 /// Distributed query related functions
-
+/// FIXME, cache it ?
 ClusterPtr StorageDistributedMergeTree::getCluster() const
 {
     auto sid = getStorageID();
@@ -635,7 +655,7 @@ ClusterPtr StorageDistributedMergeTree::getOptimizedCluster(
         }
     }
 
-    return cluster;
+    return {};
 }
 
 QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageRemote(
@@ -655,7 +675,7 @@ QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStageR
         {
             LOG_DEBUG(log, "Skipping irrelevant shards - the query will be sent to the following shards of the cluster (shard numbers): {}", makeFormattedListOfShards(optimized_cluster));
             cluster = optimized_cluster;
-            query_info.cluster = cluster;
+            query_info.optimized_cluster = cluster;
         }
         else
         {
