@@ -487,7 +487,7 @@ bool TaskStatusService::createTaskTable()
                     SETTINGS index_granularity = 8192", replicas);
 
     /// FIXME: Remove query_payload when the sql interface is implemented
-    String query_payload = R"d(\{
+    String query_payload = R"d({
         "name" : "tasks",
         "shards": 1,
         "replication_factor": )d" + replicas + R"d(,
