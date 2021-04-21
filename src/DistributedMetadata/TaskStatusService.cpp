@@ -16,6 +16,8 @@
 #include <common/DateLUT.h>
 #include <common/logger_useful.h>
 
+#include <Poco/Util/Application.h>
+
 #include <chrono>
 #include <mutex>
 #include <sstream>
@@ -462,7 +464,10 @@ void TaskStatusService::persistentFinishedTask()
 
 bool TaskStatusService::createTaskTable()
 {
-    const auto replicas = configSettings().replication_factor_key;
+    const auto & config = global_context->getConfigRef();
+    const auto & conf = configSettings();
+    const auto replicas = std::to_string(config.getInt(conf.replication_factor_key, 1));
+
     String query = fmt::format("CREATE TABLE IF NOT EXISTS \
                     system.tasks \
                     ( \
