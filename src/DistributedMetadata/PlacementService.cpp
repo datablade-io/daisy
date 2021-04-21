@@ -203,7 +203,6 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
 
 void PlacementService::scheduleBroadcast()
 {
-#if 0
     if (!global_context->isDistributed())
     {
         return;
@@ -214,7 +213,6 @@ void PlacementService::scheduleBroadcast()
     broadcast_task = std::make_unique<BackgroundSchedulePoolTaskHolder>(std::move(task_holder));
     (*broadcast_task)->activate();
     (*broadcast_task)->schedule();
-#endif
 }
 
 void PlacementService::broadcast()
