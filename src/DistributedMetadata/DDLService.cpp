@@ -126,6 +126,7 @@ MetadataService::ConfigSettings DDLService::configSettings() const
         .request_required_acks = -1,
         .request_timeout_ms = 10000,
         .auto_offset_reset = "earliest",
+        .initial_default_offset = -1000,
     };
 }
 

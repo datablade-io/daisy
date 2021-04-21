@@ -82,7 +82,24 @@ void MetadataService::doDeleteDWal(std::any & ctx)
     }
 }
 
-/// try indefinitely to create dwal
+void MetadataService::waitUntilDWalReady(std::any & ctx)
+{
+    auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
+    while (1)
+    {
+        if (dwal->describe(kctx.topic, ctx) == ErrorCodes::OK)
+        {
+            return;
+        }
+        else
+        {
+            LOG_INFO(log, "Wait for topic={} to be ready...", kctx.topic);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        }
+    }
+}
+
+/// Try indefinitely to create dwal
 void MetadataService::doCreateDWal(std::any & ctx)
 {
     auto kctx = std::any_cast<DistributedWriteAheadLogKafkaContext &>(ctx);
@@ -113,6 +130,8 @@ void MetadataService::doCreateDWal(std::any & ctx)
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         }
     }
+
+    waitUntilDWalReady(ctx);
 }
 
 void MetadataService::createDWal()
@@ -122,16 +141,29 @@ void MetadataService::createDWal()
 
 void MetadataService::tailingRecords()
 {
+    try
+    {
+        doTailingRecords();
+    }
+    catch (...)
+    {
+        LOG_ERROR(log, "Failed to consume data, exception={}", getCurrentExceptionMessage(true, true));
+    }
+}
+
+void MetadataService::doTailingRecords()
+{
     auto thr_name = log->name();
     if (thr_name.size() > 15)
     {
-        thr_name = String{log->name().begin(), log->name().begin() + 14};
+        thr_name = String{thr_name.begin(), thr_name.begin() + 14};
     }
 
     setThreadName(thr_name.c_str());
-    createDWal();
 
     auto [ batch, timeout ] = batchSizeAndTimeout();
+
+    LOG_INFO(log, "Starting tailing records");
 
     while (!stopped.test())
     {
@@ -162,39 +194,41 @@ void MetadataService::startup()
     Poco::Util::AbstractConfiguration::Keys role_keys;
     config.keys(SYSTEM_ROLES_KEY, role_keys);
 
-    const String & this_role = role();
+    /// Every service on every node has data producing capability
+    /// For example, every node can call produce node metrics via PlacementService
+    const auto & conf = configSettings();
 
+    String topic = config.getString(conf.name_key, conf.default_name);
+    auto replication_factor = config.getInt(conf.replication_factor_key, 1);
+    DistributedWriteAheadLogKafkaContext kctx{topic, 1, replication_factor, cleanupPolicy()};
+    /// Topic settings
+    kctx.retention_ms = config.getInt(conf.data_retention_key, conf.default_data_retention);
+    if (kctx.retention_ms > 0)
+    {
+        kctx.retention_ms *= 3600 * 1000;
+    }
+
+    /// Producer settings
+    kctx.request_required_acks = conf.request_required_acks;
+    kctx.request_timeout_ms = conf.request_timeout_ms;
+
+    std::any append_ctx = kctx;
+
+    const String & this_role = role();
     for (const auto & key : role_keys)
     {
+        /// Node only with corresponding service role has corresponding data consuming capability
         if (config.getString(SYSTEM_ROLES_KEY + "." + key, "") == this_role)
         {
             LOG_INFO(log, "Detects the current log has `{}` role", this_role);
 
-            const auto & conf = configSettings();
-
-            String topic = config.getString(conf.name_key, conf.default_name);
-            auto replication_factor = config.getInt(conf.replication_factor_key, 1);
-            DistributedWriteAheadLogKafkaContext kctx{topic, 1, replication_factor, cleanupPolicy()};
-            /// Topic settings
-            kctx.retention_ms = config.getInt(conf.data_retention_key, conf.default_data_retention);
-            if (kctx.retention_ms > 0)
-            {
-                kctx.retention_ms *= 3600 * 1000;
-            }
+            /// First try to create corresponding dwal
+            doCreateDWal(append_ctx);
 
             /// Consumer settings
             kctx.auto_offset_reset = conf.auto_offset_reset;
-
-            /// Producer settings
-            kctx.request_required_acks = conf.request_required_acks;
-            kctx.request_timeout_ms = conf.request_timeout_ms;
-
-            /// kctx will be copied over to consume/append ctx
+            kctx.offset = conf.initial_default_offset;
             dwal_consume_ctx = kctx;
-
-            /// Append ctx is cached for multiple threads access
-            kctx.topic_handle = static_cast<DistributedWriteAheadLogKafka *>(dwal.get())->initProducerTopic(kctx);
-            dwal_append_ctx = std::move(kctx);
 
             pool.emplace(1);
             pool->scheduleOrThrowOnError([this] { tailingRecords(); });
@@ -202,6 +236,12 @@ void MetadataService::startup()
             break;
         }
     }
+
+    /// Append ctx is cached for multiple threads access
+    waitUntilDWalReady(append_ctx);
+    kctx.topic_handle = static_cast<DistributedWriteAheadLogKafka *>(dwal.get())->initProducerTopic(kctx);
+    /// kctx will be moved over to append ctx
+    dwal_append_ctx = std::move(kctx);
 
     postStartup();
 }

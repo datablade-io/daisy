@@ -571,6 +571,8 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
         assert(!table);
     }
 
+    LOG_INFO(log, "Got {} tables from host={} identity={}", snapshot.size(), node->host, node->identity);
+
     return snapshot;
 }
 
