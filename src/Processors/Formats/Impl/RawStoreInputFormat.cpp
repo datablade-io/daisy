@@ -1,9 +1,8 @@
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 
-#include <DataTypes/DataTypeNullable.h>
-#include <DataTypes/Serializations/SerializationNullable.h>
 #include <DataTypes/NestedUtils.h>
+#include <DataTypes/Serializations/SerializationNullable.h>
 #include <Formats/FormatFactory.h>
 #include <Formats/JSONEachRowUtils.h>
 #include <Processors/Formats/Impl/RawStoreInputFormat.h>
@@ -53,7 +52,7 @@ RawStoreInputFormat::RawStoreInputFormat(
     const auto & time_extraction_type = format_settings_.rawstore.rawstore_time_extraction_type;
     const auto & time_extraction_rule = format_settings_.rawstore.rawstore_time_extraction_rule;
 
-    if (time_extraction_type != "json_path" && time_extraction_type != "regex")
+    if (!time_extraction_type.empty() && time_extraction_type != "json_path" && time_extraction_type != "regex")
         throw Exception(
             "time_extraction_type should be either 'json' or 'regex' " + time_extraction_type + " is not supported.",
             ErrorCodes::UNRECOGNIZED_ARGUMENTS);
@@ -257,7 +256,6 @@ void RawStoreInputFormat::readJSONObject(MutableColumns & columns)
         throw Exception("Logical error: no _raw column in the input data", ErrorCodes::LOGICAL_ERROR);
     }
 
-    seen_columns[time_col_idx] = read_columns[time_col_idx] = true;
     if (format_settings.rawstore.rawstore_time_extraction_type == "json_path")
         extractTimeFromRawByJSON(*columns[time_col_idx], *columns[raw_col_idx]);
     else if (format_settings.rawstore.rawstore_time_extraction_type == "regex" && time_extraction_regex != nullptr)
@@ -311,6 +309,7 @@ void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn &
     ReadBufferFromString buf(s);
 
     serializations[time_col_idx]->deserializeTextJSON(time_col, buf, format_settings);
+    seen_columns[time_col_idx] = read_columns[time_col_idx] = true;
 }
 
 void RawStoreInputFormat::extractTimeFromRawByRegex(IColumn & time_col, IColumn & raw_col)
@@ -338,6 +337,7 @@ void RawStoreInputFormat::extractTimeFromRawByRegex(IColumn & time_col, IColumn 
     ReadBufferFromString buf(s);
 
     serializations[time_col_idx]->deserializeTextJSON(time_col, buf, format_settings);
+    seen_columns[time_col_idx] = read_columns[time_col_idx] = true;
 }
 
 bool RawStoreInputFormat::readRow(MutableColumns & columns, RowReadExtension & ext)
@@ -439,7 +439,11 @@ void RawStoreInputFormat::readSuffix()
 void registerInputFormatProcessorRawStoreEachRow(FormatFactory & factory)
 {
     factory.registerInputFormatProcessor(
-        "RawStoreEachRow", [](ReadBuffer & buf, const Block & sample, IRowInputFormat::Params params, const FormatSettings & settings) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+        "RawStoreEachRow",
+        [](ReadBuffer & buf,
+           const Block & sample,
+           IRowInputFormat::Params params,
+           const FormatSettings & settings) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
             return std::make_shared<RawStoreInputFormat>(buf, sample, std::move(params), settings, false);
         });
 }

@@ -90,6 +90,7 @@ String IngestRawStoreHandler::execute(ReadBuffer & input, HTTPServerResponse & /
     WriteBufferFromString out(dummy_string);
 
     query_context->setSetting("output_format_parallel_formatting", false);
+    query_context->setSetting("date_time_input_format", String{"best_effort"});
     executeQuery(*in, out, /* allow_into_outfile = */ false, query_context, {});
 
     Poco::JSON::Object resp;
