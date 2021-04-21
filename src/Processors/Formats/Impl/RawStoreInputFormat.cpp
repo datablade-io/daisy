@@ -32,6 +32,11 @@ namespace
         NESTED_FIELD = size_t(-2)
     };
 
+    const std::vector<const std::shared_ptr<re2::RE2>> extract_rules = {
+        std::make_shared<re2::RE2>(R"###(\d{8}T(\d{2}(\d{4}(\.\d+)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
+        std::make_shared<re2::RE2>(R"###(\d{8}(\d{6})?(\.\d+)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
+        std::make_shared<re2::RE2>(R"###(\d{4}-\d\d(-\d\d([ T]\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###")
+    };
 }
 
 
@@ -260,6 +265,8 @@ void RawStoreInputFormat::readJSONObject(MutableColumns & columns)
         extractTimeFromRawByJSON(*columns[time_col_idx], *columns[raw_col_idx]);
     else if (format_settings.rawstore.rawstore_time_extraction_type == "regex" && time_extraction_regex != nullptr)
         extractTimeFromRawByRegex(*columns[time_col_idx], *columns[raw_col_idx]);
+    else if (format_settings.rawstore.rawstore_time_extraction_type.empty())
+        extractTimeFromRaw(*columns[time_col_idx], *columns[raw_col_idx]);
 }
 
 void RawStoreInputFormat::extractTimeFromRawByJSON(IColumn & time_col, IColumn & raw_col)
@@ -338,6 +345,49 @@ void RawStoreInputFormat::extractTimeFromRawByRegex(IColumn & time_col, IColumn 
 
     serializations[time_col_idx]->deserializeTextJSON(time_col, buf, format_settings);
     seen_columns[time_col_idx] = read_columns[time_col_idx] = true;
+}
+
+void RawStoreInputFormat::extractTimeFromRaw(IColumn & time_col, IColumn & raw_col)
+{
+    StringRef raw;
+    if (raw_col.getDataType() == TypeIndex::String)
+        raw = raw_col.getDataAt(raw_col.size() - 1);
+    else
+        throw Exception("_raw column is not String type", ErrorCodes::INCORRECT_DATA);
+
+    re2::StringPiece in{raw.data, raw.size};
+
+    re2::StringPiece matches[1];
+    bool matched = false;
+
+    if (!auto_extract && !time_extraction_regex)
+    {
+        for (const auto & regex : extract_rules)
+        {
+            matched = regex->Match(in, 0, in.size(), re2::RE2::Anchor::UNANCHORED, matches, 1);
+            if (matched)
+            {
+                time_extraction_regex = regex;
+                auto_extract = true;
+                break;
+            }
+        }
+        auto_extract = true;
+    }
+    else if (time_extraction_regex)
+        matched = time_extraction_regex->Match(in, 0, in.size(), re2::RE2::Anchor::UNANCHORED, matches, 1);
+
+    if (matched)
+    {
+        String s;
+        s.append("\"");
+        s.append(matches[0].data(), matches[0].size());
+        s.append("\"");
+        ReadBufferFromString buf(s);
+
+        serializations[time_col_idx]->deserializeTextJSON(time_col, buf, format_settings);
+        seen_columns[time_col_idx] = read_columns[time_col_idx] = true;
+    }
 }
 
 bool RawStoreInputFormat::readRow(MutableColumns & columns, RowReadExtension & ext)

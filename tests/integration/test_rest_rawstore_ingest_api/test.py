@@ -59,7 +59,7 @@ def setup_nodes():
             }]
         }, {
             "status": 200,
-            "result": ["query_id", "poll_id"]
+            "result": ["query_id"]
         }
     ),
     (
@@ -76,7 +76,38 @@ def setup_nodes():
             ]
         }, {
             "status": 200,
-            "result": ["query_id", "poll_id"]
+            "result": ["query_id"]
+        }
+    ),
+    (
+        "store1",
+        {
+            "data": [
+                {"_raw": "2021-03-21 00:10:23, [Apache] This is a error.", "host": "host1"},
+                {"_raw": "2021-03-22 00:10:23, [Apache] This is a error."},
+                {"_raw": "2021-03-23 00:10:23, [Apache] This is a error."}
+            ]
+        }, {
+            "status": 200,
+            "result": ["query_id"]
+        }
+    ),
+    (
+        "store1",
+        {
+            "data": [{
+                "source": "dae-access-log",
+                "sourcetype": "log",
+                "host": "host1",
+                "_raw": "{\"log\":{\"time\":\"2021-03-20 00:12:23\"}}"
+            }, {
+                "source": "dae-access-log",
+                "sourcetype": "log",
+                "_raw": "{\"log\":{\"time\":\"2021-03-20 00:12:23\"}}"
+            }]
+        }, {
+            "status": 200,
+            "result": ["query_id"]
         }
     ),
     (
