@@ -44,6 +44,7 @@ private:
 
     /// Daisy : start
     bool deleteTableDistributed(const ASTDropQuery & query);
+    bool deleteDatabaseDistributed(const ASTDropQuery & query);
     /// Daisy : end
 };
 }

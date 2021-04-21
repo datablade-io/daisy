@@ -111,7 +111,8 @@ void CatalogService::doBroadcast()
 
     /// Default max_block_size is 65505 (rows) which shall be bigger enough for a block to contain
     /// all tables on a single node
-    String query = "SELECT * FROM system.tables WHERE (database != 'system') OR (database = 'system' AND name='tables')";
+    String query = "SELECT * FROM system.databases FULL JOIN system.tables ON system.tables.database = system.databases.name "
+                   "WHERE (database != 'system') OR (database = 'system' AND name='tables')";
 
     /// FIXME, QueryScope
     /// CurrentThread::attachQueryContext(context);
@@ -223,7 +224,8 @@ CatalogService::TablePtrs CatalogService::tables() const
     {
         for (const auto & pp : p.second)
         {
-            results.push_back(pp.second);
+            if (!pp.second->database.empty())
+                results.push_back(pp.second);
         }
     }
     return results;
@@ -240,7 +242,8 @@ CatalogService::TablePtrs CatalogService::findTableByNode(const String & node_id
     {
         for (const auto & p : iter->second)
         {
-            results.push_back(p.second);
+            if (!p.second->database.empty())
+                results.push_back(p.second);
         }
     }
     return results;
@@ -504,11 +507,11 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
     {
         TablePtr table = std::make_shared<Table>(node->identity, node->host);
         std::unordered_map<String, void *> kvp = {
-            {"database", &table->database},
-            {"name", &table->name},
-            {"engine", &table->engine},
-            {"uuid", &table->uuid},
-            {"metadata_path", &table->metadata_path},
+            {"name", &table->database},
+            {"tables.name", &table->name},
+            {"tables.engine", &table->engine},
+            {"tables.uuid", &table->uuid},
+            {"tables.metadata_path", &table->metadata_path},
             {"data_paths", &table->data_paths},
             {"dependencies_database", &table->dependencies_database},
             {"dependencies_table", &table->dependencies_table},
@@ -594,7 +597,9 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             indexed_by_name[std::make_pair(p.second->database, p.second->name)].emplace(
                 std::make_pair(p.second->node_identity, p.second->shard), p.second);
 
-            {
+            if (!p.second->name.empty())
+            {   
+                assert(p.second->uuid != UUIDHelpers::Nil);
                 std::unique_lock storage_guard{storage_rwlock};
                 assert(!indexed_by_id.contains(p.second->uuid));
                 indexed_by_id[p.second->uuid] = p.second;
@@ -622,6 +627,13 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
 
             /// Deleted table, remove from `indexed_by_name` and `indexed_by_id`
             auto removed = iter_by_name->second.erase(std::make_pair(p.second->node_identity, p.second->shard));
+
+            /// Deleted (database, table), when it emtpy
+            if (iter_by_name->second.empty())
+            {
+                indexed_by_name.erase(iter_by_name);
+            }
+
             assert(removed == 1);
             (void)removed;
 

@@ -77,6 +77,8 @@
 #include <TableFunctions/TableFunctionFactory.h>
 #include <common/logger_useful.h>
 
+#include <common/ClockUtils.h>
+#include <DistributedMetadata/CatalogService.h>
 
 namespace DB
 {
@@ -113,6 +115,13 @@ InterpreterCreateQuery::InterpreterCreateQuery(const ASTPtr & query_ptr_, Contex
 
 BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
 {
+    /// Daisy : start
+    if (createDatabaseDistributed(create))
+    {
+        return {};
+    }
+    /// Daisy : end
+
     String database_name = create.database;
 
     auto guard = DatabaseCatalog::instance().getDDLGuard(database_name, "");
@@ -896,11 +905,8 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
         {"shards", shards},
         {"replication_factor", replication_factor}};
 
-    auto now = std::chrono::system_clock::now().time_since_epoch();
-    std::vector<std::pair<String, UInt64>> uint64_cols = {
-        /// Milliseconds since epoch
-        {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()}
-    };
+    /// Milliseconds since epoch
+    std::vector<std::pair<String, UInt64>> uint64_cols = {{"timestamp", MonotonicMilliseconds::now()}};
 
     /// Schema: (payload, database, table, timestamp, query_id, user, shards, replication_factor)
     Block  block = buildBlock(string_cols, int32_cols, uint64_cols);
@@ -911,6 +917,62 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
 
     /// FIXME, project tasks status
     return true;
+}
+
+bool InterpreterCreateQuery::createDatabaseDistributed(ASTCreateQuery & create)
+{   
+    auto ctx = getContext();
+    if (!ctx->isDistributed())
+    {
+        return false;
+    }
+
+    if (!ctx->getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        /// context.setDistributedDDLOperation(true);
+        return false;
+    }
+
+    if (ctx->isDistributedDDLOperation())
+    {
+        const auto & catalog_service = CatalogService::instance(ctx);
+        auto tables = catalog_service.findTableByDB(create.database);
+        if (!tables.empty())
+        {
+            throw Exception(fmt::format("Database {} already exists.", create.database), ErrorCodes::DATABASE_ALREADY_EXISTS);
+        }
+
+        auto * log = &Poco::Logger::get("InterpreterCreateQuery");
+
+        auto query_str = queryToString(create);
+        LOG_INFO(log, "Create database query={} query_id={}", query_str, ctx->getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols = {
+            {"payload", ctx->getQueryParameters().at("_payload")},
+            {"database", create.database},
+            {"query_id", ctx->getCurrentQueryId()},
+            {"user", ctx->getUserName()}
+        };
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        /// Milliseconds since epoch
+        std::vector<std::pair<String, UInt64>> uint64_cols = {{"timestamp", MonotonicMilliseconds::now()}};
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (payload, database, timestamp, query_id, user)
+
+        appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::CREATE_DATABASE, log);
+
+        LOG_INFO(
+            log, "Request of create database query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        return true;
+    }
+    return false;
 }
 /// Daisy : ends
 

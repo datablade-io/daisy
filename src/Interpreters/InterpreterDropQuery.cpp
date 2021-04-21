@@ -14,6 +14,7 @@
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Common/typeid_cast.h>
+#include <common/ClockUtils.h>
 #include <Databases/DatabaseReplicated.h>
 #include <DistributedMetadata/CatalogService.h>
 
@@ -34,6 +35,7 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int SYNTAX_ERROR;
     extern const int UNKNOWN_TABLE;
+    extern const int UNKNOWN_DATABASE;
     extern const int UNKNOWN_DICTIONARY;
     extern const int NOT_IMPLEMENTED;
     extern const int INCORRECT_QUERY;
@@ -133,11 +135,8 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
 
         std::vector<std::pair<String, Int32>> int32_cols;
 
-        auto now = std::chrono::system_clock::now().time_since_epoch();
-        std::vector<std::pair<String, UInt64>> uint64_cols = {
-            /// Milliseconds since epoch
-            std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
-        };
+        /// Milliseconds since epoch
+        std::vector<std::pair<String, UInt64>> uint64_cols = {{"timestamp", MonotonicMilliseconds::now()}};
 
         Block block = buildBlock(string_cols, int32_cols, uint64_cols);
         /// Schema: (payload, database, table, timestamp, query_id, user)
@@ -146,6 +145,63 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
 
         LOG_INFO(
             log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        return true;
+    }
+    return false;
+}
+
+bool InterpreterDropQuery::deleteDatabaseDistributed(const ASTDropQuery & query)
+{
+    auto ctx = getContext();
+    if (!ctx->isDistributed())
+    {
+        return false;
+    }
+
+    if (!ctx->getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        /// context.setDistributedDDLOperation(true);
+        return false;
+    }
+
+    if (ctx->isDistributedDDLOperation())
+    {
+        const auto & catalog_service = CatalogService::instance(ctx);
+        auto tables = catalog_service.findTableByDB(query.database);
+        
+        if (tables.empty())
+        {
+            throw Exception(fmt::format("Databases {} does not exist.", query.database), ErrorCodes::UNKNOWN_DATABASE);
+        }
+ 
+        auto * log = &Poco::Logger::get("InterpreterDropQuery");
+
+        auto query_str = queryToString(query);
+        LOG_INFO(log, "Drop database query={} query_id={}", query_str, ctx->getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols = {
+            {"payload", ctx->getQueryParameters().at("_payload")},
+            {"database", query.database},
+            {"query_id", ctx->getCurrentQueryId()},
+            {"user", ctx->getUserName()}
+        };
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        /// Milliseconds since epoch
+        std::vector<std::pair<String, UInt64>> uint64_cols = {{"timestamp", MonotonicMilliseconds::now()}};
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (payload, database, timestamp, query_id, user)
+
+        appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::DELETE_DATABASE, log);
+
+        LOG_INFO(
+            log, "Request of dropping database query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
 
         /// FIXME, project tasks status
         return true;
@@ -373,6 +429,13 @@ BlockIO InterpreterDropQuery::executeToTemporaryTable(const String & table_name,
 
 BlockIO InterpreterDropQuery::executeToDatabase(const ASTDropQuery & query)
 {
+    /// Daisy : start
+    if (deleteDatabaseDistributed(query))
+    {
+        return {};
+    }
+    /// Daisy : end
+
     DatabasePtr database;
     std::vector<UUID> tables_to_wait;
     BlockIO res;

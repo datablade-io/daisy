@@ -40,6 +40,8 @@ namespace
 
     const String DDL_TABLE_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/{}/{}";
     const String DDL_TABLE_POST_API_PATH_FMT = "/dae/v1/ddl/{}/{}";
+    const String DDL_DATABSE_POST_API_PATH_FMT = "/dae/v1/ddl/databases";
+    const String DDL_DATABSE_DELETE_API_PATH_FMT = "/dae/v1/ddl/databases/{}";
 
     int toErrorCode(std::istream & istr)
     {
@@ -256,7 +258,7 @@ Int32 DDLService::sendRequest(
 }
 
 /// Try indefininitely
-Int32 DDLService::doTable(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
+Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     /// FIXME, retry several times and report error
     Int32 err = ErrorCodes::OK;
@@ -327,7 +329,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
                 /// FIXME, check table engine, grammar check
                 target_hosts[i * replication_factor + j].setQueryParameters(
                     Poco::URI::QueryParameters{{"distributed_ddl", "false"}, {"shard", std::to_string(j)}});
-                auto err = doTable(payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST, query_id);
+                auto err = doDDL(payload, target_hosts[i * replication_factor + j], Poco::Net::HTTPRequest::HTTP_POST, query_id);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
                     failDDL(query_id, user, payload, "Unable to fulfill the request due to unrecoverable failure");
@@ -416,13 +418,96 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
         return;
     }
 
-    /// FIXME: make sure `target_hosts` is a complete list of hosts which
+    /// FIXME: make sure `target_hosts` is a complete list of hosts
     /// has this table definition (shards * replication_factor)
 
     for (auto & uri : target_hosts)
     {
         uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        doTable(payload, uri, method, query_id);
+        doDDL(payload, uri, method, query_id);
+    }
+
+    succeedDDL(query_id, user, payload);
+}
+
+void DDLService::createDatabase(IDistributedWriteAheadLog::RecordPtr record) const
+{
+    Block & block = record->block;
+    assert(block.has("query_id"));
+
+    if (!validateSchema(block, {"payload", "database", "timestamp", "query_id", "user"}))
+    {
+        return;
+    }
+
+    String payload = block.getByName("payload").column->getDataAt(0).toString();
+    String database = block.getByName("database").column->getDataAt(0).toString();
+    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
+    String user = block.getByName("user").column->getDataAt(0).toString();
+
+    const auto & nodes = placement.nodes();
+    if (nodes.empty())
+    {
+        LOG_ERROR(
+            log,
+            "Failed to create database because there are not enough hosts to place, payload={} "
+            "query_id={} user={}",
+            payload,
+            query_id,
+            user);
+        failDDL(query_id, user, payload, "There are not enough hosts to place the table shard replicas");
+        return;
+    }
+
+    std::vector<String> hosts;
+    hosts.reserve(nodes.size());
+    for (const auto & node : nodes)
+    {
+        hosts.push_back(node->host + ":" + node->http_port);
+    }
+
+    std::vector<Poco::URI> target_hosts{toURIs(hosts, fmt::format(DDL_DATABSE_POST_API_PATH_FMT, database), http_port)};
+
+    /// FIXME: make sure `target_hosts` is a complete list of hosts
+    for (auto & uri : target_hosts)
+    {
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
+        doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_POST, query_id);
+    }
+
+    succeedDDL(query_id, user, payload);
+}
+
+void DDLService::deleteDatabase(IDistributedWriteAheadLog::RecordPtr record) const
+{
+    Block & block = record->block;
+    assert(block.has("query_id"));
+
+    if (!validateSchema(block, {"payload", "database", "timestamp", "query_id", "user"}))
+    {
+        return;
+    }
+
+    String payload = block.getByName("payload").column->getDataAt(0).toString();
+    String database = block.getByName("database").column->getDataAt(0).toString();
+    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
+    String user = block.getByName("user").column->getDataAt(0).toString();
+
+    std::vector<Poco::URI> target_hosts{
+        toURIs(placement.placed(database), fmt::format(DDL_DATABSE_DELETE_API_PATH_FMT, database), http_port)};
+
+    if (target_hosts.empty())
+    {
+        LOG_ERROR(log, "Database {} is not found, payload={} query_id={} user={}", database, payload, query_id, user);
+        failDDL(query_id, user, payload, "Table not found");
+        return;
+    }
+
+    /// FIXME: make sure `target_hosts` is a complete list of hosts
+    for (auto & uri : target_hosts)
+    {
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
+        doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_DELETE, query_id);
     }
 
     succeedDDL(query_id, user, payload);
@@ -478,11 +563,11 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_DATABASE)
         {
-            assert(0);
+            createDatabase(record);
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_DATABASE)
         {
-            assert(0);
+            deleteDatabase(record);
         }
         else
         {
@@ -495,4 +580,5 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
 
     /// FIXME, update DDL task status after committing offset / local offset checkpoint ...
 }
+
 }
