@@ -34,7 +34,7 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
         return;
     }
 
-    if (table.subquery->children.size() != 1)
+    if (table.subquery->children.size() != 1 || !table.subquery->tryGetAlias().empty())
     {
         return;
     }
@@ -60,10 +60,20 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
         return;
 
     /// Try to eliminate subquery
-    if (!mergeColumns(parent_select, *sub_query))
+    bool asterisk_in_subquery = false;
+    std::unordered_map<String, ASTPtr> subquery_selects_map;
+    ASTs subquery_selects;
+    subquery_selects_map.reserve(sub_query->size());
+    subquery_selects.reserve(sub_query->size());
+    if (!mergeable(*sub_query, asterisk_in_subquery, subquery_selects_map, subquery_selects))
     {
         return;
     }
+
+    /// Rewrite selects of parent query
+    ASTPtr new_parent_select = std::make_shared<ASTExpressionList>();
+    setParentColumns(
+        new_parent_select->children, asterisk_in_subquery, parent_select.select()->children, subquery_selects_map, subquery_selects);
 
     if (sub_query->where() && parent_select.where())
     {
@@ -84,19 +94,22 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
     {
         parent_select.setExpression(ASTSelectQuery::Expression::PREWHERE, std::move(sub_query->refPrewhere()));
     }
+
     parent_select.setExpression(ASTSelectQuery::Expression::TABLES, std::move(sub_query->refTables()));
+
+    parent_select.setExpression(ASTSelectQuery::Expression::SELECT, std::move(new_parent_select));
 }
 
-void EliminateSubqueryVisitorData::rewriteColumns(
-    ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects, bool drop_alias /*= false*/)
+void EliminateSubqueryVisitorData::rewriteColumn(
+    ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects_map, bool drop_alias /*= false*/)
 {
     if (auto * identifier = ast->as<ASTIdentifier>())
     {
-        auto it = subquery_selects.find(identifier->name());
-        if (it != subquery_selects.end())
+        auto it = subquery_selects_map.find(identifier->name());
+        if (it != subquery_selects_map.end())
         {
             String alias = ast->tryGetAlias();
-            ast = it->second;
+            ast = it->second->clone();
             if (drop_alias)
             {
                 ast->setAlias("");
@@ -111,37 +124,101 @@ void EliminateSubqueryVisitorData::rewriteColumns(
     {
         for (auto & child : ast->children)
         {
-            rewriteColumns(child, subquery_selects, true);
+            rewriteColumn(child, subquery_selects_map, true);
         }
     }
 }
 
-bool EliminateSubqueryVisitorData::mergeColumns(ASTSelectQuery & parent_query, ASTSelectQuery & child_query)
+bool EliminateSubqueryVisitorData::mergeable(
+    const ASTSelectQuery & child_query,
+    bool & asterisk_in_subquery,
+    std::unordered_map<String, ASTPtr> & subquery_selects_map,
+    ASTs & subquery_selects)
 {
     /// E.g., select sum(b) from (select id as b from table)
-    std::unordered_map<String, ASTPtr> subquery_selects;
     for (auto & column : child_query.select()->children)
     {
         if (column->as<ASTAsterisk>() || column->as<ASTQualifiedAsterisk>())
         {
+            if (!asterisk_in_subquery)
+            {
+                asterisk_in_subquery = true;
+                subquery_selects.push_back(column);
+            }
             continue;
         }
-        else if (column->as<ASTIdentifier>())
+        else if (auto * identifier = column->as<ASTIdentifier>())
         {
-            subquery_selects.emplace(column->getAliasOrColumnName(), column);
+            auto it = subquery_selects_map.find(identifier->getAliasOrColumnName());
+            if (it == subquery_selects_map.end())
+            {
+                subquery_selects.push_back(column);
+                subquery_selects_map.emplace(identifier->getAliasOrColumnName(), column);
+            }
         }
         else
         {
             return false;
         }
     }
-
-    /// Try to merge select columns
-    for (auto & parent_select_item : parent_query.select()->children)
-    {
-        rewriteColumns(parent_select_item, subquery_selects);
-    }
     return true;
+}
+
+
+void EliminateSubqueryVisitorData::setParentColumns(
+    ASTs & new_parent_selects,
+    bool asterisk_in_subquery,
+    const ASTs & parent_selects,
+    const std::unordered_map<String, ASTPtr> & subquery_selects_map,
+    const ASTs & subquery_selects)
+{
+    /// Subquery selects having alias
+    ASTs subquery_selects_with_alias;
+    if (asterisk_in_subquery)
+    {
+        subquery_selects_with_alias.reserve(subquery_selects.size());
+        for (const auto & subquery_select_item : subquery_selects)
+        {
+            if (auto * identifier = subquery_select_item->as<ASTIdentifier>())
+            {
+                if (!identifier->tryGetAlias().empty())
+                {
+                    subquery_selects_with_alias.push_back(subquery_select_item);
+                }
+            }
+            else
+            {
+                /// `subquery_select_item` is ASTAsterisk or ASTQualifiedAsterisk
+                subquery_selects_with_alias.push_back(subquery_select_item);
+            }
+        }
+    }
+
+    for (const auto & parent_select_item : parent_selects)
+    {
+        if (parent_select_item->as<ASTAsterisk>())
+        {
+            if (!asterisk_in_subquery)
+            {
+                /// No asterisk in subquery selects
+                new_parent_selects.insert(new_parent_selects.end(), subquery_selects.begin(), subquery_selects.end());
+            }
+            else
+            {
+                new_parent_selects.insert(new_parent_selects.end(), subquery_selects_with_alias.begin(), subquery_selects_with_alias.end());
+            }
+        }
+        else
+        {
+            new_parent_selects.push_back(parent_select_item);
+        }
+    }
+
+    /// Try to rewrite columns of parent select
+    for (auto & parent_select_item : new_parent_selects)
+    {
+        rewriteColumn(parent_select_item, subquery_selects_map);
+    }
 }
 
 }
