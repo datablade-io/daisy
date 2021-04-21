@@ -9,7 +9,7 @@ namespace DB
 class TaskRestRouterHandler final : public RestRouterHandler
 {
 public:
-    explicit TaskRestRouterHandler(Context & query_context_) : RestRouterHandler(query_context_, "Task") { }
+    explicit TaskRestRouterHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "Task") { }
     ~TaskRestRouterHandler() override { }
 
 private:

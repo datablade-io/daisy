@@ -39,7 +39,7 @@ String TaskRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /*paylo
 
     if (task_id.empty())
     {
-        const auto & user = query_context.getUserName();
+        const auto & user = query_context->getUserName();
         auto tasks = task_service.findByUser(user);
         tasks_array = buildTaskResponse(tasks);
     }
@@ -59,7 +59,7 @@ String TaskRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /*paylo
     }
 
     Poco::JSON::Object result;
-    result.set("query_id", query_context.getCurrentQueryId());
+    result.set("query_id", query_context->getCurrentQueryId());
     result.set("tasks", tasks_array);
 
     std::ostringstream oss; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM

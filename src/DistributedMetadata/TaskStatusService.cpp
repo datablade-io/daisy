@@ -215,8 +215,8 @@ bool TaskStatusService::validateSchema(const Block & block, const std::vector<St
 bool TaskStatusService::tableExists() const
 {
     bool exists = false;
-    auto query_context = global_context;
-    query_context.makeQueryContext();
+    ContextPtr query_context = Context::createCopy(global_context);
+    query_context->makeQueryContext();
     executeSelectQuery(
         "SELECT count(*) AS c FROM system.tables WHERE database = 'system' AND name = 'tasks'", query_context, [&exists](Block && block) {
             assert(block.has("c"));
@@ -313,8 +313,8 @@ TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInTable(const String
 
     std::vector<TaskStatusService::TaskStatusPtr> res;
 
-    Context query_context = global_context;
-    query_context.makeQueryContext();
+    ContextPtr query_context = Context::createCopy(global_context);
+    query_context->makeQueryContext();
 
     executeSelectQuery(query, query_context, [this, &res](Block && block) { this->buildTaskStatusFromBlock(block, res); });
     if (res.size() == 0)
@@ -367,8 +367,8 @@ void TaskStatusService::findByUserInTable(const String & user, std::vector<TaskS
                           "ORDER BY last_modified DESC";
     auto query = fmt::format(query_template, user);
 
-    Context query_context = global_context;
-    query_context.makeQueryContext();
+    ContextPtr query_context = Context::createCopy(global_context);
+    query_context->makeQueryContext();
 
     executeSelectQuery(query, query_context, [this, &res](Block && block) { this->buildTaskStatusFromBlock(block, res); });
 }
@@ -384,7 +384,7 @@ void TaskStatusService::schedulePersistentTask()
         std::this_thread::sleep_for(std::chrono::seconds(RETRY_INTERVAL_MS));
     }
 
-    auto task_holder = global_context.getSchedulePool().createTask("PersistentTask", [this]() { this->persistentFinishedTask(); });
+    auto task_holder = global_context->getSchedulePool().createTask("PersistentTask", [this]() { this->persistentFinishedTask(); });
     persistent_task = std::make_unique<BackgroundSchedulePoolTaskHolder>(std::move(task_holder));
     (*persistent_task)->activate();
     (*persistent_task)->schedule();
@@ -528,10 +528,10 @@ bool TaskStatusService::createTaskTable()
         }
     )d";
 
-    Context context = global_context;
-    context.setCurrentQueryId("");
-    context.setQueryParameter("_payload", query_payload);
-    context.setDistributedDDLOperation(true);
+    ContextPtr context = Context::createCopy(global_context);
+    context->setCurrentQueryId("");
+    context->setQueryParameter("_payload", query_payload);
+    context->setDistributedDDLOperation(true);
     CurrentThread::QueryScope query_scope{context};
     
 
@@ -560,8 +560,8 @@ bool TaskStatusService::persistentTaskStatuses(const std::vector<TaskStatusPtr> 
                     (id, status, progress, reason, user, context, created, last_modified) \
                     VALUES ";
 
-    Context context = global_context;
-    context.setCurrentQueryId("");
+    ContextPtr context = Context::createCopy(global_context);
+    context->setCurrentQueryId("");
     CurrentThread::QueryScope query_scope{context};
 
     const String value_template = "{}('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}')";

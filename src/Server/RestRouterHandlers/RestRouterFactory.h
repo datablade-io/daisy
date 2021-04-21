@@ -94,7 +94,7 @@ public:
         factory.registerRouterHandler(
             "/dae/v1/tasks($|/(?P<task_id>[-\\w]+))", 
             "GET", 
-            [](Context & query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<DB::TaskRestRouterHandler>(query_context);
             });
     }

@@ -98,7 +98,7 @@ Block buildBlock(
     return block;
 }
 
-void appendBlock(Block && block, Context & context, IDistributedWriteAheadLog::OpCode opCode, const Poco::Logger * log)
+void appendBlock(Block && block, ContextPtr context, IDistributedWriteAheadLog::OpCode opCode, const Poco::Logger * log)
 {
     IDistributedWriteAheadLog::Record record{opCode, std::move(block)};
     record.headers["_version"] = "1";
