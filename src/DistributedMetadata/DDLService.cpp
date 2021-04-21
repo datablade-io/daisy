@@ -580,5 +580,4 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
 
     /// FIXME, update DDL task status after committing offset / local offset checkpoint ...
 }
-
 }
