@@ -100,7 +100,6 @@ String IngestRestRouterHandler::execute(ReadBuffer & input, HTTPServerResponse &
     const auto & poll_id = query_context->getQueryStatusPollId();
     if (!poll_id.empty())
     {
-        resp.set("poll_id", poll_id);
         resp.set("channel", query_context->getChannel());
     }
     std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM

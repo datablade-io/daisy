@@ -2,8 +2,6 @@
 
 #include "RestRouterHandler.h"
 
-#include <Storages/StorageDistributedMergeTree.h>
-
 
 
 namespace DB

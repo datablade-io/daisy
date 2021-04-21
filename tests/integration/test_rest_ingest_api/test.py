@@ -51,7 +51,6 @@ def setup_nodes():
     finally:
         cluster.shutdown()
 
-
 @pytest.mark.parametrize("table, query, status", [
     (
         "test",
@@ -60,7 +59,6 @@ def setup_nodes():
             "data": [[21, "a", "2021-01-01 23:23:00", [30, 31], ["aa", "ab"], "::10.1.1.1"],
                      [22, "b", "2021-01-01 00:00:00", [31, 32], ["aa", "ab"], "::10.1.1.2"],
                      [23, "c", "2021-01-02 00:00:00.000", [33, 34], ["aa", "ab"], "::10.1.1.3"]]
-
         }, {
             "status": 400,
             "result": "None of poll_id"
@@ -77,11 +75,12 @@ def setup_nodes():
         }
     )
 ])
-def test_ingest_api_basic_case(table, query, status):
+def test_ingest_api_baisc_case(table, query, status):
     instance.ip_address = "localhost"
     # insert data
     resp = instance.http_request(method="POST", url="dae/v1/ingest/default/tables/" + table, data=json.dumps(query))
     result = json.loads(resp.content)
+    # assert resp.status == 200
     assert 'poll_id' in result
     assert 'query_id' in result
     assert 'channel' in result

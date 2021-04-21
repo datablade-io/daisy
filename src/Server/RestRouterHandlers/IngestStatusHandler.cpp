@@ -1,14 +1,13 @@
+
 #include "IngestStatusHandler.h"
 #include "SchemaValidator.h"
 
-#include <DistributedMetadata/PlacementService.h>
 #include <IO/HTTPCommon.h>
 #include <Storages/StorageDistributedMergeTree.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Path.h>
 
-#include <numeric>
 #include <vector>
 
 
@@ -175,7 +174,7 @@ String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload,
     }
 }
 
-String IngestStatusHandler::forwardRequest(const Poco::URI & uri, const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_status) const
 {
     LOG_DEBUG(log, "Forward request to uri={}", uri.toString());
 
@@ -208,9 +207,6 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, const Poco::JS
             LOG_ERROR(log, error);
             return jsonErrorResponse(error, ErrorCodes::SEND_POLL_REQ_ERROR);
         }
-
-        if (payload)
-            ostr << req_body_stream.str();
 
         Poco::Net::HTTPResponse response;
         auto & istr = session->receiveResponse(response);
