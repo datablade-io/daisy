@@ -157,6 +157,6 @@ def test_poll_status_in_batch_case(table, query, status):
     resp = instance.http_request(method="POST", url="dae/v1/ingest/statuses", data=json.dumps(req))
     assert resp.status_code == status['status']
     result = json.loads(resp.content)
-    if resp.status_code == 2000:
+    if resp.status_code == 200:
         assert len(result['status']) == 2
     assert status['result'] in resp.text

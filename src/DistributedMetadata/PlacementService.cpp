@@ -114,7 +114,7 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
 
 const String PlacementService::getNodeIdentityByChannelId(const String & channel_id) const
 {
-    std::unique_lock guard(rwlock);
+    std::shared_lock guard(rwlock);
 
     for (const auto & [node_identity, node_metrics] : nodes_metrics)
     {

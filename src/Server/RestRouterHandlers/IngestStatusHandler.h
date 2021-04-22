@@ -27,7 +27,7 @@ private:
     getAndVerifyStorage(const String & database_name, const String & table_name, String & error, int & error_code) const;
     static String makeResponse(const std::pair<String, Int32> & status);
     static String makeBatchResponse(const std::vector<std::tuple<String, String, Int32>> & statuses);
-    bool parsePollIds(std::vector<String> & poll_ids, TableQueries & queries, String & error) const;
+    bool parsePollIds(const std::vector<String> & poll_ids, TableQueries & queries, String & error) const;
 };
 
 }

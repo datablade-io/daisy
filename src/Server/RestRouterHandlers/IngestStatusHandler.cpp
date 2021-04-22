@@ -67,12 +67,11 @@ String IngestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /* payloa
     }
 }
 
-bool IngestStatusHandler::parsePollIds(std::vector<String> & poll_ids, TableQueries & queries, String & error) const
+bool IngestStatusHandler::parsePollIds(const std::vector<String> & poll_ids, TableQueries & queries, String & error) const
 {
-    String target_node;
     error.clear();
 
-    for (auto & poll_id : poll_ids)
+    for (const auto & poll_id : poll_ids)
     {
         std::vector<String> components;
         try
