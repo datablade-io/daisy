@@ -1052,6 +1052,7 @@ int Server::main(const std::vector<std::string> & /*args*/)
     /// Daisy : start.
     DB::CatalogService::instance(global_context).broadcast();
     DB::PlacementService::instance(global_context).scheduleBroadcast();
+    DB::TaskStatusService::instance(global_context).schedulePersistentTask();
     /// Daisy : end.
 
     /// Init trace collector only after trace_log system table was created

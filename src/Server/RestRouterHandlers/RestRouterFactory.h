@@ -7,6 +7,7 @@
 #include "RestRouterHandler.h"
 #include "SQLAnalyzerRestRouterHandler.h"
 #include "TabularTableRestRouterHandler.h"
+#include "TaskRestRouterHandler.h"
 
 #include <re2/re2.h>
 
@@ -88,6 +89,13 @@ public:
             "POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<SQLAnalyzerRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/tasks($|/(?P<task_id>[-\\w]+))",
+            "GET",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<DB::TaskRestRouterHandler>(query_context);
             });
     }
 
