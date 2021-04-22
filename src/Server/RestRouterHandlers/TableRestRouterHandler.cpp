@@ -72,6 +72,11 @@ bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & /* payl
 
 bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
+    if (!getQueryParameter("query").empty())
+    {
+        return true;
+    }
+
     return validateSchema(update_schema, payload, error_msg);
 }
 
@@ -83,15 +88,15 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
 
 String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
-    const auto & shard = getQueryParameter("shard");
-    const auto & query = getCreationSQL(payload, shard);
-
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    String query = getQueryParameter("query");
+    if (query.empty())
     {
-        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        payload->stringify(payload_str_stream, 0);
-        query_context->setQueryParameter("_payload", payload_str_stream.str());
-        query_context->setDistributedDDLOperation(true);
+        query = getCreationSQL(payload);
+    }
+
+    if (getQueryParameter("distributed_ddl") == "false")
+    {
+        query_context->setDistributedDDLOperation(false);
     }
 
     return processQuery(query);
@@ -99,10 +104,9 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
 {
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    if (getQueryParameter("distributed_ddl") == "false")
     {
-        query_context->setDistributedDDLOperation(true);
-        query_context->setQueryParameter("_payload", "{}");
+        query_context->setDistributedDDLOperation(false);
     }
 
     const String & database_name = getPathParameter("database");
@@ -115,20 +119,19 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
 
-    LOG_INFO(log, "Updating table {}.{}", database_name, table_name);
-    std::vector<String> create_segments;
-    create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
-    create_segments.push_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
-
-    const String & query = boost::algorithm::join(create_segments, " ");
-
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    String query = getQueryParameter("query");
+    if (query.empty())
     {
-        query_context->setDistributedDDLOperation(true);
+        std::vector<String> create_segments;
+        create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
+        create_segments.push_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
 
-        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        payload->stringify(payload_str_stream, 0);
-        query_context->setQueryParameter("_payload", payload_str_stream.str());
+        query = boost::algorithm::join(create_segments, " ");
+    }
+
+    if (getQueryParameter("distributed_ddl") == "false")
+    {
+        query_context->setDistributedDDLOperation(false);
     }
 
     return processQuery(query);
@@ -185,7 +188,7 @@ String TableRestRouterHandler::getStringValueFrom(const Poco::JSON::Object::Ptr 
     return payload->has(key) ? payload->get(key).toString() : default_value;
 }
 
-String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const
+String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & payload) const
 {
     const auto & database_name = getPathParameter("database");
     const auto & time_col = getStringValueFrom(payload, "_time_column", "_time");
@@ -202,11 +205,6 @@ String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & pa
     {
         /// FIXME  Enforce time based TTL only
         create_segments.push_back("TTL " + payload->get("ttl_expression").toString());
-    }
-
-    if (!shard.empty())
-    {
-        create_segments.push_back("SETTINGS shard=" + shard);
     }
 
     return boost::algorithm::join(create_segments, " ");

@@ -88,7 +88,7 @@ void InterpreterDropQuery::waitForTableToBeActuallyDroppedOrDetached(const ASTDr
 }
 
 /// Daisy : start
-bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
+bool InterpreterDropQuery::deleteTableDistributed(ASTDropQuery & query)
 {
     auto ctx = getContext();
     if (!ctx->isDistributed())
@@ -96,16 +96,11 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
         return false;
     }
 
-    if (!ctx->getQueryParameters().contains("_payload"))
-    {
-        /// FIXME:
-        /// Build json payload here from SQL statement
-        /// context.setDistributedDDLOperation(true);
-        return false;
-    }
-
     if (ctx->isDistributedDDLOperation())
     {
+        String current_database = ctx->getCurrentDatabase();
+        query.database = query.database.empty() ? current_database : query.database;
+
         const auto & catalog_service = CatalogService::instance(ctx);
         auto tables = catalog_service.findTableByName(query.database, query.table);
         if (tables.empty())
@@ -124,7 +119,7 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
         LOG_INFO(log, "Drop DistributedMergeTree query={} query_id={}", query_str, ctx->getCurrentQueryId());
 
         std::vector<std::pair<String, String>> string_cols = {
-            {"payload", ctx->getQueryParameters().at("_payload")},
+            {"query", query_str},
             {"database", query.database},
             {"table", query.table},
             {"query_id", ctx->getCurrentQueryId()},
@@ -140,7 +135,7 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
         };
 
         Block block = buildBlock(string_cols, int32_cols, uint64_cols);
-        /// Schema: (payload, database, table, timestamp, query_id, user)
+        /// Schema: (query, database, table, timestamp, query_id, user)
 
         appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
 

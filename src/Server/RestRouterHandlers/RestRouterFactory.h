@@ -56,28 +56,28 @@ public:
             });
 
         factory.registerRouterHandler(
-            "/dae/v1/ddl/(?P<database>\\w+)/tables(\\?[\\w\\-=&#]+){0,1}",
+            "/dae/v1/ddl/(?P<database>\\w+)/tables(\\?[\\w\\-=&#%\\.]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<TabularTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
-            "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)(\\?[\\w\\-=&#]+){0,1}",
+            "/dae/v1/ddl/(?P<database>\\w+)/tables/(?P<table>\\w+)(\\?[\\w\\-=&#%\\.]+){0,1}",
             "PATCH/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<TabularTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
-            "/dae/v1/ddl/(?P<database>\\w+)/rawstores(\\?[\\w\\-=&#]+){0,1}",
+            "/dae/v1/ddl/(?P<database>\\w+)/rawstores(\\?[\\w\\-=&#%\\.]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<RawstoreTableRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(
-            "/dae/v1/ddl/(?P<database>\\w+)/rawstores/(?P<table>\\w+)(\\?[\\w\\-=&#]+){0,1}",
+            "/dae/v1/ddl/(?P<database>\\w+)/rawstores/(?P<table>\\w+)(\\?[\\w\\-=&#%\\.]+){0,1}",
             "PATCH/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<RawstoreTableRestRouterHandler>(query_context);

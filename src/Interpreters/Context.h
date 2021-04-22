@@ -201,7 +201,7 @@ private:
     String query_status_poll_id;
     String idempotent_key;
     String ingest_mode;
-    bool distributed_ddl_operation = false;
+    bool distributed_ddl_operation = true;
     /// Daisy : ends
 
     /// Record entities accessed by current query, and store this information in system.query_log.

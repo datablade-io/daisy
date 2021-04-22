@@ -841,6 +841,11 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
         return false;
     }
 
+    if (!ctx->isDistributedDDLOperation())
+    {
+        return false;
+    }
+
     assert(!ctx->getCurrentQueryId().empty());
 
     auto * log = &Poco::Logger::get("InterpreterCreateQuery");
@@ -869,22 +874,8 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
     auto query = queryToString(create);
     LOG_INFO(log, "Creating DistributedMergeTree query={} query_id={}", query, ctx->getCurrentQueryId());
 
-
-    if (!ctx->getQueryParameters().contains("_payload"))
-    {
-        /// FIXME:
-        /// Build json payload here from SQL statement
-        /// context.setDistributedDDLOperation(true);
-        return false;
-    }
-
-    if (!ctx->isDistributedDDLOperation())
-    {
-        return false;
-    }
-
     std::vector<std::pair<String, String>> string_cols
-        = {{"payload", ctx->getQueryParameters().at("_payload")},
+        = { {"query", query},
            {"database", current_database},
            {"table", create.table},
            {"query_id", ctx->getCurrentQueryId()},
@@ -902,7 +893,7 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
         {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()}
     };
 
-    /// Schema: (payload, database, table, timestamp, query_id, user, shards, replication_factor)
+    /// Schema: (query, database, table, timestamp, query_id, user, shards, replication_factor)
     Block  block = buildBlock(string_cols, int32_cols, uint64_cols);
 
     appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::CREATE_TABLE, log);

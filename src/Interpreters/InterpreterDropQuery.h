@@ -43,7 +43,7 @@ private:
     BlockIO executeToTemporaryTable(const String & table_name, ASTDropQuery::Kind kind);
 
     /// Daisy : start
-    bool deleteTableDistributed(const ASTDropQuery & query);
+    bool deleteTableDistributed(ASTDropQuery & query);
     /// Daisy : end
 };
 }

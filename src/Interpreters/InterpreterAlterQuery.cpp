@@ -49,8 +49,9 @@ InterpreterAlterQuery::InterpreterAlterQuery(const ASTPtr & query_ptr_, ContextP
 BlockIO InterpreterAlterQuery::execute()
 {
     BlockIO res;
-    const auto & alter = query_ptr->as<ASTAlterQuery &>();
-
+    /// Daisy : start
+    auto & alter = query_ptr->as<ASTAlterQuery &>();
+    /// Daisy : end
 
     if (!alter.cluster.empty())
         return executeDDLQueryOnCluster(query_ptr, getContext(), getRequiredAccess());
@@ -164,7 +165,7 @@ BlockIO InterpreterAlterQuery::execute()
 }
 
 /// Daisy : start
-bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
+bool InterpreterAlterQuery::alterTableDistributed(ASTAlterQuery & query)
 {
     auto ctx = getContext();
     if (!ctx->isDistributed())
@@ -172,16 +173,11 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
         return false;
     }
 
-    if (!ctx->getQueryParameters().contains("_payload"))
-    {
-        /// FIXME:
-        /// Build json payload here from SQL statement
-        /// context.setDistributedDDLOperation(true);
-        return false;
-    }
-
     if (ctx->isDistributedDDLOperation())
     {
+        String current_database = ctx->getCurrentDatabase();
+        query.database = query.database.empty() ? current_database : query.database;
+
         const auto & catalog_service = CatalogService::instance(ctx);
         auto tables = catalog_service.findTableByName(query.database, query.table);
         if (tables.empty())
@@ -203,7 +199,7 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
         LOG_INFO(log, "Altering DistributedMergeTree query={} query_id={}", query_str, ctx->getCurrentQueryId());
 
         std::vector<std::pair<String, String>> string_cols
-            = {{"payload", ctx->getQueryParameters().at("_payload")},
+            = {{"query", query_str},
                {"database", query.database},
                {"table", query.table},
                {"query_id", ctx->getCurrentQueryId()},
@@ -217,7 +213,7 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
             std::make_pair("timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(now).count()),
         };
 
-        /// Schema: (payload, database, table, timestamp, query_id, user)
+        /// Schema: (query, database, table, timestamp, query_id, user)
         Block block = buildBlock(string_cols, int32_cols, uint64_cols);
 
         appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::ALTER_TABLE, log);
