@@ -1089,30 +1089,23 @@
     <!-- Uncomment to disable ClickHouse internal DNS caching. -->
     <!-- <disable_internal_dns_cache>1</disable_internal_dns_cache> -->
 
-    <system_settings>
-        <system_dwals>
-            <system_kafka>
-                <system_default>true</system_default>
+    <!-- Multiple clusters of streaming storage are supported -->
+    <!--
+    <cluster_settings>
+        <streaming_storage>
+            <kafka>
+                <default>true</default>
                 <cluster_name>default-sys-kafka-cluster-name</cluster_name>
-                <!-- cluster_id canâ€™t be changed after the system is up and running -->
-                <!-- because the code depends on the immutability of cluster_id -->
                 <cluster_id>default-sys-kafka-cluster-id</cluster_id>
                 <security_protocol>PLAINTEXT</security_protocol>
                 <brokers>localhost:9092</brokers>
                 <replication_factor>1</replication_factor>
-
-                <!-- Global settings for both producers & consumers -->
-                <!--
-                <sasl_kerberos_keytab>...</sasl_kerberos_keytab>
-                <sasl_kerberos_principal>...</sasl_kerberos_principal>
-                -->
 
                 <topic_metadata_refresh_interval_ms>300000</topic_metadata_refresh_interval_ms>
                 <message_max_bytes>1000000</message_max_bytes>
                 <statistic_internal_ms>30000</statistic_internal_ms>
                 <debug></debug>
 
-                <!-- Global settings for producers -->
                 <enable_idempotence>true</enable_idempotence>
                 <queue_buffering_max_messages>100000</queue_buffering_max_messages>
                 <queue_buffering_max_kbytes>1048576</queue_buffering_max_kbytes>
@@ -1121,12 +1114,10 @@
                 <retry_backoff_ms>100</retry_backoff_ms>
                 <compression_codec>snappy</compression_codec>
 
-                <!-- Global librdkafka client settings for producers -->
                 <message_timeout_ms>40000</message_timeout_ms>
                 <message_delivery_async_poll_ms>100</message_delivery_async_poll_ms>
                 <message_delivery_sync_poll_ms>10</message_delivery_sync_poll_ms>
 
-                <!-- Global settings for consumers -->
                 <group_id>daisy</group_id>
                 <message_max_bytes>1000000</message_max_bytes>
                 <enable_auto_commit>true</enable_auto_commit>
@@ -1134,53 +1125,45 @@
                 <auto_commit_interval_ms>5000</auto_commit_interval_ms>
                 <fetch_message_max_bytes>1048576</fetch_message_max_bytes>
 
-                <!-- Global librdkafka client settings for consumers -->
                 <queued_min_messages>1000000</queued_min_messages>
                 <queued_max_messages_kbytes>65536</queued_max_messages_kbytes>
 
                 <internal_pool_size>2</internal_pool_size>
-            </system_kafka>
-        </system_dwals>
+            </kafka>
+        </streaming_storage>
 
-        <system_roles>
+        <system_ddls>
+            <name>__system_ddls</name>
+            <replication_factor>1</replication_factor>
+            <data_retention>168</data_retention>
+        </system_ddls>
+
+        <system_catalogs>
+            <name>__system_catalogs</name>
+            <replication_factor>1</replication_factor>
+        </system_catalogs>
+
+        <system_node_metrics>
+            <name>__system_node_metrics</name>
+            <replication_factor>1</replication_factor>
+        </system_node_metrics>
+
+        <system_tasks>
+            <name>__system_tasks</name>
+            <replication_factor>1</replication_factor>
+            <data_retention>24</data_retention>
+        </system_tasks>
+
+        <node_identity>localhost:8123</node_identity>
+
+        <node_roles>
             <role>placement</role>
             <role>catalog</role>
             <role>ddl</role>
             <role>task</role>
-        </system_roles>
+        </node_roles>
 
-        <!-- system_ddl_wal is for distributed DDL -->
-        <system_ddl_dwal>
-            <name>__system_ddls</name>
-            <replication_factor>1</replication_factor>
-            <!-- 168 hours (7 days) -->
-            <data_retention>168</data_retention>
-        </system_ddl_dwal>
-
-        <!-- system_catalog_dwal is for distributed catalog service -->
-        <!-- it is compact -->
-        <system_catalog_dwal>
-            <name>__system_catalogs</name>
-            <replication_factor>1</replication_factor>
-        </system_catalog_dwal>
-
-        <!-- system_node_metrics_dwal is for distributed placement service -->
-        <!-- it is compact -->
-        <system_node_metrics_dwal>
-            <name>__system_node_metrics</name>
-            <replication_factor>1</replication_factor>
-        </system_node_metrics_dwal>
-
-        <!-- system_task_dwal is for global task status -->
-        <system_task_dwal>
-            <name>__system_tasks</name>
-            <replication_factor>1</replication_factor>
-            <!-- 24 hours -->
-            <data_retention>24</data_retention>
-        </system_task_dwal>
-
-        <node_identity>localhost:8123</node_identity>
-
-    </system_settings>
+    </cluster_settings>
+    -->
 
 </yandex>

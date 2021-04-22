@@ -32,7 +32,7 @@ namespace ErrorCodes
 namespace
 {
     /// globals
-    const String DDL_KEY_PREFIX = "system_settings.system_ddl_dwal.";
+    const String DDL_KEY_PREFIX = "cluster_settings.system_ddls.";
     const String DDL_NAME_KEY = DDL_KEY_PREFIX + "name";
     const String DDL_REPLICATION_FACTOR_KEY = DDL_KEY_PREFIX + "replication_factor";
     const String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";

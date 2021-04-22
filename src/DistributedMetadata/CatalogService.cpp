@@ -40,7 +40,7 @@ namespace ErrorCodes
 namespace
 {
 /// Globals
-const String CATALOG_KEY_PREFIX = "system_settings.system_catalog_dwal.";
+const String CATALOG_KEY_PREFIX = "cluster_settings.system_catalogs.";
 const String CATALOG_NAME_KEY = CATALOG_KEY_PREFIX + "name";
 const String CATALOG_REPLICATION_FACTOR_KEY = CATALOG_KEY_PREFIX + "replication_factor";
 const String CATALOG_DATA_RETENTION_KEY = CATALOG_KEY_PREFIX + "data_retention";
@@ -196,20 +196,6 @@ void CatalogService::append(Block && block)
         LOG_ERROR(log, "Failed to append table definition block, error={}", result.err);
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     }
-}
-
-std::vector<CatalogService::NodePtr> CatalogService::nodes() const
-{
-    std::vector<NodePtr> results;
-
-    std::shared_lock guard{catalog_rwlock};
-    results.reserve(table_nodes.size());
-
-    for (const auto & n : table_nodes)
-    {
-        results.push_back(n.second);
-    }
-    return results;
 }
 
 std::vector<String> CatalogService::databases() const
@@ -449,7 +435,12 @@ ClusterPtr CatalogService::tableCluster(const String & database, const String & 
     if (replication_factor * shards != static_cast<Int32>(remote_tables.size()))
     {
         LOG_WARNING(
-            log, "Missing total shard replicas, expected={} got={} for database={} table={}", replication_factor * shards, database, table);
+            log,
+            "Missing total shard replicas, expected={} got={} for database={} table={}",
+            replication_factor * shards,
+            remote_tables.size(),
+            database,
+            table);
     }
 
     /// Group table by shard ID
@@ -565,6 +556,12 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
             table->shard = parseShard(table->engine_full);
         }
 
+        if (table->database == "system")
+        {
+            /// Ignore tables in `system` database
+            continue;
+        }
+
         DatabaseTableShard key = std::make_pair(table->database, std::make_pair(table->name, table->shard));
         snapshot.emplace(std::move(key), std::move(table));
 
@@ -579,6 +576,11 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
 /// Merge a snapshot of tables from one host
 void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode snapshot)
 {
+    if (snapshot.empty())
+    {
+        return;
+    }
+
     std::unique_lock guard{catalog_rwlock};
 
     auto iter = indexed_by_node.find(node->identity);
@@ -587,12 +589,6 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
         /// New host. Add all tables from this host to `indexed_by_name`
         for (const auto & p : snapshot)
         {
-            if (p.second->database == "system")
-            {
-                /// Ignore tables in `system` database
-                continue;
-            }
-
             assert(p.second->uuid != UUIDHelpers::Nil);
 
             indexed_by_name[std::make_pair(p.second->database, p.second->name)].emplace(
@@ -629,6 +625,11 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             assert(removed == 1);
             (void)removed;
 
+            if (iter_by_name->second.empty())
+            {
+                indexed_by_name.erase(iter_by_name);
+            }
+
             {
                 std::unique_lock storage_guard{storage_rwlock};
                 removed = indexed_by_id.erase(p.second->uuid);
@@ -641,22 +642,37 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
     /// Add new tables or override existing tables in `indexed_by_name`
     for (const auto & p : snapshot)
     {
-        DatabaseTable key = std::make_pair(p.second->database, p.second->name);
-        auto iter_by_name = indexed_by_name.find(key);
+        UUID uuid = UUIDHelpers::Nil;
+        auto node_shard =  std::make_pair(p.second->node_identity, p.second->shard);
+
+        DatabaseTable db_table = std::make_pair(p.second->database, p.second->name);
+        auto iter_by_name = indexed_by_name.find(db_table);
         if (iter_by_name == indexed_by_name.end())
         {
             /// New table
-            indexed_by_name[key].emplace(std::make_pair(p.second->node_identity, p.second->shard), p.second);
+            indexed_by_name[db_table].emplace(std::move(node_shard), p.second);
         }
         else
         {
             /// An existing table
-            indexed_by_name[key].insert_or_assign(std::make_pair(p.second->node_identity, p.second->shard), p.second);
+            auto node_shard_iter = iter_by_name->second.find(node_shard);
+            if (node_shard_iter != iter_by_name->second.end() && node_shard_iter->second->uuid != p.second->uuid)
+            {
+                /// If uuid changed (table with same name got deleted and recreatd), delete it from indexed_by_id
+                uuid = node_shard_iter->second->uuid;
+            }
+            iter_by_name->second.insert_or_assign(std::move(node_shard), p.second);
         }
 
         {
             /// FIXME, if table definition changed, we will need update the storage inline
             std::unique_lock storage_guard{storage_rwlock};
+            if (uuid != UUIDHelpers::Nil)
+            {
+                auto removed = indexed_by_id.erase(uuid);
+                assert(removed);
+                assert(removed == 1);
+            }
             indexed_by_id[p.second->uuid] = p.second;
         }
     }

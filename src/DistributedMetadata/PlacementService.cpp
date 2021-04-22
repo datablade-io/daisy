@@ -21,7 +21,7 @@ namespace ErrorCodes
 namespace
 {
 /// Globals
-const String PLACEMENT_KEY_PREFIX = "system_settings.system_node_metrics_dwal.";
+const String PLACEMENT_KEY_PREFIX = "cluster_settings.system_node_metrics.";
 const String PLACEMENT_NAME_KEY = PLACEMENT_KEY_PREFIX + "name";
 const String PLACEMENT_REPLICATION_FACTOR_KEY = PLACEMENT_KEY_PREFIX + "replication_factor";
 const String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retention";
@@ -178,7 +178,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
         }
         else if (auto latency = utc_now - broadcast_time; latency > LATENCY_THRESHOLD_MS)
         {
-            LOG_WARNING(
+            LOG_TRACE(
                 log,
                 "It took {}ms to broadcast node metrics from node identity={} host={}. Probably there is some perf issue or the clocks "
                 "between the machines are out of sync too much.",

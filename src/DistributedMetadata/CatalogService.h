@@ -114,9 +114,6 @@ public:
     TablePtrs tables() const;
     std::vector<String> databases() const;
 
-    /// FIXME : remove `nodes` when Placement service is ready
-    std::vector<NodePtr> nodes() const;
-
     ClusterPtr tableCluster(const String & database, const String & table, Int32 replication_factor, Int32 shards);
 
 private:

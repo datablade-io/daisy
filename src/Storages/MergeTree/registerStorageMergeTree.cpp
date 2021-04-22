@@ -366,12 +366,12 @@ static StoragePtr create(const StorageFactory::Arguments & args)
         * - shard_by_expr
 
         * DistributedMergeTree engine settings :
-        * - dwal_type=kafka
-        * - dwal_cluster_id=<my_cluster>
-        * - dwal_partition=<partition>
-        * - dwal_request_required_acks=1
-        * - dwal_request_timeout_ms=30000
-        * - dwal_auto_offset_reset=earliest
+        * - streaming_storage=kafka
+        * - streaming_storage_cluster_id=<my_cluster>
+        * - streaming_storage_partition=<partition>
+        * - streaming_storage_request_required_acks=1
+        * - streaming_storage_request_timeout_ms=30000
+        * - streaming_storage_auto_offset_reset=earliest
         */
 
     bool is_extended_storage_def = args.storage_def->partition_by || args.storage_def->primary_key || args.storage_def->order_by

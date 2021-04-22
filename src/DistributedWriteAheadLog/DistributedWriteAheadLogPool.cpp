@@ -17,8 +17,8 @@ namespace ErrorCodes
 namespace
 {
     /// Globals
-    const String SYSTEM_DWALS_KEY = "system_settings.system_dwals";
-    const String SYSTEM_DWALS_KEY_PREFIX = "system_settings.system_dwals.";
+    const String SYSTEM_DWALS_KEY = "cluster_settings.streaming_storage";
+    const String SYSTEM_DWALS_KEY_PREFIX = "cluster_settings.streaming_storage.";
 }
 
 DistributedWriteAheadLogPool & DistributedWriteAheadLogPool::instance(ContextPtr global_context)
@@ -88,7 +88,7 @@ void DistributedWriteAheadLogPool::shutdown()
 void DistributedWriteAheadLogPool::init(const String & key)
 {
     /// FIXME; for now, we only support kafka, so assume it is kafka
-    /// assert(key.startswith("system_kafka"));
+    /// assert(key.startswith("kafka"));
 
     const auto & config = global_context->getConfigRef();
 
@@ -97,7 +97,7 @@ void DistributedWriteAheadLogPool::init(const String & key)
     bool system_default = false;
 
     std::vector<std::tuple<String, String, void *>> settings = {
-        {".system_default", "Bool", &system_default},
+        {".default", "Bool", &system_default},
         {".cluster_id", "String", &kafka_settings.cluster_id},
         {".security_protocol", "String", &kafka_settings.security_protocol},
         {".brokers", "String", &kafka_settings.brokers},
