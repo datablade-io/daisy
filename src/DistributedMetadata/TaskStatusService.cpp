@@ -572,8 +572,6 @@ bool TaskStatusService::createTaskTable()
     context->setDistributedDDLOperation(true);
     CurrentThread::QueryScope query_scope{context};
 
-    /// FIXME: Check if this query is succeed or not by current query id
-
     try
     {
         if (tableExists())
