@@ -493,7 +493,18 @@ void TaskStatusService::persistentFinishedTask()
 
 bool TaskStatusService::createTaskTable()
 {
-    static String query_id = "";
+    if (tableExists())
+    {
+        return true;
+    }
+    if (!create_task_table_id.empty())
+    {
+        auto task = findByIdInMemory(create_task_table_id);
+        if (task && task->status == TaskStatus::SUCCEEDED)
+        {
+            return true;
+        }
+    }
 
     const auto & config = global_context->getConfigRef();
     const auto & conf = configSettings();
@@ -574,23 +585,10 @@ bool TaskStatusService::createTaskTable()
 
     try
     {
-        if (tableExists())
-        {
-            return true;
-        }
-        if (!query_id.empty())
-        {
-            auto task = findByIdInMemory(query_id);
-            if (task && task->status == TaskStatus::SUCCEEDED)
-            {
-                return true;
-            }
-        }
-
         auto stream = executeQuery(query, context, true, QueryProcessingStage::Enum::WithMergeableStateAfterAggregation, false);
         stream.onFinish();
 
-        query_id = context->getCurrentQueryId();
+        create_task_table_id = context->getCurrentQueryId();
     }
     catch (...)
     {
