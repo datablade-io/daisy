@@ -134,11 +134,11 @@ struct Settings;
     M(Bool, allow_floating_point_partition_key, false, "Allow floating point as partition key", 0) \
     /** Settings for DistributedMergeTree */ \
     M(Int64, shard, -1, "Current shard number", 0) \
-    M(String, dwal_type, "kafka", "Backend distributed write-ahead log implementation", 0) \
-    M(String, dwal_cluster_id, "", "Backend distributed write-ahead log cluster id", 0) \
-    M(String, dwal_auto_offset_reset, "earliest", "Default offset to consume messages from if there is no initial one", 0) \
-    M(Int64, dwal_request_required_acks, 1, "Waited ack during data ingestion to the backend write-ahead log", 0) \
-    M(Int64, dwal_request_timeout_ms, 30000, "Time out vallue for an ingest request to the backend write-ahead log", 0) \
+    M(String, streaming_storage, "kafka", "Backend streaming storage for write ahead log implementation", 0) \
+    M(String, streaming_storage_cluster_id, "", "Backend streaming storage cluster id", 0) \
+    M(String, streaming_storage_auto_offset_reset, "earliest", "Default offset to consume messages from if there is no initial one", 0) \
+    M(Int64, streaming_storage_request_required_acks, 1, "Waited ack during data ingestion to the backend write-ahead log", 0) \
+    M(Int64, streaming_storage_request_timeout_ms, 30000, "Time out vallue for an ingest request to the backend write-ahead log", 0) \
     M(Int64, distributed_flush_threshhold_ms, 500, "Time threshhold for DistributedMergeTree to flush consumed data from write-ahead log", 0) \
     M(Int64, distributed_flush_threshhold_count, 1000000, "Row count threshhold for DistributedMergeTree to flush consumed data from write-ahead log", 0) \
     M(Int64, distributed_flush_threshhold_size, 50 * 1024 * 1024, "Data size threshhold for DistributedMergeTree to flush consumed data from write-ahead log", 0) \

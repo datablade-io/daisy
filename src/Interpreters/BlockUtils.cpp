@@ -119,7 +119,7 @@ void appendBlock(Block && block, ContextPtr context, IDistributedWriteAheadLog::
     }
 
     const auto & config = context->getGlobalContext()->getConfigRef();
-    auto topic = config.getString("system_settings.system_ddl_dwal.name");
+    auto topic = config.getString("cluster_settings.system_ddls.name");
     std::any ctx{DistributedWriteAheadLogKafkaContext{topic}};
 
     auto result = wal->append(record, ctx);

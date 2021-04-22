@@ -21,7 +21,7 @@ namespace ErrorCodes
 namespace
 {
     /// Globals
-    const String SYSTEM_ROLES_KEY = "system_settings.system_roles";
+    const String SYSTEM_ROLES_KEY = "cluster_settings.node_roles";
 }
 
 MetadataService::MetadataService(const ContextPtr & global_context_, const String & service_name)
@@ -188,6 +188,13 @@ void MetadataService::doTailingRecords()
 
 void MetadataService::startup()
 {
+    if (!global_context->isDistributed())
+    {
+        return;
+    }
+
+    assert(dwal);
+
     const auto & config = global_context->getConfigRef();
 
     /// If this node has `target` role, start background thread tailing records

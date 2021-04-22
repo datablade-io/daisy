@@ -33,7 +33,7 @@ namespace ErrorCodes
 
 namespace
 {
-String TASK_KEY_PREFIX = "system_settings.system_task_dwal.";
+String TASK_KEY_PREFIX = "cluster_settings.system_tasks.";
 String TASK_NAME_KEY = TASK_KEY_PREFIX + "name";
 String TASK_REPLICATION_FACTOR_KEY = TASK_KEY_PREFIX + "replication_factor";
 String TASK_DATA_RETENTION_KEY = TASK_KEY_PREFIX + "data_retention";

@@ -221,12 +221,6 @@ private:
     Int32 shards;
     ExpressionActionsPtr sharding_key_expr;
 
-    /// From table settings for producer
-    Int32 dwal_request_timeout_ms = 30000;
-    Int32 dwal_request_required_acks = 1;
-
-    /// From table settings for consumer
-    String dwal_auto_offset_reset = "earliest";
     /// Current shard. DWAL partition and table shard is 1:1 mapped
     Int32 shard = -1;
 

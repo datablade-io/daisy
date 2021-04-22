@@ -2685,9 +2685,8 @@ bool Context::isDistributed() const
         return false;
     }
 
-    /// Check if `system_settings.system_dwals` has been configured
     Poco::Util::AbstractConfiguration::Keys sys_dwal_keys;
-    getConfigRef().keys("system_settings.system_dwals", sys_dwal_keys);
+    getConfigRef().keys("cluster_settings.streaming_storage", sys_dwal_keys);
     return !sys_dwal_keys.empty();
 }
 
@@ -2707,7 +2706,7 @@ void Context::setupNodeIdentity()
         return;
     }
 
-    auto id = getConfigRef().getString("system_settings.node_identity", "");
+    auto id = getConfigRef().getString("cluster_settings.node_identity", "");
     if (!id.empty())
     {
         node_identity = id;

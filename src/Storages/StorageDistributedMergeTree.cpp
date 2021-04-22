@@ -1171,10 +1171,10 @@ void StorageDistributedMergeTree::backgroundConsumer()
     auto topic = getStorageID().getFullTableName();
     setThreadName("DistMergeTree");
 
-    DistributedWriteAheadLogKafkaContext consume_ctx{topic, shard, sequenceNumberLoaded()};
-    consume_ctx.auto_offset_reset = dwal_auto_offset_reset;
-
     auto ssettings = storage_settings.get();
+
+    DistributedWriteAheadLogKafkaContext consume_ctx{topic, shard, sequenceNumberLoaded()};
+    consume_ctx.auto_offset_reset = ssettings->streaming_storage_auto_offset_reset.value;
     consume_ctx.consume_callback_timeout_ms = ssettings->distributed_flush_threshhold_ms.value;
     consume_ctx.consume_callback_max_rows = ssettings->distributed_flush_threshhold_count;
     consume_ctx.consume_callback_max_messages_size = ssettings->distributed_flush_threshhold_size;
@@ -1297,17 +1297,14 @@ void StorageDistributedMergeTree::backgroundConsumer()
 void StorageDistributedMergeTree::initWal()
 {
     auto ssettings = storage_settings.get();
-    auto & offset_reset = ssettings->dwal_auto_offset_reset.value;
-    if (offset_reset == "earliest" || offset_reset == "latest")
+    const auto & offset_reset = ssettings->streaming_storage_auto_offset_reset.value;
+    if (offset_reset != "earliest" && offset_reset != "latest")
     {
-        dwal_auto_offset_reset = offset_reset;
-    }
-    else
-    {
-        throw Exception("Invalid dwal_auto_offset_reset, only 'earliest' and 'latest' are supported", ErrorCodes::INVALID_CONFIG_PARAMETER);
+        throw Exception("Invalid streaming_storage_auto_offset_reset, only 'earliest' and 'latest' are supported", ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
-    auto acks = ssettings->dwal_request_required_acks.value;
+    Int32 dwal_request_required_acks = 1;
+    auto acks = ssettings->streaming_storage_request_required_acks.value;
     if (acks >= -1 && acks <= replication_factor)
     {
         dwal_request_required_acks = acks;
@@ -1315,11 +1312,12 @@ void StorageDistributedMergeTree::initWal()
     else
     {
         throw Exception(
-            "Invalid dwal_request_required_acks, shall be in [-1, " + std::to_string(replication_factor) + "] range",
+            "Invalid streaming_storage_request_required_acks, shall be in [-1, " + std::to_string(replication_factor) + "] range",
             ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
-    auto timeout = ssettings->dwal_request_timeout_ms.value;
+    Int32 dwal_request_timeout_ms = 30000;
+    auto timeout = ssettings->streaming_storage_request_timeout_ms.value;
     if (timeout > 0)
     {
         dwal_request_timeout_ms = timeout;
@@ -1327,18 +1325,18 @@ void StorageDistributedMergeTree::initWal()
 
     shard = ssettings->shard.value;
 
-    if (ssettings->dwal_cluster_id.value.empty())
+    if (ssettings->streaming_storage_cluster_id.value.empty())
     {
         dwal = DistributedWriteAheadLogPool::instance(getContext()).getDefault();
     }
     else
     {
-        dwal = DistributedWriteAheadLogPool::instance(getContext()).get(ssettings->dwal_cluster_id.value);
+        dwal = DistributedWriteAheadLogPool::instance(getContext()).get(ssettings->streaming_storage_cluster_id.value);
     }
 
     if (!dwal)
     {
-        throw Exception("Invalid Kafka cluster id " + ssettings->dwal_cluster_id.value, ErrorCodes::INVALID_CONFIG_PARAMETER);
+        throw Exception("Invalid Kafka cluster id " + ssettings->streaming_storage_cluster_id.value, ErrorCodes::INVALID_CONFIG_PARAMETER);
     }
 
     /// Cached ctx, reused by append. Multiple threads are accessing append context
