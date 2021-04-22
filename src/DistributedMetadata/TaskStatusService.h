@@ -89,7 +89,7 @@ private:
 
     std::unique_ptr<BackgroundSchedulePoolTaskHolder> persistent_task;
     static constexpr size_t RESCHEDULE_TIME_MS = 120000;
-    static constexpr int RETRY_TIMES = 3;
+    static constexpr Int32 RETRY_TIMES = 3;
     static constexpr size_t RETRY_INTERVAL_MS = 5000;
     static constexpr Int64 CACHE_FINISHED_TASK_MS = 30000;
 };

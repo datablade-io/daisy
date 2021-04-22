@@ -12,8 +12,6 @@ namespace
         Poco::JSON::Array task_list;
         for (const auto & task : tasks)
         {
-            const auto & date_lut = DateLUT::instance();
-
             Poco::JSON::Object task_object;
             task_object.set("id", task->id);
             task_object.set("status", task->status);
@@ -21,8 +19,8 @@ namespace
             task_object.set("reason", task->reason);
             task_object.set("user", task->user);
             task_object.set("context", task->context);
-            task_object.set("last_modified", date_lut.timeToString(task->last_modified / 1000));
-            task_object.set("created", date_lut.timeToString(task->created / 1000));
+            task_object.set("last_modified", task->last_modified);
+            task_object.set("created", task->created);
 
             task_list.add(task_object);
         }

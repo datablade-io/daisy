@@ -26,6 +26,11 @@
 
 namespace DB
 {
+namespace ErrorCodes
+{
+    extern const int OK;
+}
+
 namespace
 {
 String TASK_KEY_PREFIX = "system_settings.system_task_dwal.";
@@ -79,6 +84,7 @@ Block buildBlock(const std::vector<TaskStatusService::TaskStatusPtr> & tasks)
                 assert(false);
             }
         }
+
         for (auto & col : int64_cols)
         {
             if ("last_modified" == col.first)
@@ -144,7 +150,18 @@ MetadataService::ConfigSettings TaskStatusService::configSettings() const
 Int32 TaskStatusService::append(TaskStatusPtr task)
 {
     auto record = buildRecord(task);
-    dwal->append(record, dwal_append_ctx);
+
+    for (auto i = 0; i < RETRY_TIMES; ++i)
+    {
+        auto result = dwal->append(record, dwal_append_ctx);
+        if (result.err == ErrorCodes::OK)
+        {
+            return 0;
+        }
+    }
+
+    /// FIXME: Error handling
+    LOG_ERROR(log, "Failed to commit task {}", task->id);
     return 0;
 }
 
@@ -158,6 +175,8 @@ void TaskStatusService::processRecords(const IDistributedWriteAheadLog::RecordPt
         auto task_ptr = buildTaskStatusFromRecord(record);
         updateTaskStatus(task_ptr);
     }
+
+    /// FIXME: Checkpointing
 }
 
 void TaskStatusService::updateTaskStatus(TaskStatusPtr & task_ptr)
@@ -169,14 +188,14 @@ void TaskStatusService::updateTaskStatus(TaskStatusPtr & task_ptr)
     {
         indexed_by_id[task_ptr->id] = task_ptr;
         auto user_map_iter = indexed_by_user.find(task_ptr->user);
-        if(user_map_iter == indexed_by_user.end())
+        if (user_map_iter == indexed_by_user.end())
         {
             indexed_by_user[task_ptr->user] = std::unordered_map<String, TaskStatusPtr>();
             user_map_iter = indexed_by_user.find(task_ptr->user);
         }
 
         assert(user_map_iter != indexed_by_user.end());
-        assert(user_map_iter->second.find(task_ptr->id) == user_map_iter->second.end());
+        assert(!user_map_iter->second.contains(task_ptr->id));
 
         user_map_iter->second[task_ptr->id] = task_ptr;
         return;
@@ -217,10 +236,15 @@ bool TaskStatusService::validateSchema(const Block & block, const std::vector<St
 bool TaskStatusService::tableExists() const
 {
     bool exists = false;
+    CurrentThread::detachQueryIfNotDetached();
+
     ContextPtr query_context = Context::createCopy(global_context);
-    query_context->makeQueryContext();
+    CurrentThread::QueryScope query_scope{query_context};
+
     executeSelectQuery(
-        "SELECT count(*) AS c FROM system.tables WHERE database = 'system' AND name = 'tasks'", query_context, [&exists](Block && block) {
+        "SELECT count(*) AS c FROM system.tables WHERE database = 'system' AND name = 'tasks'",
+        query_context,
+        [&exists](Block && block) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
             assert(block.has("c"));
             const auto & counts_col = block.findByName("c")->column;
             exists = counts_col->getUInt(0) != 0;
@@ -293,9 +317,9 @@ TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInMemory(const Strin
 
     for (auto task_list_iter = finished_tasks.begin(); task_list_iter != finished_tasks.end(); ++task_list_iter)
     {
-        for(const auto & task : task_list_iter->second)
+        for (const auto & task : task_list_iter->second)
         {
-            if(task->id == id)
+            if (task->id == id)
             {
                 return task;
             }
@@ -306,6 +330,8 @@ TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInMemory(const Strin
 
 TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInTable(const String & id)
 {
+    CurrentThread::detachQueryIfNotDetached();
+    /// FIXME: Remove DISTINCT when we resolve the checkpointing issue
     auto query_template = "SELECT DISTINCT id, status, progress, "
                           "reason, user, context, created, last_modified "
                           "FROM system.tasks "
@@ -316,10 +342,10 @@ TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInTable(const String
     std::vector<TaskStatusService::TaskStatusPtr> res;
 
     ContextPtr query_context = Context::createCopy(global_context);
-    query_context->makeQueryContext();
+    CurrentThread::QueryScope query_scope{query_context};
 
     executeSelectQuery(query, query_context, [this, &res](Block && block) { this->buildTaskStatusFromBlock(block, res); });
-    if (res.size() == 0)
+    if (res.empty())
         return nullptr;
     return res[0];
 }
@@ -342,14 +368,14 @@ void TaskStatusService::findByUserInMemory(const String & user, std::vector<Task
         return;
     }
 
-    for(auto it = user_map_iter->second.begin(); it != user_map_iter->second.end(); ++it)
+    for (auto it = user_map_iter->second.begin(); it != user_map_iter->second.end(); ++it)
     {
         res.push_back(it->second);
     }
 
     for (auto it = finished_tasks.begin(); it != finished_tasks.end(); ++it)
     {
-        for(const auto & task : it->second)
+        for (const auto & task : it->second)
         {
             if (task->user == user)
             {
@@ -362,6 +388,7 @@ void TaskStatusService::findByUserInMemory(const String & user, std::vector<Task
 void TaskStatusService::findByUserInTable(const String & user, std::vector<TaskStatusService::TaskStatusPtr> & res)
 {
     assert(!user.empty());
+    CurrentThread::detachQueryIfNotDetached();
     auto query_template = "SELECT DISTINCT id, status, progress, "
                           "reason, user, context, created, last_modified "
                           "FROM system.tasks "
@@ -370,20 +397,20 @@ void TaskStatusService::findByUserInTable(const String & user, std::vector<TaskS
     auto query = fmt::format(query_template, user);
 
     ContextPtr query_context = Context::createCopy(global_context);
-    query_context->makeQueryContext();
+    CurrentThread::QueryScope query_scope{query_context};
 
     executeSelectQuery(query, query_context, [this, &res](Block && block) { this->buildTaskStatusFromBlock(block, res); });
 }
 
 void TaskStatusService::schedulePersistentTask()
 {
-    for(int i = 0; i < RETRY_TIMES; ++i)
+    for (int i = 0; i < RETRY_TIMES; ++i)
     {
-        if(createTaskTable())
+        if (createTaskTable())
         {
             break;
         }
-        std::this_thread::sleep_for(std::chrono::seconds(RETRY_INTERVAL_MS));
+        std::this_thread::sleep_for(std::chrono::milliseconds(RETRY_INTERVAL_MS));
     }
 
     auto task_holder = global_context->getSchedulePool().createTask("PersistentTask", [this]() { this->persistentFinishedTask(); });
@@ -416,18 +443,18 @@ void TaskStatusService::persistentFinishedTask()
 
             auto task_iter = user_map_iter->second.find(it->second->id);
             assert(task_iter != user_map_iter->second.end());
-            
+
             user_map_iter->second.erase(task_iter);
             assert(user_map_iter->second.find(it->second->id) == user_map_iter->second.end());
 
-            if(user_map_iter->second.empty())
+            if (user_map_iter->second.empty())
             {
                 indexed_by_user.erase(user_map_iter);
                 assert(indexed_by_user.find(it->second->user) == indexed_by_user.end());
             }
 
             auto finished_task_iter = finished_tasks.find(it->second->last_modified);
-            if(finished_task_iter == finished_tasks.end())
+            if (finished_task_iter == finished_tasks.end())
             {
                 finished_tasks[it->second->last_modified] = std::vector<TaskStatusPtr>{it->second};
             }
@@ -440,6 +467,7 @@ void TaskStatusService::persistentFinishedTask()
         }
     }
 
+    /// FIXME: Add some error handling logic
     std::vector<TaskStatusPtr> persistent_list;
 
     for (auto finished_task_iter = finished_tasks.begin(); finished_task_iter != finished_tasks.end();)
@@ -456,6 +484,7 @@ void TaskStatusService::persistentFinishedTask()
 
     if (!persistent_list.empty())
     {
+        persistentTaskStatuses(persistent_list);
         LOG_DEBUG(log, "Persistent {} finished tasks", persistent_list.size());
     }
 
@@ -464,11 +493,14 @@ void TaskStatusService::persistentFinishedTask()
 
 bool TaskStatusService::createTaskTable()
 {
+    static String query_id = "";
+
     const auto & config = global_context->getConfigRef();
     const auto & conf = configSettings();
     const auto replicas = std::to_string(config.getInt(conf.replication_factor_key, 1));
 
-    String query = fmt::format("CREATE TABLE IF NOT EXISTS \
+    String query = fmt::format(
+        "CREATE TABLE IF NOT EXISTS \
                     system.tasks \
                     ( \
                     `id` String, \
@@ -477,20 +509,21 @@ bool TaskStatusService::createTaskTable()
                     `reason` String, \
                     `user` String, \
                     `context` String, \
-                    `created` DateTime64(3), \
-                    `last_modified` DateTime64(3), \
-                    `_time` DateTime64(3) DEFAULT created) \
+                    `created` Int64, \
+                    `last_modified` Int64, \
+                    `_time` Datetime64(3) DEFAULT fromUnixTimestamp64Milli(created, 'UTC')) \
                     ENGINE = DistributedMergeTree(1,{},rand()) \
                     ORDER BY (toMinute(_time), user, id) \
                     PARTITION BY toDate(_time) \
                     TTL toDateTime(_time + toIntervalDay(7)) DELETE \
-                    SETTINGS index_granularity = 8192", replicas);
+                    SETTINGS index_granularity = 8192",
+        replicas);
 
     /// FIXME: Remove query_payload when the sql interface is implemented
     String query_payload = R"d({
         "name" : "tasks",
         "shards": 1,
-        "replication_factor": )d" + replicas + R"d(,
+        "replication_factor": 1,
         "shard_by_expression": "rand()",
         "columns" : [
         {
@@ -519,17 +552,17 @@ bool TaskStatusService::createTaskTable()
         },
         {
         "name" : "created",
-        "type" : "DateTime64(3)"
+        "type" : "Int64"
         },
         {
         "name" : "last_modified",
-        "type" : "DateTime64(3)"
+        "type" : "Int64"
         }],
         "order_by_expression" : "(toMinute(_time), user, id)",
         "partition_by_granularity" : "D",
         "order_by_granularity": "H",
         "ttl_expression" : "toDateTime(_time + toIntervalDay(7)) DELETE",
-        "_time_column": "created"
+        "_time_column": "fromUnixTimestamp64Milli(created, 'UTC')"
         }
     )d";
 
@@ -538,7 +571,8 @@ bool TaskStatusService::createTaskTable()
     context->setQueryParameter("_payload", query_payload);
     context->setDistributedDDLOperation(true);
     CurrentThread::QueryScope query_scope{context};
-    
+
+    /// FIXME: Check if this query is succeed or not by current query id
 
     try
     {
@@ -546,16 +580,26 @@ bool TaskStatusService::createTaskTable()
         {
             return true;
         }
+        if (!query_id.empty())
+        {
+            auto task = findByIdInMemory(query_id);
+            if (task && task->status == TaskStatus::SUCCEEDED)
+            {
+                return true;
+            }
+        }
 
         auto stream = executeQuery(query, context, true, QueryProcessingStage::Enum::WithMergeableStateAfterAggregation, false);
         stream.onFinish();
+
+        query_id = context->getCurrentQueryId();
     }
     catch (...)
     {
         LOG_ERROR(log, "Create task table failed. ", getCurrentExceptionMessage(true, true));
         return false;
     }
-    return true;
+    return false;
 }
 
 bool TaskStatusService::persistentTaskStatuses(const std::vector<TaskStatusPtr> & tasks)
@@ -569,16 +613,15 @@ bool TaskStatusService::persistentTaskStatuses(const std::vector<TaskStatusPtr> 
     context->setCurrentQueryId("");
     CurrentThread::QueryScope query_scope{context};
 
-    const String value_template = "{}('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}')";
+    const String value_template = "{}('{}', '{}', '{}', '{}', '{}', '{}', {}, {})";
     String delimiter = "";
-    auto & date_lut = DateLUT::instance();
 
     for (const auto & task : tasks)
     {
         /// Only SUCCEEDED or FAILED task should be persistented into table
         assert(task->status == TaskStatus::SUCCEEDED || task->status == TaskStatus::FAILED);
-        auto created = date_lut.timeToString(task->created / 1000);
-        auto last_modified = date_lut.timeToString(task->last_modified / 1000);
+        auto created = std::to_string(task->created);
+        auto last_modified = std::to_string(task->last_modified);
         String value = fmt::format(
             value_template,
             delimiter,

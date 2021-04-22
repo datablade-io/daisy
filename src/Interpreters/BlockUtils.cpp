@@ -1,7 +1,6 @@
 #include "BlockUtils.h"
 
 #include <Core/Types.h>
-#include <Common/typeid_cast.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeString.h>
 #include <Databases/DatabaseFactory.h>
@@ -9,6 +8,7 @@
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <DistributedWriteAheadLog/IDistributedWriteAheadLog.h>
 #include <Interpreters/Context.h>
+#include <Common/typeid_cast.h>
 
 #include <common/logger_useful.h>
 
@@ -72,11 +72,11 @@ Block buildBlock(
     for (const auto & p : string_cols)
     {
         auto col = string_type->createColumn();
-        for(auto v = p.second.begin(); v != p.second.end(); ++v)
+        for (auto v = p.second.begin(); v != p.second.end(); ++v)
         {
             col->insertData(v->data(), v->size());
         }
-        
+
         ColumnWithTypeAndName col_with_type(std::move(col), string_type, p.first);
         block.insert(col_with_type);
     }
@@ -86,11 +86,11 @@ Block buildBlock(
     {
         auto col = int64_type->createColumn();
         auto int64_col = typeid_cast<ColumnInt64 *>(col.get());
-        for(auto v = p.second.begin(); v != p.second.end(); ++v)
+        for (auto v = p.second.begin(); v != p.second.end(); ++v)
         {
             int64_col->insertValue(*v);
         }
-        
+
         ColumnWithTypeAndName col_with_type(std::move(col), int64_type, p.first);
         block.insert(col_with_type);
     }
