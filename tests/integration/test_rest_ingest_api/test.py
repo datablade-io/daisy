@@ -84,9 +84,9 @@ def test_ingest_api_basic_case(table, query, status):
     result = json.loads(resp.content)
     assert 'poll_id' in result
     assert 'query_id' in result
-    assert 'channel_id' in result
+    assert 'channel' in result
     # get status
-    req = {"channel_id": result['channel_id'], "poll_ids": [result['poll_id']]}
+    req = {"channel": result['channel'], "poll_ids": [result['poll_id']]}
     resp = instance.http_request(method="POST", url="dae/v1/ingest/statuses", data=json.dumps(req))
     assert resp.status_code == status['status']
     assert status['result'] in resp.text
@@ -95,11 +95,11 @@ def test_ingest_api_basic_case(table, query, status):
 @pytest.mark.parametrize("poll, status", [
     (
         {
-            "channel_id": "fsfs"
+            "channel": "fsfs"
         },
         {
             "status": 404,
-            "result": "Unknown channel_id"
+            "result": "Unknown channel"
         }
     )
 ])
