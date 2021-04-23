@@ -24,9 +24,10 @@ std::map<String, std::map<String, String> > RawstoreTableRestRouterHandler::crea
 
 bool RawstoreTableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    if (!getQueryParameter("query").empty())
+    const String & query = getQueryParameter("query");
+    if (!query.empty())
     {
-        return true;
+        return validateQueryType(query, "create", error_msg);
     }
 
     if (!validateSchema(create_schema, payload, error_msg))

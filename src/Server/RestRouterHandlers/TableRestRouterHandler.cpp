@@ -3,6 +3,9 @@
 
 #include <Core/Block.h>
 #include <Interpreters/executeQuery.h>
+#include <Parsers/ASTCreateQuery.h>
+#include <Parsers/ASTAlterQuery.h>
+#include <Parsers/New/parseQuery.h>
 
 #include <boost/algorithm/string/join.hpp>
 
@@ -72,12 +75,41 @@ bool TableRestRouterHandler::validateGet(const Poco::JSON::Object::Ptr & /* payl
 
 bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    if (!getQueryParameter("query").empty())
+    const String & query = getQueryParameter("query");
+    if (!query.empty())
     {
-        return true;
+        return validateQueryType(query, "alter", error_msg);
     }
 
     return validateSchema(update_schema, payload, error_msg);
+}
+
+bool TableRestRouterHandler::validateQueryType(const String & query, const String & query_type, String & error_msg) const
+{
+    const auto & query_ptr = parseQuery(
+        query.data(),
+        query.data() + query.size(),
+        query_context->getSettingsRef().max_query_size,
+        query_context->getSettingsRef().max_parser_depth,
+        query_context->getCurrentDatabase());
+    bool valid = false;
+
+    if (query_type == "create")
+    {
+        valid = query_ptr->as<ASTCreateQuery>();
+    }
+    else if (query_type == "alter")
+    {
+        valid = query_ptr->as<ASTAlterQuery>();
+    }
+    /// `Drop` does not need valid as the `Delete` api does not accept any sql query.
+
+    if (!valid)
+    {
+        error_msg = "The input query has an invalid query type.";
+    }
+
+    return valid;
 }
 
 String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status*/) const

@@ -23,6 +23,8 @@ protected:
     String processQuery(const String & query) const;
     String getCreationSQL(const Poco::JSON::Object::Ptr & payload) const;
 
+    bool validateQueryType(const String & query, const String & query_type, String & error_msg) const;
+
     bool validateGet(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
     bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
     bool validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
