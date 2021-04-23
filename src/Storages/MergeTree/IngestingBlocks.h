@@ -33,7 +33,13 @@ public:
 
     /// Ingest status calculation
     std::pair<String, Int32> status(const String & id) const;
-    void getStatusInBatch(const std::vector<String> & poll_ids, std::vector<std::tuple<String, String, Int32>> & status);
+    struct IngestStatus
+    {
+        String poll_id;
+        String status;
+        Int32 progress;
+    };
+    void getStatusInBatch(const std::vector<String> & poll_ids, std::vector<IngestStatus> & statuses) const;
 
     /// number of outstanding blocks
     size_t outstandingBlocks() const;

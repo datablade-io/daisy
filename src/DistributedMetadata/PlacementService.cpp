@@ -29,7 +29,6 @@ const String PLACEMENT_DATA_RETENTION_KEY = PLACEMENT_KEY_PREFIX + "data_retenti
 const String PLACEMENT_DEFAULT_TOPIC = "__system_node_metrics";
 
 const String THIS_HOST = getFQDNOrHostName();
-const String HOST_CHANNEL_ID = std::to_string(CityHash_v1_0_2::CityHash64WithSeed(THIS_HOST.data(), THIS_HOST.size(), 123));
 }
 
 PlacementService & PlacementService::instance(const ContextPtr & context)
@@ -273,10 +272,11 @@ void PlacementService::doBroadcast()
     disk_block.insert(disk_space_col_with_type);
 
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(disk_block)};
+    const auto & node_identity = global_context->getNodeIdentity();
     record.partition_key = 0;
-    record.setIdempotentKey(global_context->getNodeIdentity());
+    record.setIdempotentKey(node_identity);
     record.headers["_host"] = THIS_HOST;
-    record.headers["_channel"] = HOST_CHANNEL_ID;
+    record.headers["_channel"] = std::to_string(CityHash_v1_0_2::CityHash64WithSeed(node_identity.data(), node_identity.size(), 123));
     record.headers["_http_port"] = global_context->getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context->getConfigRef().getString("tcp_port", "9000");
     record.headers["_version"] = "1";

@@ -62,8 +62,8 @@ def setup_nodes():
                      [23, "c", "2021-01-02 00:00:00.000", [33, 34], ["aa", "ab"], "::10.1.1.3"]]
 
         }, {
-            "status": 406,
-            "result": "table: default.test is not a DistributedMergeTreeTable"
+            "status": 400,
+            "result": "None of poll_id"
         }
     ),
     (
@@ -84,33 +84,30 @@ def test_ingest_api_basic_case(table, query, status):
     result = json.loads(resp.content)
     assert 'poll_id' in result
     assert 'query_id' in result
+    assert 'channel_id' in result
     # get status
-    poll_id = result['poll_id']
-    resp = instance.http_request(method="GET", url="dae/v1/ingest/statuses/" + poll_id)
+    req = {"channel_id": result['channel_id'], "poll_ids": [result['poll_id']]}
+    resp = instance.http_request(method="POST", url="dae/v1/ingest/statuses", data=json.dumps(req))
     assert resp.status_code == status['status']
     assert status['result'] in resp.text
 
 
-@pytest.mark.parametrize("poll_id, status", [
+@pytest.mark.parametrize("poll, status", [
     (
-        "poll_id_invalid",
         {
-            "status": 500,
-            "result": "Invalid poll ID"
-        }
-    ),
-    (
-        "",
+            "channel_id": "fsfs"
+        },
         {
             "status": 404,
-            "result": '"code":78,"error_msg":"Unknown URI"'
+            "result": "Unknown channel_id"
         }
     )
 ])
-def test_status_exception(poll_id, status):
+def test_status_exception(poll, status):
     instance.ip_address = "localhost"
+    # get channel_id
     # get status
-    resp = instance.http_request(method="GET", url="dae/v1/ingest/statuses/" + poll_id)
+    resp = instance.http_request(method="POST", url="dae/v1/ingest/statuses", data=json.dumps(poll))
     assert resp.status_code == status['status']
     assert status['result'] in resp.text
 
@@ -120,9 +117,7 @@ def test_status_exception(poll_id, status):
         "test",
         {
             "columns": ["a", "b", "t", "n.a", "n.b", "ip"],
-            "data": [[21, "a", "2021-01-01 23:23:00", [30, 31], ["aa", "ab"], "::10.1.1.1"],
-                     [22, "b", "2021-01-01 00:00:00", [31, 32], ["aa", "ab"], "::10.1.1.2"],
-                     [23, "c", "2021-01-02 00:00:00.000", [33, 34], ["aa", "ab"], "::10.1.1.3"]]
+            "data": [[21, "a", "2021-01-01 23:23:00", [30, 31], ["aa", "ab"], "::10.1.1.1"]]
 
         }, {
             "status": 400,
