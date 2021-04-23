@@ -152,6 +152,9 @@ TEST(EliminateSubquery, OptimizedQuery)
     EXPECT_EQ(
         optimizeSubquery("SELECT *, sourcetype FROM (SELECT _raw, _time, sourcetype, * FROM default.frontier_integration_test)"),
         "SELECT *, sourcetype FROM default.frontier_integration_test");
+    EXPECT_EQ(
+        optimizeSubquery("SELECT *, sourcetype FROM (SELECT * EXCEPT _time FROM default.frontier_integration_test)"),
+        "SELECT * EXCEPT _time, sourcetype FROM default.frontier_integration_test");
 }
 
 TEST(EliminateSubquery, FailedOptimizedQuery)
