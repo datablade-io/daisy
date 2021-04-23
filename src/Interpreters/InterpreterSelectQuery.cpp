@@ -35,7 +35,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/QueryAliasesVisitor.h>
 #include <Interpreters/replaceAliasColumnsInQuery.h>
-#include <Interpreters/EliminateSubqueryVisitor.h>
+#include <Interpreters/UnnestSubqueryVisitor.h>
 
 #include <Processors/Pipe.h>
 #include <Processors/QueryPlan/AggregatingStep.h>
@@ -309,6 +309,14 @@ InterpreterSelectQuery::InterpreterSelectQuery(
         ApplyWithSubqueryVisitor().visit(query_ptr);
     }
 
+    /// Daisy : starts. Try to eliminate subquery
+    if (settings.unnest_subqueries)
+    {
+        UnnestSubqueryVisitorData data;
+        UnnestSubqueryVisitor(data).visit(query_ptr);
+    }
+    /// Daisy : ends.
+
     JoinedTables joined_tables(getSubqueryContext(context), getSelectQuery());
 
     bool got_storage_from_query = false;
@@ -482,15 +490,6 @@ InterpreterSelectQuery::InterpreterSelectQuery(
     };
 
     analyze(settings.optimize_move_to_prewhere);
-
-    /// Daisy : starts. Try to eliminate subquery
-    /// Put after "analyze" func call to use the rewrite result by "translateQualifiedNames" func call.
-    if (settings.unnest_subqueries)
-    {
-        EliminateSubqueryVisitorData data;
-        EliminateSubqueryVisitor(data).visit(query_ptr);
-    }
-    /// Daisy : ends.
 
     bool need_analyze_again = false;
     if (analysis_result.prewhere_constant_filter_description.always_false || analysis_result.prewhere_constant_filter_description.always_true)
