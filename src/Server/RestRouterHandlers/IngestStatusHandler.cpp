@@ -1,4 +1,3 @@
-
 #include "IngestStatusHandler.h"
 #include "SchemaValidator.h"
 
