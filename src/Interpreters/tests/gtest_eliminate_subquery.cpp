@@ -171,4 +171,18 @@ TEST(EliminateSubquery, FailedOptimizedQuery)
         "SELECT t.c AS d FROM (SELECT a AS c, b FROM product) AS t");
     EXPECT_EQ(optimizeSubquery("SELECT t.a FROM (SELECT a, b FROM product) AS t"), "SELECT t.a FROM (SELECT a, b FROM product) AS t");
     EXPECT_EQ(optimizeSubquery("SELECT t.a FROM (SELECT * FROM product) AS t"), "SELECT t.a FROM (SELECT * FROM product) AS t");
+    EXPECT_EQ(
+        optimizeSubquery(
+            "SELECT count(t.code) FROM (SELECT a.code, b.code FROM product_info a , product_info b WHERE a.productid = b.productid) AS t"),
+        "SELECT count(t.code) FROM (SELECT a.code, b.code FROM product_info AS a , product_info AS b WHERE a.productid = b.productid) AS "
+        "t");
+    EXPECT_EQ(
+        optimizeSubquery("SELECT count(t.b.code) FROM (SELECT a.code, b.code FROM product_info a , product_info b WHERE a.productid = "
+                         "b.productid) AS t"),
+        "SELECT count(t.b.code) FROM (SELECT a.code, b.code FROM product_info AS a , product_info AS b WHERE a.productid = b.productid) AS "
+        "t");
+    EXPECT_EQ(
+        optimizeSubquery(
+            "SELECT count(t.code) FROM (SELECT code, code FROM product_info a , product_info b WHERE a.productid = b.productid) AS t"),
+        "SELECT count(t.code) FROM (SELECT code, code FROM product_info AS a , product_info AS b WHERE a.productid = b.productid) AS t");
 }
