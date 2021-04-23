@@ -1,4 +1,4 @@
-#include <Interpreters/EliminateSubqueryVisitor.h>
+#include <Interpreters/UnnestSubqueryVisitor.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/formatAST.h>
@@ -18,8 +18,8 @@ static String optimizeSubquery(const String & query)
     {
         for (auto & select : select_with_union_query->list_of_selects->children)
         {
-            EliminateSubqueryVisitorData data;
-            EliminateSubqueryVisitor(data).visit(select);
+            UnnestSubqueryVisitorData data;
+            UnnestSubqueryVisitor(data).visit(select);
         }
     }
 

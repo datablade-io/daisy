@@ -35,7 +35,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/QueryAliasesVisitor.h>
 #include <Interpreters/replaceAliasColumnsInQuery.h>
-#include <Interpreters/EliminateSubqueryVisitor.h>
+#include <Interpreters/UnnestSubqueryVisitor.h>
 
 #include <Processors/Pipe.h>
 #include <Processors/QueryPlan/AggregatingStep.h>
@@ -312,8 +312,8 @@ InterpreterSelectQuery::InterpreterSelectQuery(
     /// Daisy : starts. Try to eliminate subquery
     if (settings.unnest_subqueries)
     {
-        EliminateSubqueryVisitorData data;
-        EliminateSubqueryVisitor(data).visit(query_ptr);
+        UnnestSubqueryVisitorData data;
+        UnnestSubqueryVisitor(data).visit(query_ptr);
     }
     /// Daisy : ends.
 

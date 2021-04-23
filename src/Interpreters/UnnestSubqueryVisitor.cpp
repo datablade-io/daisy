@@ -1,4 +1,4 @@
-#include <Interpreters/EliminateSubqueryVisitor.h>
+#include <Interpreters/UnnestSubqueryVisitor.h>
 #include <Parsers/ASTAsterisk.h>
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
@@ -7,7 +7,7 @@
 
 namespace DB
 {
-void EliminateSubqueryVisitorData::visit(ASTSelectQuery & select_query, ASTPtr &)
+void UnnestSubqueryVisitorData::visit(ASTSelectQuery & select_query, ASTPtr &)
 {
     /// Ignore "join" case
     if (select_query.tables() == nullptr || select_query.tables()->children.size() != 1)
@@ -27,7 +27,7 @@ void EliminateSubqueryVisitorData::visit(ASTSelectQuery & select_query, ASTPtr &
     }
 }
 
-void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQuery & parent_select)
+void UnnestSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQuery & parent_select)
 {
     if (table.subquery == nullptr)
     {
@@ -100,7 +100,7 @@ void EliminateSubqueryVisitorData::visit(ASTTableExpression & table, ASTSelectQu
     parent_select.setExpression(ASTSelectQuery::Expression::SELECT, std::move(new_parent_select));
 }
 
-void EliminateSubqueryVisitorData::rewriteColumn(
+void UnnestSubqueryVisitorData::rewriteColumn(
     ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects_map, bool drop_alias /*= false*/)
 {
     if (auto * identifier = ast->as<ASTIdentifier>())
@@ -129,7 +129,7 @@ void EliminateSubqueryVisitorData::rewriteColumn(
     }
 }
 
-bool EliminateSubqueryVisitorData::mergeable(
+bool UnnestSubqueryVisitorData::mergeable(
     const ASTSelectQuery & child_query,
     bool & asterisk_in_subquery,
     std::unordered_map<String, ASTPtr> & subquery_selects_map,
@@ -165,7 +165,7 @@ bool EliminateSubqueryVisitorData::mergeable(
 }
 
 
-void EliminateSubqueryVisitorData::setParentColumns(
+void UnnestSubqueryVisitorData::setParentColumns(
     ASTs & new_parent_selects,
     bool asterisk_in_subquery,
     const ASTs & parent_selects,

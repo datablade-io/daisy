@@ -9,11 +9,11 @@
 
 namespace DB
 {
-class EliminateSubqueryVisitorData
+class UnnestSubqueryVisitorData
 {
 public:
     using TypeToVisit = ASTSelectQuery;
-    using Matcher = OneTypeMatcher<EliminateSubqueryVisitorData, NeedChild::none>;
+    using Matcher = OneTypeMatcher<UnnestSubqueryVisitorData, NeedChild::none>;
     using Visitor = InDepthNodeVisitor<Matcher, false>;
     void visit(ASTSelectQuery & node, ASTPtr &);
 
@@ -33,6 +33,6 @@ private:
         ASTs & subquery_selects);
 };
 
-using EliminateSubqueryVisitor = EliminateSubqueryVisitorData::Visitor;
+using UnnestSubqueryVisitor = UnnestSubqueryVisitorData::Visitor;
 
 }
