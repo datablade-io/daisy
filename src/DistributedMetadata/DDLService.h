@@ -32,8 +32,7 @@ private:
     Int32 doDDL(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
     void createTable(IDistributedWriteAheadLog::RecordPtr record);
     void mutateTable(IDistributedWriteAheadLog::RecordPtr record, const String & method) const;
-    void createDatabase(IDistributedWriteAheadLog::RecordPtr record) const;
-    void deleteDatabase(IDistributedWriteAheadLog::RecordPtr record) const;
+    void mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, const String & method) const;
     void commit(Int64 last_sn);
 
 private:

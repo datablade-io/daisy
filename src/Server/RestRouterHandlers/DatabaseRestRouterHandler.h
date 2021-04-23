@@ -2,6 +2,8 @@
 
 #include "RestRouterHandler.h"
 
+#include <Processors/QueryPipeline.h>
+
 namespace DB
 {
 class DatabaseRestRouterHandler final : public RestRouterHandler
@@ -20,6 +22,7 @@ private:
 private:
     String processQuery(const String & query, Int32 & /* http_status */) const;
     String buildResponse() const;
+    void processQueryWithProcessors(Poco::JSON::Object & resp, QueryPipeline & pipeline) const;
 };
 
 }

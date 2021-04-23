@@ -116,8 +116,8 @@ void buildTablesJSON(Poco::JSON::Object & resp, const CatalogService::TablePtrs 
 
     for (const auto & table : tables)
     {
-        /// Distinguish not rawstore
-        if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") == String::npos && !table->name.empty())
+        /// FIXME : Later based on engin seting dstinguish table or rawstore
+        if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") == String::npos)
         {
             Poco::JSON::Object table_mapping_json;
 
@@ -214,10 +214,10 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
     }
 
     Poco::JSON::Object resp;
-    resp.set("query_id", query_context->getClientInfo().initial_query_id);
+    resp.set("query_id", query_context->getCurrentQueryId());
     buildTablesJSON(resp, tables);
 
-    std::stringstream resp_str_stream;
+    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     resp.stringify(resp_str_stream, 0);
     String resp_str = resp_str_stream.str();
 

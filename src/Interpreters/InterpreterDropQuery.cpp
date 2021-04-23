@@ -170,10 +170,8 @@ bool InterpreterDropQuery::deleteDatabaseDistributed(const ASTDropQuery & query)
 
     if (ctx->isDistributedDDLOperation())
     {
-        const auto & catalog_service = CatalogService::instance(ctx);
-        auto tables = catalog_service.findTableByDB(query.database);
-        
-        if (tables.empty())
+        const auto & database = DatabaseCatalog::instance().tryGetDatabase(query.database);
+        if (!database)
         {
             throw Exception(fmt::format("Databases {} does not exist.", query.database), ErrorCodes::UNKNOWN_DATABASE);
         }

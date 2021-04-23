@@ -418,7 +418,7 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
         return;
     }
 
-    /// FIXME: make sure `target_hosts` is a complete list of hosts
+    /// FIXME: make sure `target_hosts` is a complete list of hosts which
     /// has this table definition (shards * replication_factor)
 
     for (auto & uri : target_hosts)
@@ -430,7 +430,7 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
     succeedDDL(query_id, user, payload);
 }
 
-void DDLService::createDatabase(IDistributedWriteAheadLog::RecordPtr record) const
+void DDLService::mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, const String & method) const
 {
     Block & block = record->block;
     assert(block.has("query_id"));
@@ -450,7 +450,7 @@ void DDLService::createDatabase(IDistributedWriteAheadLog::RecordPtr record) con
     {
         LOG_ERROR(
             log,
-            "Failed to create database because there are not enough hosts to place, payload={} "
+            "Failed to mutage database because there are not enough hosts to place, payload={} "
             "query_id={} user={}",
             payload,
             query_id,
@@ -468,46 +468,14 @@ void DDLService::createDatabase(IDistributedWriteAheadLog::RecordPtr record) con
 
     std::vector<Poco::URI> target_hosts{toURIs(hosts, fmt::format(DDL_DATABSE_POST_API_PATH_FMT, database), http_port)};
 
-    /// FIXME: make sure `target_hosts` is a complete list of hosts
+    /// FIXME: make sure `target_hosts` is a complete list of hosts which
+    /// has this table definition (shards * replication_factor)
+
+    /// FIXME : Parallelize doDDL on the uris
     for (auto & uri : target_hosts)
     {
         uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_POST, query_id);
-    }
-
-    succeedDDL(query_id, user, payload);
-}
-
-void DDLService::deleteDatabase(IDistributedWriteAheadLog::RecordPtr record) const
-{
-    Block & block = record->block;
-    assert(block.has("query_id"));
-
-    if (!validateSchema(block, {"payload", "database", "timestamp", "query_id", "user"}))
-    {
-        return;
-    }
-
-    String payload = block.getByName("payload").column->getDataAt(0).toString();
-    String database = block.getByName("database").column->getDataAt(0).toString();
-    String query_id = block.getByName("query_id").column->getDataAt(0).toString();
-    String user = block.getByName("user").column->getDataAt(0).toString();
-
-    std::vector<Poco::URI> target_hosts{
-        toURIs(placement.placed(database), fmt::format(DDL_DATABSE_DELETE_API_PATH_FMT, database), http_port)};
-
-    if (target_hosts.empty())
-    {
-        LOG_ERROR(log, "Database {} is not found, payload={} query_id={} user={}", database, payload, query_id, user);
-        failDDL(query_id, user, payload, "Table not found");
-        return;
-    }
-
-    /// FIXME: make sure `target_hosts` is a complete list of hosts
-    for (auto & uri : target_hosts)
-    {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_DELETE, query_id);
+        doDDL(payload, uri, method, query_id);
     }
 
     succeedDDL(query_id, user, payload);
@@ -563,11 +531,16 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_DATABASE)
         {
-            createDatabase(record);
+            mutateDatabase(record, Poco::Net::HTTPRequest::HTTP_POST);
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_DATABASE)
         {
-            deleteDatabase(record);
+            mutateDatabase(record, Poco::Net::HTTPRequest::HTTP_DELETE);
+
+            /// Delete DWAL
+            String database = record->block.getByName("database").column->getDataAt(0).toString();
+            std::any ctx{DistributedWriteAheadLogKafkaContext{database}};
+            doDeleteDWal(ctx);
         }
         else
         {

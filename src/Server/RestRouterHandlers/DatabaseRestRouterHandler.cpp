@@ -2,10 +2,9 @@
 
 #include "SchemaValidator.h"
 
-#include <DataStreams/IBlockStream_fwd.h>
-#include <DataTypes/DataTypeString.h>
-#include <DistributedMetadata/CatalogService.h>
+#include <Core/Block.h>
 #include <Interpreters/executeQuery.h>
+#include <Processors/Executors/PullingAsyncPipelineExecutor.h>
 
 #include <boost/functional/hash.hpp>
 
@@ -27,24 +26,11 @@ bool DatabaseRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & pay
     return validateSchema(CREATE_SCHEMA, payload, error_msg);
 }
 
-String DatabaseRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status */) const
+String DatabaseRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
 {
-    const auto & catalog_service = CatalogService::instance(query_context);
-    const auto & databases = catalog_service.databases();
+    String query = "SHOW DATABASES;";
 
-    Poco::JSON::Array databases_mapping_json;
-    for (const auto & database : databases)
-    {
-        databases_mapping_json.add(database);
-    }
-
-    Poco::JSON::Object resp;
-    resp.set("query_id", query_context->getCurrentQueryId());
-    resp.set("databases", databases_mapping_json);
-    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    resp.stringify(resp_str_stream, 0);
-
-    return resp_str_stream.str();
+    return processQuery(query, http_status);
 }
 
 String DatabaseRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
@@ -81,23 +67,38 @@ String DatabaseRestRouterHandler::processQuery(const String & query, Int32 & /* 
 {
     BlockIO io{executeQuery(query, query_context, false /* internal */)};
 
+    Poco::JSON::Object resp;
     if (io.pipeline.initialized())
     {
-        return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
+        processQueryWithProcessors(resp, io.pipeline);
     }
     io.onFinish();
 
-    return buildResponse();
-}
-
-String DatabaseRestRouterHandler::buildResponse() const
-{
-    Poco::JSON::Object resp;
     resp.set("query_id", query_context->getCurrentQueryId());
     std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     resp.stringify(resp_str_stream, 0);
 
     return resp_str_stream.str();
+}
+
+void DatabaseRestRouterHandler::processQueryWithProcessors(Poco::JSON::Object & resp, QueryPipeline & pipeline) const
+{
+    PullingAsyncPipelineExecutor executor(pipeline);
+    Poco::JSON::Array databases_mapping_json;
+    Block block;
+
+    while (executor.pull(block, 100))
+    {
+        if (block)
+        {
+            for (size_t index = 0; index < block.rows(); index++)
+            {
+                const auto & databases_info = block.getColumns().at(0)->getDataAt(index).data;
+                databases_mapping_json.add(databases_info);
+            }
+        }
+    }
+    resp.set("databases", databases_mapping_json);
 }
 
 }

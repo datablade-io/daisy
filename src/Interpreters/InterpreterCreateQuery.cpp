@@ -78,7 +78,6 @@
 #include <common/logger_useful.h>
 
 #include <common/ClockUtils.h>
-#include <DistributedMetadata/CatalogService.h>
 
 namespace DB
 {
@@ -937,9 +936,8 @@ bool InterpreterCreateQuery::createDatabaseDistributed(ASTCreateQuery & create)
 
     if (ctx->isDistributedDDLOperation())
     {
-        const auto & catalog_service = CatalogService::instance(ctx);
-        auto tables = catalog_service.findTableByDB(create.database);
-        if (!tables.empty())
+        const auto & database = DatabaseCatalog::instance().tryGetDatabase(create.database);
+        if (database)
         {
             throw Exception(fmt::format("Database {} already exists.", create.database), ErrorCodes::DATABASE_ALREADY_EXISTS);
         }
