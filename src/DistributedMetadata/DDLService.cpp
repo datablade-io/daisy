@@ -522,8 +522,7 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
             /// Delete DWAL
             String database = record->block.getByName("database").column->getDataAt(0).toString();
             String table = record->block.getByName("table").column->getDataAt(0).toString();
-            std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table}};
-            doDeleteDWal(ctx);
+            cleanDWALs({database + "." + table});
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
         {
@@ -535,12 +534,18 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
         }
         else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_DATABASE)
         {
+            String database = record->block.getByName("database").column->getDataAt(0).toString();
+            const auto & tables = catalog.findTableByDB(database);
+
             mutateDatabase(record, Poco::Net::HTTPRequest::HTTP_DELETE);
 
-            /// Delete DWAL
-            String database = record->block.getByName("database").column->getDataAt(0).toString();
-            std::any ctx{DistributedWriteAheadLogKafkaContext{database}};
-            doDeleteDWal(ctx);
+            /// Clean up all DWAL in the database
+            std::vector<String> dwal_names;
+            for (const auto & table : tables)
+            {
+                dwal_names.emplace_back(database + "." + table->name);
+            }
+            cleanDWALs(dwal_names);
         }
         else
         {
@@ -553,4 +558,14 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
 
     /// FIXME, update DDL task status after committing offset / local offset checkpoint ...
 }
+
+void DDLService::cleanDWALs(const std::vector<String> & dwal_names)
+{
+    for (const auto & dwal_name : dwal_names)
+    {
+        std::any ctx{DistributedWriteAheadLogKafkaContext{dwal_name}};
+        doDeleteDWal(ctx);
+    }
+}
+
 }

@@ -204,19 +204,21 @@ bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payloa
 
 String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status */) const
 {
-    const auto & catalog_service = CatalogService::instance(query_context);
     const String & database_name = getPathParameter("database");
-    const auto & tables = catalog_service.findTableByDB(database_name);
+    const auto & database = DatabaseCatalog::instance().tryGetDatabase(database_name);
 
-    if (tables.size() == 0)
+    if (!database)
     {
         return jsonErrorResponse(fmt::format("Databases {} does not exist.", database_name), ErrorCodes::UNKNOWN_DATABASE);
     }
 
+    const auto & catalog_service = CatalogService::instance(query_context);
+    const auto & tables = catalog_service.findTableByDB(database_name);
+
     Poco::JSON::Object resp;
-    resp.set("query_id", query_context->getCurrentQueryId());
     buildTablesJSON(resp, tables);
 
+    resp.set("query_id", query_context->getCurrentQueryId());
     std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
     resp.stringify(resp_str_stream, 0);
     String resp_str = resp_str_stream.str();
