@@ -132,7 +132,7 @@ std::pair<String, Int32> IngestingBlocks::status(const String & id) const
     return std::make_pair("Unknown", -1);
 }
 
-void IngestingBlocks::getStatusInBatch(const std::vector<String> & poll_ids, std::vector<IngestingBlocks::IngestStatus> & statuses) const
+void IngestingBlocks::getStatuses(const std::vector<String> & poll_ids, std::vector<IngestingBlocks::IngestStatus> & statuses) const
 {
     std::shared_lock guard(rwlock);
     for (const auto & id : poll_ids)

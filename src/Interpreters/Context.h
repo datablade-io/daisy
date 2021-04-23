@@ -497,7 +497,7 @@ public:
     /// Parse poll id and return `host` in ID, throws if poll_id is invalid or validations didn't pass
     std::vector<String> parseQueryStatusPollId(const String & poll_id) const;
     String getNodeIdentity() const { return node_identity; }
-    String getChannelId() const { return channel_id; }
+    String getChannel() const { return channel_id; }
     const String & getIdempotentKey() const { return idempotent_key; }
     const String & getIngestMode() const { return ingest_mode; }
     bool isDistributed() const;

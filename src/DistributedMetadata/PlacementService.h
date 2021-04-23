@@ -22,7 +22,7 @@ public:
     std::vector<NodeMetricsPtr>
     place(Int32 shards, Int32 replication_factor, const String & storage_policy = "default", const String & colocated_table = "") const;
     std::vector<String> placed(const String & database, const String & table) const;
-    const String getNodeIdentityByChannelId(const String & channel_id) const;
+    String getNodeIdentityByChannel(const String & channel) const;
 
 private:
     void preShutdown() override

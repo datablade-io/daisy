@@ -39,7 +39,7 @@ public:
         String status;
         Int32 progress;
     };
-    void getStatusInBatch(const std::vector<String> & poll_ids, std::vector<IngestStatus> & statuses) const;
+    void getStatuses(const std::vector<String> & poll_ids, std::vector<IngestStatus> & statuses) const;
 
     /// number of outstanding blocks
     size_t outstandingBlocks() const;

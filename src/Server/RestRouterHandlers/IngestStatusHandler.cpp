@@ -24,18 +24,69 @@ namespace ErrorCodes
     extern const int SEND_POLL_REQ_ERROR;
 }
 
-
+namespace
+{
 const String BATCH_URL = "http://{}:{}/dae/v1/ingest/statuses";
 
-std::map<String, std::map<String, String>> IngestStatusHandler::poll_schema
-    = {{"required", {{"channel_id", "string"}, {"poll_ids", "array"}}}};
+const std::map<String, std::map<String, String>> POLL_SCHEMA = {{"required", {{"channel", "string"}, {"poll_ids", "array"}}}};
+
+
+StoragePtr
+getTableStorage(const String & database_name, const String & table_name, ContextPtr query_context, String & error, int & error_code) const
+{
+    error.clear();
+    error_code = ErrorCodes::OK;
+
+    StoragePtr storage;
+    try
+    {
+        storage = DatabaseCatalog::instance().getTable(StorageID(database_name, table_name), query_context);
+    }
+    catch (Exception & e)
+    {
+        error = e.message();
+        error_code = e.code();
+        return nullptr;
+    }
+
+    if (!storage)
+    {
+        error = "table: " + database_name + "." + table_name + " does not exist";
+        error_code = ErrorCodes::UNKNOWN_TABLE;
+        return nullptr;
+    }
+
+    if (storage->getName() != "DistributedMergeTree")
+    {
+        error = "table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable";
+        error_code = ErrorCodes::TYPE_MISMATCH;
+        return nullptr;
+    }
+    return storage;
+}
+
+String makeBatchResponse(const std::vector<IngestingBlocks::IngestStatus> & statuses)
+{
+    Poco::JSON::Object resp;
+    Poco::JSON::Array json_statuses;
+    for (const auto & status : statuses)
+    {
+        Poco::JSON::Object::Ptr json(new Poco::JSON::Object());
+        json->set("poll_id", status.poll_id);
+        json->set("status", status.status);
+        json->set("progress", status.progress);
+        json_statuses.add(json);
+    }
+    resp.set("status", json_statuses);
+    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+    resp.stringify(resp_str_stream, 0);
+    return resp_str_stream.str();
+}
+}
 
 bool IngestStatusHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    if (!validateSchema(poll_schema, payload, error_msg))
-        return false;
-
-    return true;
+    return !validateSchema(POLL_SCHEMA, payload, error_msg);
 }
 
 bool IngestStatusHandler::categorizePollIds(const std::vector<String> & poll_ids, TablePollIdMap & table_poll_ids, String & error) const
@@ -49,7 +100,7 @@ bool IngestStatusHandler::categorizePollIds(const std::vector<String> & poll_ids
         {
             /// components: 0: query_id, 1: database, 2: table, 3: user, 5: timestamp
             components = query_context->parseQueryStatusPollId(poll_id);
-            const auto db_table = std::make_pair(components[1], components[2]);
+            auto db_table = std::make_pair(std::move(components[1]), std::move(components[2]));
             table_poll_ids[db_table].emplace_back(std::move(poll_id));
         }
         catch (Exception & e)
@@ -66,14 +117,14 @@ String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload,
 {
     String error;
     PlacementService & placement = PlacementService::instance(query_context);
-    const String & channel_id = payload->get("channel_id").toString();
-    const String & target_node = placement.getNodeIdentityByChannelId(channel_id);
+    const String & channel = payload->get("channel").toString();
+    const String & target_node = placement.getNodeIdentityByChannel(channel);
 
     if (target_node.empty())
     {
         /// Invalid node
         http_status = Poco::Net::HTTPResponse::HTTP_NOT_FOUND;
-        return jsonErrorResponse("Unknown channel_id", ErrorCodes::CHANNEL_ID_NOT_EXISTS);
+        return jsonErrorResponse("Unknown channel", ErrorCodes::CHANNEL_ID_NOT_EXISTS);
     }
 
     if (target_node == query_context->getNodeIdentity())
@@ -94,10 +145,9 @@ String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload,
         std::vector<IngestingBlocks::IngestStatus> statuses;
         int error_code = ErrorCodes::OK;
 
-        for (auto & table_polls : table_poll_ids)
+        for (const auto & table_polls : table_poll_ids)
         {
-            const StorageDistributedMergeTree * storage = static_cast<const StorageDistributedMergeTree *>(
-                getAndVerifyStorage(table_polls.first.first, table_polls.first.second, error, error_code));
+            auto storage = getTableStorage(table_polls.first.first, table_polls.first.second, query_context, error, error_code);
             if (!storage)
             {
                 LOG_ERROR(
@@ -108,7 +158,9 @@ String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload,
                     error_code);
                 continue;
             }
-            storage->getStatusInBatch(table_polls.second, statuses);
+
+            StorageDistributedMergeTree * storage = static_cast<StorageDistributedMergeTree *>(storage.get());
+            storage->getIngestionStatuses(table_polls.second, statuses);
         }
         if (statuses.empty())
         {
@@ -187,55 +239,4 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, const Poco::JS
     return jsonErrorResponse(error, ErrorCodes::SEND_POLL_REQ_ERROR);
 }
 
-const IStorage *
-IngestStatusHandler::getAndVerifyStorage(const String & database_name, const String & table_name, String & error, int & error_code) const
-{
-    error.clear();
-    error_code = ErrorCodes::OK;
-
-    StoragePtr storage;
-    try
-    {
-        storage = DatabaseCatalog::instance().getTable(StorageID(database_name, table_name), query_context);
-    }
-    catch (Exception & e)
-    {
-        error = e.message();
-        error_code = e.code();
-        return nullptr;
-    }
-
-    if (!storage)
-    {
-        error = "table: " + database_name + "." + table_name + " does not exist";
-        error_code = ErrorCodes::UNKNOWN_TABLE;
-        return nullptr;
-    }
-
-    if (storage->getName() != "DistributedMergeTree")
-    {
-        error = "table: " + database_name + "." + table_name + " is not a DistributedMergeTreeTable";
-        error_code = ErrorCodes::TYPE_MISMATCH;
-        return nullptr;
-    }
-    return storage.get();
-}
-
-String IngestStatusHandler::makeBatchResponse(const std::vector<IngestingBlocks::IngestStatus> & statuses)
-{
-    Poco::JSON::Object resp;
-    Poco::JSON::Array json_statuses;
-    for (const auto & status : statuses)
-    {
-        Poco::JSON::Object::Ptr json(new Poco::JSON::Object());
-        json->set("poll_id", status.poll_id);
-        json->set("status", status.status);
-        json->set("progress", status.progress);
-        json_statuses.add(json);
-    }
-    resp.set("status", json_statuses);
-    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    resp.stringify(resp_str_stream, 0);
-    return resp_str_stream.str();
-}
 }

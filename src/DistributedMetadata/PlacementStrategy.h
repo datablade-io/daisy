@@ -14,8 +14,8 @@ struct NodeMetrics
 {
     /// `host` is network reachable like hostname, FQDN or IP of the node
     String host;
-    /// `channel_id` is the identifier of the host exposed to client for polling status
-    String channel_id;
+    /// `channel` is the identifier of the host exposed to client for polling status
+    String channel;
     /// `node_identity` can be unique uuid
     String node_identity;
     /// `(policy name, free disk space)`
@@ -29,7 +29,7 @@ struct NodeMetrics
 
     bool staled = false;
 
-    explicit NodeMetrics(const String & host_, const String & channel_id_) : host(host_), channel_id(channel_id_) { }
+    explicit NodeMetrics(const String & host_, const String & channel_) : host(host_), channel(channel_) { }
 };
 using NodeMetricsPtr = std::shared_ptr<NodeMetrics>;
 using NodeMetricsContainer = std::unordered_map<String, NodeMetricsPtr>;

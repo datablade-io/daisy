@@ -111,13 +111,13 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
     return hosts;
 }
 
-const String PlacementService::getNodeIdentityByChannelId(const String & channel_id) const
+String PlacementService::getNodeIdentityByChannel(const String & channel) const
 {
     std::shared_lock guard(rwlock);
 
     for (const auto & [node_identity, node_metrics] : nodes_metrics)
     {
-        if(!node_metrics->staled && node_metrics->channel_id == channel_id)
+        if(!node_metrics->staled && node_metrics->channel == channel)
         {
             return node_metrics->host;
         }
@@ -210,7 +210,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
             LOG_INFO(log, "Node identity={} host={} recovered from staleness", key, host);
         }
     }
-    node_metrics->channel_id = channel_id;
+    node_metrics->channel = channel_id;
     node_metrics->node_identity = key;
     node_metrics->http_port = http_port;
     node_metrics->tcp_port = tcp_port;
@@ -272,11 +272,10 @@ void PlacementService::doBroadcast()
     disk_block.insert(disk_space_col_with_type);
 
     IDistributedWriteAheadLog::Record record{IDistributedWriteAheadLog::OpCode::ADD_DATA_BLOCK, std::move(disk_block)};
-    const auto & node_identity = global_context->getNodeIdentity();
     record.partition_key = 0;
-    record.setIdempotentKey(node_identity);
+    record.setIdempotentKey(global_context->getNodeIdentity());
     record.headers["_host"] = THIS_HOST;
-    record.headers["_channel"] = std::to_string(CityHash_v1_0_2::CityHash64WithSeed(node_identity.data(), node_identity.size(), 123));
+    record.headers["_channel"] = global_context->getChannel();
     record.headers["_http_port"] = global_context->getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context->getConfigRef().getString("tcp_port", "9000");
     record.headers["_version"] = "1";
