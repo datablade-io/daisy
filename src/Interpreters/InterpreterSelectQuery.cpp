@@ -330,8 +330,25 @@ InterpreterSelectQuery::InterpreterSelectQuery(
     {
         table_lock = storage->lockForShare(context->getInitialQueryId(), context->getSettingsRef().lock_acquire_timeout);
         table_id = storage->getStorageID();
+        /// Daisy : starts
         if (!metadata_snapshot)
-            metadata_snapshot = storage->getInMemoryMetadataPtr();
+        {
+            if (storage->getName() != "Distributed")
+            {
+                metadata_snapshot = storage->getInMemoryMetadataPtr();
+            }
+            else
+            {
+                const StorageDistributed * storage_distributed = static_cast<const StorageDistributed *>(storage.get());
+                StoragePtr storage_replicated = DatabaseCatalog::instance().getTable(
+                    StorageID(storage_distributed->getRemoteDatabaseName(), storage_distributed->getRemoteTableName()), context);
+                if (storage_replicated)
+                    metadata_snapshot = storage_replicated->getInMemoryMetadataPtr();
+                else
+                    metadata_snapshot = storage->getInMemoryMetadataPtr();
+            }
+        }
+        /// Daisy : ends
     }
 
     if (has_input || !joined_tables.resolveTables())
