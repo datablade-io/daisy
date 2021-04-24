@@ -73,7 +73,7 @@
 #include <Storages/MergeTree/MergeTreeWhereOptimizer.h>
 #include <Storages/IStorage.h>
 #include <Storages/StorageView.h>
-#include <Storage/StorageDistributed.h>
+#include <Storages/StorageDistributed.h>
 
 #include <Functions/IFunction.h>
 #include <Core/Field.h>

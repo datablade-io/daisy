@@ -32,7 +32,7 @@ const std::map<String, std::map<String, String>> POLL_SCHEMA = {{"required", {{"
 
 
 StoragePtr
-getTableStorage(const String & database_name, const String & table_name, ContextPtr query_context, String & error, int & error_code) const
+getTableStorage(const String & database_name, const String & table_name, ContextPtr query_context, String & error, int & error_code)
 {
     error.clear();
     error_code = ErrorCodes::OK;
@@ -117,8 +117,7 @@ String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload,
 {
     String error;
     PlacementService & placement = PlacementService::instance(query_context);
-    const String & channel = payload->get("channel").toString();
-    const String & target_node = placement.getNodeIdentityByChannel(channel);
+    const String & target_node = placement.getNodeIdentityByChannel(payload->get("channel").toString());
 
     if (target_node.empty())
     {
@@ -159,8 +158,8 @@ String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload,
                 continue;
             }
 
-            StorageDistributedMergeTree * storage = static_cast<StorageDistributedMergeTree *>(storage.get());
-            storage->getIngestionStatuses(table_polls.second, statuses);
+            StorageDistributedMergeTree * dstorage = static_cast<StorageDistributedMergeTree *>(storage.get());
+            dstorage->getIngestionStatuses(table_polls.second, statuses);
         }
         if (statuses.empty())
         {
