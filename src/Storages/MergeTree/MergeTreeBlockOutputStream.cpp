@@ -1,5 +1,6 @@
 #include <Storages/MergeTree/MergeTreeBlockOutputStream.h>
 #include <Storages/MergeTree/MergeTreeDataPartInMemory.h>
+#include <Storages/MergeTree/SequenceInfo.h>
 #include <Storages/StorageMergeTree.h>
 #include <Interpreters/PartLog.h>
 
@@ -24,11 +25,26 @@ void MergeTreeBlockOutputStream::writePrefix()
 void MergeTreeBlockOutputStream::write(const Block & block)
 {
     auto part_blocks = storage.writer.splitBlockIntoParts(block, max_parts_per_block, metadata_snapshot);
+
+    /// Daisy : starts
+    Int32 parts = static_cast<Int32>(part_blocks.size());
+    Int32 part_index = 0;
+
     for (auto & current_block : part_blocks)
     {
         Stopwatch watch;
 
-        MergeTreeData::MutableDataPartPtr part = storage.writer.writeTempPart(current_block, metadata_snapshot, optimize_on_insert);
+        SequenceInfoPtr part_seq;
+
+        if (seq_info)
+        {
+            part_seq = seq_info->shallowClone(part_index, parts);
+        }
+
+        MergeTreeData::MutableDataPartPtr part
+            = storage.writer.writeTempPart(current_block, metadata_snapshot, optimize_on_insert, part_seq);
+        part_index++;
+        /// Daisy : ends
 
         /// If optimize_on_insert setting is true, current_block could become empty after merge
         /// and we didn't create part.

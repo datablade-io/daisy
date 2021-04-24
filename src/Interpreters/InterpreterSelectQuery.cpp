@@ -35,7 +35,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/QueryAliasesVisitor.h>
 #include <Interpreters/replaceAliasColumnsInQuery.h>
-#include <Interpreters/EliminateSubqueryVisitor.h>
+#include <Interpreters/UnnestSubqueryVisitor.h>
 
 #include <Processors/Pipe.h>
 #include <Processors/QueryPlan/AggregatingStep.h>
@@ -73,6 +73,7 @@
 #include <Storages/MergeTree/MergeTreeWhereOptimizer.h>
 #include <Storages/IStorage.h>
 #include <Storages/StorageView.h>
+#include <Storages/StorageDistributed.h>
 
 #include <Functions/IFunction.h>
 #include <Core/Field.h>
@@ -312,12 +313,12 @@ InterpreterSelectQuery::InterpreterSelectQuery(
     /// Daisy : starts. Try to eliminate subquery
     if (settings.unnest_subqueries)
     {
-        EliminateSubqueryVisitorData data;
-        EliminateSubqueryVisitor(data).visit(query_ptr);
+        UnnestSubqueryVisitorData data;
+        UnnestSubqueryVisitor(data).visit(query_ptr);
     }
     /// Daisy : ends.
 
-    JoinedTables joined_tables(getSubqueryContext(*context), getSelectQuery());
+    JoinedTables joined_tables(getSubqueryContext(context), getSelectQuery());
 
     bool got_storage_from_query = false;
     if (!has_input && !storage)
@@ -330,8 +331,25 @@ InterpreterSelectQuery::InterpreterSelectQuery(
     {
         table_lock = storage->lockForShare(context->getInitialQueryId(), context->getSettingsRef().lock_acquire_timeout);
         table_id = storage->getStorageID();
+        /// Daisy : starts
         if (!metadata_snapshot)
-            metadata_snapshot = storage->getInMemoryMetadataPtr();
+        {
+            if (storage->getName() != "Distributed")
+            {
+                metadata_snapshot = storage->getInMemoryMetadataPtr();
+            }
+            else
+            {
+                const StorageDistributed * storage_distributed = static_cast<const StorageDistributed *>(storage.get());
+                StoragePtr storage_replicated = DatabaseCatalog::instance().getTable(
+                    StorageID(storage_distributed->getRemoteDatabaseName(), storage_distributed->getRemoteTableName()), context);
+                if (storage_replicated)
+                    metadata_snapshot = storage_replicated->getInMemoryMetadataPtr();
+                else
+                    metadata_snapshot = storage->getInMemoryMetadataPtr();
+            }
+        }
+        /// Daisy : ends
     }
 
     if (has_input || !joined_tables.resolveTables())

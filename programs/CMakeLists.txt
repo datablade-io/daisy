@@ -39,6 +39,8 @@ option (ENABLE_CLICKHOUSE_ODBC_BRIDGE "HTTP-server working like a proxy to ODBC 
 option (ENABLE_CLICKHOUSE_LIBRARY_BRIDGE "HTTP-server working like a proxy to Library dictionary source"
     ${ENABLE_CLICKHOUSE_ALL})
 
+option (ENABLE_CLICKHOUSE_DWAL_BENCHMARK "Distributed write ahead log benchmark" ${ENABLE_CLICKHOUSE_ALL})
+
 # https://presentations.clickhouse.tech/matemarketing_2020/
 option (ENABLE_CLICKHOUSE_GIT_IMPORT "A tool to analyze Git repositories"
     ${ENABLE_CLICKHOUSE_ALL})
@@ -130,6 +132,12 @@ else()
     message(STATUS "ClickHouse git-import: OFF")
 endif()
 
+if (ENABLE_CLICKHOUSE_DWAL_BENCHMARK)
+    message(STATUS "ClickHouse dwal-benchmark: ON")
+else()
+    message(STATUS "ClickHouse dwal-benchmark: OFF")
+endif()
+
 if(NOT (MAKE_STATIC_LIBRARIES OR SPLIT_SHARED_LIBRARIES))
     set(CLICKHOUSE_ONE_SHARED ON)
 endif()
@@ -198,6 +206,7 @@ add_subdirectory (obfuscator)
 add_subdirectory (install)
 add_subdirectory (git-import)
 add_subdirectory (bash-completion)
+add_subdirectory (distributed-wal)
 
 if (ENABLE_CLICKHOUSE_ODBC_BRIDGE)
     add_subdirectory (odbc-bridge)
@@ -208,15 +217,15 @@ if (ENABLE_CLICKHOUSE_LIBRARY_BRIDGE)
 endif ()
 
 if (CLICKHOUSE_ONE_SHARED)
-    add_library(clickhouse-lib SHARED ${CLICKHOUSE_SERVER_SOURCES} ${CLICKHOUSE_CLIENT_SOURCES} ${CLICKHOUSE_LOCAL_SOURCES} ${CLICKHOUSE_BENCHMARK_SOURCES} ${CLICKHOUSE_COPIER_SOURCES} ${CLICKHOUSE_EXTRACT_FROM_CONFIG_SOURCES} ${CLICKHOUSE_COMPRESSOR_SOURCES} ${CLICKHOUSE_FORMAT_SOURCES} ${CLICKHOUSE_OBFUSCATOR_SOURCES} ${CLICKHOUSE_GIT_IMPORT_SOURCES} ${CLICKHOUSE_ODBC_BRIDGE_SOURCES})
-    target_link_libraries(clickhouse-lib ${CLICKHOUSE_SERVER_LINK} ${CLICKHOUSE_CLIENT_LINK} ${CLICKHOUSE_LOCAL_LINK} ${CLICKHOUSE_BENCHMARK_LINK} ${CLICKHOUSE_COPIER_LINK} ${CLICKHOUSE_EXTRACT_FROM_CONFIG_LINK} ${CLICKHOUSE_COMPRESSOR_LINK} ${CLICKHOUSE_FORMAT_LINK} ${CLICKHOUSE_OBFUSCATOR_LINK} ${CLICKHOUSE_GIT_IMPORT_LINK} ${CLICKHOUSE_ODBC_BRIDGE_LINK})
+    add_library(clickhouse-lib SHARED ${CLICKHOUSE_SERVER_SOURCES} ${CLICKHOUSE_CLIENT_SOURCES} ${CLICKHOUSE_LOCAL_SOURCES} ${CLICKHOUSE_BENCHMARK_SOURCES} ${CLICKHOUSE_COPIER_SOURCES} ${CLICKHOUSE_EXTRACT_FROM_CONFIG_SOURCES} ${CLICKHOUSE_COMPRESSOR_SOURCES} ${CLICKHOUSE_FORMAT_SOURCES} ${CLICKHOUSE_OBFUSCATOR_SOURCES} ${CLICKHOUSE_GIT_IMPORT_SOURCES} ${CLICKHOUSE_ODBC_BRIDGE_SOURCES} ${CLICKHOUSE_DWAL_BENCHMARK_SOURCES})
+    target_link_libraries(clickhouse-lib ${CLICKHOUSE_SERVER_LINK} ${CLICKHOUSE_CLIENT_LINK} ${CLICKHOUSE_LOCAL_LINK} ${CLICKHOUSE_BENCHMARK_LINK} ${CLICKHOUSE_COPIER_LINK} ${CLICKHOUSE_EXTRACT_FROM_CONFIG_LINK} ${CLICKHOUSE_COMPRESSOR_LINK} ${CLICKHOUSE_FORMAT_LINK} ${CLICKHOUSE_OBFUSCATOR_LINK} ${CLICKHOUSE_GIT_IMPORT_LINK} ${CLICKHOUSE_ODBC_BRIDGE_LINK} ${CLICKHOUSE_DWAL_BENCHMARK_LINK})
     target_include_directories(clickhouse-lib ${CLICKHOUSE_SERVER_INCLUDE} ${CLICKHOUSE_CLIENT_INCLUDE} ${CLICKHOUSE_LOCAL_INCLUDE} ${CLICKHOUSE_BENCHMARK_INCLUDE} ${CLICKHOUSE_COPIER_INCLUDE} ${CLICKHOUSE_EXTRACT_FROM_CONFIG_INCLUDE} ${CLICKHOUSE_COMPRESSOR_INCLUDE} ${CLICKHOUSE_FORMAT_INCLUDE} ${CLICKHOUSE_OBFUSCATOR_INCLUDE} ${CLICKHOUSE_GIT_IMPORT_INCLUDE} ${CLICKHOUSE_ODBC_BRIDGE_INCLUDE})
     set_target_properties(clickhouse-lib PROPERTIES SOVERSION ${VERSION_MAJOR}.${VERSION_MINOR} VERSION ${VERSION_SO} OUTPUT_NAME clickhouse DEBUG_POSTFIX "")
     install (TARGETS clickhouse-lib LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT clickhouse)
 endif()
 
 if (CLICKHOUSE_SPLIT_BINARY)
-    set (CLICKHOUSE_ALL_TARGETS clickhouse-server clickhouse-client clickhouse-local clickhouse-benchmark clickhouse-extract-from-config clickhouse-compressor clickhouse-format clickhouse-obfuscator clickhouse-git-import clickhouse-copier)
+    set (CLICKHOUSE_ALL_TARGETS clickhouse-server clickhouse-client clickhouse-local clickhouse-benchmark clickhouse-extract-from-config clickhouse-compressor clickhouse-format clickhouse-obfuscator clickhouse-git-import clickhouse-copier clickhouse-dwal-benchmark)
 
     if (ENABLE_CLICKHOUSE_ODBC_BRIDGE)
         list (APPEND CLICKHOUSE_ALL_TARGETS clickhouse-odbc-bridge)
@@ -276,6 +285,9 @@ else ()
     if (ENABLE_CLICKHOUSE_INSTALL)
         clickhouse_target_link_split_lib(clickhouse install)
     endif ()
+    if (ENABLE_CLICKHOUSE_DWAL_BENCHMARK)
+        clickhouse_target_link_split_lib(clickhouse dwal-benchmark)
+    endif ()
 
     set (CLICKHOUSE_BUNDLE)
     if (ENABLE_CLICKHOUSE_SERVER)
@@ -327,6 +339,11 @@ else ()
         add_custom_target (clickhouse-git-import ALL COMMAND ${CMAKE_COMMAND} -E create_symlink clickhouse clickhouse-git-import DEPENDS clickhouse)
         install (FILES ${CMAKE_CURRENT_BINARY_DIR}/clickhouse-git-import DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT clickhouse)
         list(APPEND CLICKHOUSE_BUNDLE clickhouse-git-import)
+    endif ()
+    if (ENABLE_CLICKHOUSE_DWAL_BENCHMARK)
+        add_custom_target (clickhouse-dwal-benchmark ALL COMMAND ${CMAKE_COMMAND} -E create_symlink clickhouse clickhouse-dwal-benchmark DEPENDS clickhouse)
+        install (FILES ${CMAKE_CURRENT_BINARY_DIR}/clickhouse-dwal-benchmark DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT clickhouse)
+        list(APPEND CLICKHOUSE_BUNDLE clickhouse-dwal-benchmark)
     endif ()
 
     install (TARGETS clickhouse RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT clickhouse)

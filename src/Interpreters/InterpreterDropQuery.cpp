@@ -6,13 +6,17 @@
 #include <Interpreters/InterpreterDropQuery.h>
 #include <Interpreters/ExternalDictionariesLoader.h>
 #include <Interpreters/QueryLog.h>
+#include <Interpreters/BlockUtils.h>
 #include <Access/AccessRightsElement.h>
 #include <Parsers/ASTDropQuery.h>
+#include <Parsers/queryToString.h>
 #include <Storages/IStorage.h>
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Common/typeid_cast.h>
+#include <common/ClockUtils.h>
 #include <Databases/DatabaseReplicated.h>
+#include <DistributedMetadata/CatalogService.h>
 
 #if !defined(ARCADIA_BUILD)
 #    include "config_core.h"
@@ -31,6 +35,7 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int SYNTAX_ERROR;
     extern const int UNKNOWN_TABLE;
+    extern const int UNKNOWN_DATABASE;
     extern const int UNKNOWN_DICTIONARY;
     extern const int NOT_IMPLEMENTED;
     extern const int INCORRECT_QUERY;
@@ -84,9 +89,136 @@ void InterpreterDropQuery::waitForTableToBeActuallyDroppedOrDetached(const ASTDr
         db->waitDetachedTableNotInUse(uuid_to_wait);
 }
 
+/// Daisy : start
+bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
+{
+    auto ctx = getContext();
+    if (!ctx->isDistributed())
+    {
+        return false;
+    }
+
+    if (!ctx->getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        /// context.setDistributedDDLOperation(true);
+        return false;
+    }
+
+    if (ctx->isDistributedDDLOperation())
+    {
+        const auto & catalog_service = CatalogService::instance(ctx);
+        auto tables = catalog_service.findTableByName(query.database, query.table);
+        if (tables.empty())
+        {
+            throw Exception(fmt::format("Table {}.{} does not exist.", query.database, query.table), ErrorCodes::UNKNOWN_TABLE);
+        }
+        if (tables[0]->engine !="DistributedMergeTree")
+        {
+            /// FIXME:  We only support `DistributedMergeTree` table engine for now
+            return false;
+        }
+
+        auto * log = &Poco::Logger::get("InterpreterDropQuery");
+
+        auto query_str = queryToString(query);
+        LOG_INFO(log, "Drop DistributedMergeTree query={} query_id={}", query_str, ctx->getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols = {
+            {"payload", ctx->getQueryParameters().at("_payload")},
+            {"database", query.database},
+            {"table", query.table},
+            {"query_id", ctx->getCurrentQueryId()},
+            {"user", ctx->getUserName()}
+        };
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        /// Milliseconds since epoch
+        std::vector<std::pair<String, UInt64>> uint64_cols = {{"timestamp", MonotonicMilliseconds::now()}};
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (payload, database, table, timestamp, query_id, user)
+
+        appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::DELETE_TABLE, log);
+
+        LOG_INFO(
+            log, "Request of dropping DistributedMergeTree query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        return true;
+    }
+    return false;
+}
+
+bool InterpreterDropQuery::deleteDatabaseDistributed(const ASTDropQuery & query)
+{
+    auto ctx = getContext();
+    if (!ctx->isDistributed())
+    {
+        return false;
+    }
+
+    if (!ctx->getQueryParameters().contains("_payload"))
+    {
+        /// FIXME:
+        /// Build json payload here from SQL statement
+        /// context.setDistributedDDLOperation(true);
+        return false;
+    }
+
+    if (ctx->isDistributedDDLOperation())
+    {
+        const auto & database = DatabaseCatalog::instance().tryGetDatabase(query.database);
+        if (!database)
+        {
+            throw Exception(fmt::format("Databases {} does not exist.", query.database), ErrorCodes::UNKNOWN_DATABASE);
+        }
+ 
+        auto * log = &Poco::Logger::get("InterpreterDropQuery");
+
+        auto query_str = queryToString(query);
+        LOG_INFO(log, "Drop database query={} query_id={}", query_str, ctx->getCurrentQueryId());
+
+        std::vector<std::pair<String, String>> string_cols = {
+            {"payload", ctx->getQueryParameters().at("_payload")},
+            {"database", query.database},
+            {"query_id", ctx->getCurrentQueryId()},
+            {"user", ctx->getUserName()}
+        };
+
+        std::vector<std::pair<String, Int32>> int32_cols;
+
+        /// Milliseconds since epoch
+        std::vector<std::pair<String, UInt64>> uint64_cols = {{"timestamp", MonotonicMilliseconds::now()}};
+
+        Block block = buildBlock(string_cols, int32_cols, uint64_cols);
+        /// Schema: (payload, database, timestamp, query_id, user)
+
+        appendBlock(std::move(block), ctx, IDistributedWriteAheadLog::OpCode::DELETE_DATABASE, log);
+
+        LOG_INFO(
+            log, "Request of dropping database query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
+
+        /// FIXME, project tasks status
+        return true;
+    }
+    return false;
+}
+/// Daisy : end
+
 BlockIO InterpreterDropQuery::executeToTable(ASTDropQuery & query)
 {
     DatabasePtr database;
+
+    /// Daisy : start
+    if (deleteTableDistributed(query))
+    {
+        return {};
+    }
+    /// Daisy : end
+
     UUID table_to_wait_on = UUIDHelpers::Nil;
     auto res = executeToTableImpl(query, database, table_to_wait_on);
     if (query.no_delay)
@@ -199,7 +331,6 @@ BlockIO InterpreterDropQuery::executeToTableImpl(ASTDropQuery & query, DatabaseP
     return {};
 }
 
-
 BlockIO InterpreterDropQuery::executeToDictionary(
     const String & database_name_,
     const String & dictionary_name,
@@ -294,9 +425,15 @@ BlockIO InterpreterDropQuery::executeToTemporaryTable(const String & table_name,
     return {};
 }
 
-
 BlockIO InterpreterDropQuery::executeToDatabase(const ASTDropQuery & query)
 {
+    /// Daisy : start
+    if (deleteDatabaseDistributed(query))
+    {
+        return {};
+    }
+    /// Daisy : end
+
     DatabasePtr database;
     std::vector<UUID> tables_to_wait;
     BlockIO res;

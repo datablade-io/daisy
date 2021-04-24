@@ -50,6 +50,7 @@
 #include <Interpreters/InterserverCredentials.h>
 #include <Interpreters/ExpressionJIT.h>
 #include <Access/AccessControlManager.h>
+#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
 #include <Storages/StorageReplicatedMergeTree.h>
 #include <Storages/System/attachSystemTables.h>
 #include <AggregateFunctions/registerAggregateFunctions.h>
@@ -72,7 +73,11 @@
 #include <Server/PostgreSQLHandlerFactory.h>
 #include <Server/ProtocolServerAdapter.h>
 #include <Server/HTTP/HTTPServer.h>
-
+#include <DistributedMetadata/TaskStatusService.h>
+#include <DistributedMetadata/CatalogService.h>
+#include <DistributedMetadata/DDLService.h>
+#include <DistributedMetadata/PlacementService.h>
+#include <Server/RestRouterHandlers/RestRouterFactory.h>
 
 #if !defined(ARCADIA_BUILD)
 #   include "config_core.h"
@@ -143,7 +148,6 @@ int mainEntryClickHouseServer(int argc, char ** argv)
     }
 }
 
-
 namespace
 {
 
@@ -194,6 +198,45 @@ int waitServersToFinish(std::vector<DB::ProtocolServerAdapter> & servers, size_t
     }
     return current_connections;
 }
+
+/// Daisy : starts
+void initDistributedMetadataServices(DB::ContextPtr & global_context)
+{
+    /// Init DWAL pool
+    auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
+    pool.startup();
+
+    auto & task_status_service = DB::TaskStatusService::instance(global_context);
+    task_status_service.startup();
+
+    auto & catalog_service = DB::CatalogService::instance(global_context);
+    catalog_service.startup();
+
+    auto & placement_service = DB::PlacementService::instance(global_context);
+    placement_service.startup();
+
+    auto & ddl_service = DB::DDLService::instance(global_context);
+    ddl_service.startup();
+}
+
+void deinitDistributedMetadataServices(DB::ContextPtr & global_context)
+{
+    auto & ddl_service = DB::DDLService::instance(global_context);
+    ddl_service.shutdown();
+
+    auto & placement_service = DB::PlacementService::instance(global_context);
+    placement_service.shutdown();
+
+    auto & catalog_service = DB::CatalogService::instance(global_context);
+    catalog_service.shutdown();
+
+    auto & task_status_service = DB::TaskStatusService::instance(global_context);
+    task_status_service.shutdown();
+
+    auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
+    pool.shutdown();
+}
+/// Daisy : ends
 
 }
 
@@ -980,6 +1023,11 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
     LOG_INFO(log, "Loading metadata from {}", path);
 
+    /// Daisy: start. init Distributed metadata services for DistributedMergeTree table engine
+    global_context->setupNodeIdentity();
+    initDistributedMetadataServices(global_context);
+    /// Daisy: end.
+
     try
     {
         loadMetadataSystem(global_context);
@@ -1000,6 +1048,12 @@ int Server::main(const std::vector<std::string> & /*args*/)
         throw;
     }
     LOG_DEBUG(log, "Loaded metadata.");
+
+    /// Daisy : start.
+    DB::CatalogService::instance(global_context).broadcast();
+    DB::PlacementService::instance(global_context).scheduleBroadcast();
+    DB::TaskStatusService::instance(global_context).schedulePersistentTask();
+    /// Daisy : end.
 
     /// Init trace collector only after trace_log system table was created
     /// Disable it if we collect test coverage information, because it will work extremely slow.
@@ -1103,6 +1157,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
         AsynchronousMetrics async_metrics(
             global_context, config().getUInt("asynchronous_metrics_update_period_s", 60), servers_to_start_before_tables, servers);
         attachSystemTablesAsync(*DatabaseCatalog::instance().getSystemDatabase(), async_metrics);
+
+        /// Daisy : start. Register Rest api route handlers
+        RestRouterFactory::registerRestRouterHandlers();
+        /// Daisy : end.
 
         for (const auto & listen_host : listen_hosts)
         {
@@ -1399,6 +1457,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
                     " Tip: To increase wait time add to config: <shutdown_wait_unfinished>60</shutdown_wait_unfinished>", current_connections);
             else
                 LOG_INFO(log, "Closed connections.");
+
+            /// Daisy : start.
+            deinitDistributedMetadataServices(global_context);
+            /// Daisy : end.
 
             dns_cache_updater.reset();
             main_config_reloader.reset();

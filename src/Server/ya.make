@@ -32,6 +32,15 @@ SRCS(
     PrometheusRequestHandler.cpp
     ProtocolServerAdapter.cpp
     ReplicasStatusHandler.cpp
+    RestHTTPRequestHandler.cpp
+    RestRouterHandlers/IngestRawStoreHandler.cpp
+    RestRouterHandlers/IngestRestRouterHandler.cpp
+    RestRouterHandlers/IngestStatusHandler.cpp
+    RestRouterHandlers/RawstoreTableRestRouterHandler.cpp
+    RestRouterHandlers/SQLAnalyzerRestRouterHandler.cpp
+    RestRouterHandlers/SchemaValidator.cpp
+    RestRouterHandlers/TableRestRouterHandler.cpp
+    RestRouterHandlers/TabularTableRestRouterHandler.cpp
     StaticRequestHandler.cpp
     TCPHandler.cpp
     WebUIRequestHandler.cpp

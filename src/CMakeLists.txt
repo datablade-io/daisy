@@ -79,6 +79,7 @@ list (REMOVE_ITEM clickhouse_common_io_sources Common/malloc.cpp Common/new_dele
 
 if(USE_RDKAFKA)
     add_headers_and_sources(dbms Storages/Kafka)
+    add_headers_and_sources(dbms DistributedWriteAheadLog)
 endif()
 
 if (USE_AMQPCPP)
@@ -193,6 +194,7 @@ add_object_library(clickhouse_client Client)
 add_object_library(clickhouse_bridge Bridge)
 add_object_library(clickhouse_server Server)
 add_object_library(clickhouse_server_http Server/HTTP)
+add_object_library(clickhouse_server_rest_handlers Server/RestRouterHandlers)
 add_object_library(clickhouse_formats Formats)
 add_object_library(clickhouse_processors Processors)
 add_object_library(clickhouse_processors_executors Processors/Executors)
@@ -208,6 +210,14 @@ add_object_library(clickhouse_processors_queryplan_optimizations Processors/Quer
 if (USE_NURAFT)
     add_object_library(clickhouse_coordination Coordination)
 endif()
+
+# Daisy : begin
+add_object_library(clickhouse_distributed_metadata_service DistributedMetadata)
+
+if(USE_RDKAFKA)
+    add_object_library(clickhouse_distributed_write_ahead_log DistributedWriteAheadLog)
+endif ()
+# Daisy : end
 
 set (DBMS_COMMON_LIBRARIES)
 # libgcc_s does not provide an implementation of an atomics library. Instead,

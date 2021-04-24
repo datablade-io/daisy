@@ -20,6 +20,7 @@
 #include <Parsers/ASTSelectQuery.h>
 #include <Parsers/ASTDropQuery.h>
 #include <Parsers/ASTCreateQuery.h>
+#include <Parsers/ASTFunction.h>
 #include <Parsers/ASTRenameQuery.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
@@ -32,6 +33,9 @@
 #endif
 
 #include <Parsers/parseQuery.h>
+/// Daisy : starts
+#include <Parsers/parseQueryPipe.h>
+/// Daisy : ends
 #include <Parsers/ParserQuery.h>
 #include <Parsers/queryNormalization.h>
 #include <Parsers/queryToString.h>
@@ -47,9 +51,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/ProcessList.h>
 #include <Interpreters/QueryLog.h>
-#include <Interpreters/InterpreterSetQuery.h>
 #include <Interpreters/AddTimeParamVisitor.h>
-#include <Interpreters/ApplyWithGlobalVisitor.h>
 #include <Interpreters/ReplaceQueryParameterVisitor.h>
 #include <Interpreters/SelectQueryOptions.h>
 #include <Interpreters/executeQuery.h>
@@ -60,6 +62,8 @@
 #include <Processors/Transforms/LimitsCheckingTransform.h>
 #include <Processors/Transforms/MaterializingTransform.h>
 #include <Processors/Formats/IOutputFormat.h>
+
+#include <DistributedMetadata/CatalogService.h>
 
 
 namespace ProfileEvents
@@ -82,6 +86,28 @@ namespace ErrorCodes
     extern const int QUERY_WAS_CANCELLED;
 }
 
+namespace
+{
+/// Daisy : starts
+/// If there are any table definition changes locally on the node
+/// broadcast the table definitions to notify all CatalogService
+void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextPtr & context)
+{
+    if (auto create = ast->as<ASTCreateQuery>())
+    {
+        if ((!create->database.empty() || !create->table.empty()) && !context->isDistributedDDLOperation())
+        {
+            CatalogService::instance(context).broadcast();
+        }
+    }
+
+    if (ast->as<ASTDropQuery>() || ast->as<ASTAlterQuery>())
+    {
+        CatalogService::instance(context->getGlobalContext()).broadcast();
+    }
+}
+/// Daisy : ends
+}
 
 static void checkASTSizeLimits(const IAST & ast, const Settings & settings)
 {
@@ -386,13 +412,23 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
             ParserQuery parser(end);
 
             /// TODO: parser should fail early when max_query_size limit is reached.
-            ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+            /// Daisy : starts
+            if (settings.enable_query_pipe)
+                ast = parseQueryPipe(parser, begin, end, max_query_size, settings.max_parser_depth);
+            else
+                ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+            /// Daisy : ends
         }
 #else
         ParserQuery parser(end);
 
         /// TODO: parser should fail early when max_query_size limit is reached.
-        ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+        /// Daisy : starts
+        if (settings.enable_query_pipe)
+            ast = parseQueryPipe(parser, begin, end, max_query_size, settings.max_parser_depth);
+        else
+            ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
+        /// Daisy : ends
 #endif
 
         /// Interpret SETTINGS clauses as early as possible (before invoking the corresponding interpreter),
@@ -494,7 +530,7 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
         NormalizeSelectWithUnionQueryVisitor{data}.visit(ast);
 
         /// Daisy : starts. Add time param into AST
-        if (!context.getTimeParam().empty())
+        if (!context->getTimeParam().empty())
         {
             AddTimeParamVisitor visitor(context);
             visitor.visit(ast);
@@ -576,12 +612,21 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
         QueryPipeline & pipeline = res.pipeline;
         bool use_processors = pipeline.initialized();
 
-        if (const auto * insert_interpreter = typeid_cast<const InterpreterInsertQuery *>(&*interpreter))
+        if (const auto * insert_interpreter = typeid_cast<const InterpreterInsertQuery *>(interpreter.get()))
         {
             /// Save insertion table (not table function). TODO: support remote() table function.
             auto table_id = insert_interpreter->getDatabaseTable();
             if (!table_id.empty())
+            {
                 context->setInsertionTable(std::move(table_id));
+                /// Daisy : starts
+                /// Setup poll ID for ingestion status querying
+                if (context->getIngestMode() == "async")
+                {
+                    context->getQueryContext()->setupQueryStatusPollId();
+                }
+                /// Daisy : ends
+            }
         }
 
         if (process_list_entry)
@@ -833,6 +878,10 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
 
                     opentelemetry_span_log->add(span);
                 }
+
+                /// Daisy : starts
+                broadcastCatalogIfNecessary(ast, context);
+                /// Daisy : ends
             };
 
             auto exception_callback = [elem, context, ast,
