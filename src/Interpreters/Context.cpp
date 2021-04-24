@@ -2701,7 +2701,7 @@ ThreadPool & Context::getPartCommitPool() const
 
 void Context::setupNodeIdentity()
 {
-    if (!node_identity.empty())
+    if (!node_identity.empty() && !channel_id.empty())
     {
         return;
     }

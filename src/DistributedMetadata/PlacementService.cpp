@@ -10,6 +10,7 @@
 #include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
+#include <city.h>
 
 namespace DB
 {
@@ -110,14 +111,26 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
     return hosts;
 }
 
+std::vector<NodeMetricsPtr> PlacementService::nodes() const
+{
+    std::vector<NodeMetricsPtr> nodes;
+
+    std::shared_lock guard{rwlock};
+    nodes.reserve(nodes_metrics.size());
+
+    for (const auto & [node, metrics] : nodes_metrics)
+    {
+        nodes.emplace_back(metrics);
+    }
+
+    return nodes;
+}
+
 String PlacementService::getNodeIdentityByChannel(const String & channel) const
 {
     std::shared_lock guard(rwlock);
 
-    std::unordered_set<String> hosts;
-    hosts.reserve(tables.size());
-
-    for (const auto & t : tables)
+    for (const auto & [node_identity, node_metrics] : nodes_metrics)
     {
         if(!node_metrics->staled && node_metrics->channel == channel)
         {
@@ -125,7 +138,7 @@ String PlacementService::getNodeIdentityByChannel(const String & channel) const
         }
     }
 
-    return nodes;
+    return "";
 }
 
 void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
@@ -147,7 +160,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
 
 void PlacementService::mergeMetrics(const String & key, const IDistributedWriteAheadLog::RecordPtr & record)
 {
-    for (const auto & item : {"_host", "_http_port", "_tcp_port", "_tables"})
+    for (const auto & item : {"_host", "_channel", "_http_port", "_tcp_port", "_tables"})
     {
         if (!record->headers.contains(item))
         {
@@ -157,6 +170,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     }
 
     const String & host = record->headers["_host"];
+    const String & channel_id = record->headers["_channel"];
     const String & http_port = record->headers["_http_port"];
     const String & tcp_port = record->headers["_tcp_port"];
     const Int64 table_counts = std::stoll(record->headers["_tables"]);
@@ -178,7 +192,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     if (iter == nodes_metrics.end())
     {
         /// New node metrics.
-        node_metrics = std::make_shared<NodeMetrics>(host);
+        node_metrics = std::make_shared<NodeMetrics>(host, channel_id);
         nodes_metrics.emplace(key, node_metrics);
     }
     else

@@ -1,12 +1,14 @@
 #include "IngestStatusHandler.h"
 #include "SchemaValidator.h"
 
+#include <DistributedMetadata/PlacementService.h>
 #include <IO/HTTPCommon.h>
 #include <Storages/StorageDistributedMergeTree.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Path.h>
 
+#include <numeric>
 #include <vector>
 
 
@@ -173,7 +175,7 @@ String IngestStatusHandler::executePost(const Poco::JSON::Object::Ptr & payload,
     }
 }
 
-String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_status) const
+String IngestStatusHandler::forwardRequest(const Poco::URI & uri, const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
     LOG_DEBUG(log, "Forward request to uri={}", uri.toString());
 
@@ -199,6 +201,7 @@ String IngestStatusHandler::forwardRequest(const Poco::URI & uri, Int32 & http_s
         request.add("X-ClickHouse-Query-Id", query_context->getCurrentQueryId());
         auto & ostr = session->sendRequest(request);
         ostr << req_body_stream.str();
+
         if (!ostr.good())
         {
             http_status = Poco::Net::HTTPResponse::HTTP_SERVICE_UNAVAILABLE;

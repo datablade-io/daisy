@@ -198,6 +198,7 @@ private:
 
     /// Daisy : starts
     String node_identity;
+    String channel_id;
     String query_status_poll_id;
     String idempotent_key;
     String ingest_mode;
