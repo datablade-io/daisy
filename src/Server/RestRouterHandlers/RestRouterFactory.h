@@ -8,6 +8,7 @@
 #include "SQLAnalyzerRestRouterHandler.h"
 #include "TabularTableRestRouterHandler.h"
 #include "TaskRestRouterHandler.h"
+#include "DatabaseRestRouterHandler.h"
 
 #include <re2/re2.h>
 
@@ -82,6 +83,20 @@ public:
             "PATCH/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<RawstoreTableRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/databases(\\?[\\w\\-=&#]+){0,1}",
+            "GET/POST",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<DB::DatabaseRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/databases/(?P<database>\\w+)(\\?[\\w\\-=&#]+){0,1}",
+            "DELETE",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<DB::DatabaseRestRouterHandler>(query_context);
             });
 
         factory.registerRouterHandler(

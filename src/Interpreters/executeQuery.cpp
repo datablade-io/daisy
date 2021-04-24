@@ -95,7 +95,7 @@ void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextPtr & context)
 {
     if (auto create = ast->as<ASTCreateQuery>())
     {
-        if (!create->database.empty() && !create->table.empty() && !context->isDistributedDDLOperation())
+        if ((!create->database.empty() || !create->table.empty()) && !context->isDistributedDDLOperation())
         {
             CatalogService::instance(context).broadcast();
         }

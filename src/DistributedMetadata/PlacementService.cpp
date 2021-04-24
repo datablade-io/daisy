@@ -111,6 +111,21 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
     return hosts;
 }
 
+std::vector<NodeMetricsPtr> PlacementService::nodes() const
+{
+    std::vector<NodeMetricsPtr> nodes;
+
+    std::shared_lock guard{rwlock};
+    nodes.reserve(nodes_metrics.size());
+
+    for (const auto & [node, metrics] : nodes_metrics)
+    {
+        nodes.emplace_back(metrics);
+    }
+
+    return nodes;
+}
+
 String PlacementService::getNodeIdentityByChannel(const String & channel) const
 {
     std::shared_lock guard(rwlock);
