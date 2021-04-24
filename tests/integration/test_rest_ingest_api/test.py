@@ -60,6 +60,7 @@ def setup_nodes():
             "data": [[21, "a", "2021-01-01 23:23:00", [30, 31], ["aa", "ab"], "::10.1.1.1"],
                      [22, "b", "2021-01-01 00:00:00", [31, 32], ["aa", "ab"], "::10.1.1.2"],
                      [23, "c", "2021-01-02 00:00:00.000", [33, 34], ["aa", "ab"], "::10.1.1.3"]]
+
         }, {
             "status": 400,
             "result": "None of poll_id"
@@ -117,6 +118,7 @@ def test_status_exception(poll, status):
         {
             "columns": ["a", "b", "t", "n.a", "n.b", "ip"],
             "data": [[21, "a", "2021-01-01 23:23:00", [30, 31], ["aa", "ab"], "::10.1.1.1"]]
+
         }, {
             "status": 400,
             "result": '{"code":1010,"error_msg":"None of poll_id in \'poll_ids\' is valid"'
@@ -153,3 +155,4 @@ def test_poll_status_in_batch_case(table, query, status):
     if resp.status_code == 200:
         assert len(result['status']) == 2
     assert status['result'] in resp.text
+    

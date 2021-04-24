@@ -2715,6 +2715,7 @@ void Context::setupNodeIdentity()
     {
         node_identity = getFQDNOrHostName();
     }
+    channel_id = std::to_string(CityHash_v1_0_2::CityHash64WithSeed(node_identity.data(), node_identity.size(), 123));
 }
 
 void Context::setupQueryStatusPollId()
