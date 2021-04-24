@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Interpreters/IInterpreter.h>
+#include <Parsers/ASTAlterQuery.h>
 #include <Parsers/IAST_fwd.h>
 
 
@@ -29,6 +30,9 @@ private:
     AccessRightsElements getRequiredAccess() const;
 
     ASTPtr query_ptr;
+    /// Daisy : start
+    bool alterTableDistributed(const ASTAlterQuery & query);
+    /// Daisy : end
 };
 
 }

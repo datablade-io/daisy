@@ -22,7 +22,9 @@ JSONCompactEachRowRowInputFormat::JSONCompactEachRowRowInputFormat(ReadBuffer & 
         const FormatSettings & format_settings_,
         bool with_names_,
         bool yield_strings_)
-        : IRowInputFormat(header_, in_, std::move(params_)), format_settings(format_settings_), with_names(with_names_), yield_strings(yield_strings_)
+        /// Daisy : starts
+        : IRowInputFormat(header_, in_, std::move(params_)), format_settings(format_settings_), with_names(with_names_), yield_strings(yield_strings_), with_bracket(false)
+        /// Daisy : ends
 {
     const auto & sample = getPort().getHeader();
     size_t num_columns = sample.columns();
@@ -156,7 +158,34 @@ bool JSONCompactEachRowRowInputFormat::readRow(DB::MutableColumns &columns, DB::
 
     read_columns.assign(num_columns, false);
 
-    assertChar('[', in);
+    /// Daisy : starts
+    if (*in.position() == '[')
+    {
+        ++in.position();
+        skipWhitespaceIfAny(in);
+        if (*in.position() == '[' && !with_bracket)
+        {
+            with_bracket = true;
+            ++in.position();
+            skipWhitespaceIfAny(in);
+        }
+    }
+    else
+    {
+        if (*in.position() == ']' && with_bracket)
+        {
+            return false;
+        }
+
+        /// Invalid format
+        char err[2] = {'[', '\0'};
+        throwAtAssertionFailed(err, in);
+    }
+
+    if (in.eof())
+        return false;
+    /// Daisy : ends
+
     for (size_t file_column = 0; file_column < column_indexes_for_input_fields.size(); ++file_column)
     {
         const auto & table_column = column_indexes_for_input_fields[file_column];

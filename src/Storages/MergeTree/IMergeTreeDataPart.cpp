@@ -598,6 +598,9 @@ void IMergeTreeDataPart::loadColumnsChecksumsIndexes(bool require_columns_checks
         checkConsistency(require_columns_checksums);
     loadDefaultCompressionCodec();
 
+    /// Daisy : starts
+    loadSequenceInfo();
+    /// Daisy : ends
 }
 
 void IMergeTreeDataPart::loadProjections(bool require_columns_checksums, bool check_consistency)
@@ -1035,6 +1038,18 @@ void IMergeTreeDataPart::loadColumns(bool require)
     setColumns(loaded_columns);
 }
 
+/// Daisy : starts
+void IMergeTreeDataPart::loadSequenceInfo()
+{
+    String path = getFullRelativePath() + "sn.txt";
+    if (volume->getDisk()->exists(path))
+    {
+        auto in = openForReading(volume->getDisk(), path);
+        seq_info = SequenceInfo::read(*in);
+    }
+}
+/// Daisy : ends
+
 bool IMergeTreeDataPart::shallParticipateInMerges(const StoragePolicyPtr & storage_policy) const
 {
     /// `IMergeTreeDataPart::volume` describes space where current part belongs, and holds
@@ -1192,6 +1207,7 @@ void IMergeTreeDataPart::remove(bool keep_s3) const
 
             disk->removeSharedFileIfExists(to + "/" + DEFAULT_COMPRESSION_CODEC_FILE_NAME, keep_s3);
             disk->removeSharedFileIfExists(to + "/" + DELETE_ON_DESTROY_MARKER_FILE_NAME, keep_s3);
+            disk->removeSharedFileIfExists(to + "/sn.txt", keep_s3);
 
             disk->removeDirectory(to);
         }

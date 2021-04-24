@@ -24,6 +24,7 @@ sudo -H pip install \
     cassandra-driver \
     confluent-kafka \
     dicttoxml \
+    dict2xml \
     docker \
     docker-compose==1.22.0 \
     grpcio \
@@ -31,8 +32,9 @@ sudo -H pip install \
     kafka-python \
     kazoo \
     minio \
+    pika \
     protobuf \
-    psycopg2-binary==2.7.5 \
+    psycopg2-binary==2.8.6 \
     pymongo \
     pytest \
     pytest-timeout \

@@ -58,6 +58,9 @@ int mainEntryClickHouseGitImport(int argc, char ** argv);
 #if ENABLE_CLICKHOUSE_KEEPER
 int mainEntryClickHouseKeeper(int argc, char ** argv);
 #endif
+#if ENABLE_CLICKHOUSE_DWAL_BENCHMARK
+int mainEntryClickHouseDWal(int argc, char ** argv);
+#endif
 #if ENABLE_CLICKHOUSE_INSTALL
 int mainEntryClickHouseInstall(int argc, char ** argv);
 int mainEntryClickHouseStart(int argc, char ** argv);
@@ -117,6 +120,9 @@ std::pair<const char *, MainFunc> clickhouse_applications[] =
 #endif
 #if ENABLE_CLICKHOUSE_KEEPER
     {"keeper", mainEntryClickHouseKeeper},
+#endif
+#if ENABLE_CLICKHOUSE_DWAL_BENCHMARK
+    {"dwal-benchmark", mainEntryClickHouseDWal},
 #endif
 #if ENABLE_CLICKHOUSE_INSTALL
     {"install", mainEntryClickHouseInstall},

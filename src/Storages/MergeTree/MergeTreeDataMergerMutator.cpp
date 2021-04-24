@@ -1152,6 +1152,10 @@ MergeTreeData::MutableDataPartPtr MergeTreeDataMergerMutator::mergePartsToTempor
         new_data_part->addProjectionPart(projection.name, std::move(merged_projection_part));
     }
 
+    /// Daisy : starts
+    new_data_part->seq_info = mergeSequenceInfo(parts, context);
+    /// Daisy : ends
+
     if (chosen_merge_algorithm != MergeAlgorithm::Vertical)
         to.writeSuffixAndFinalizePart(new_data_part, need_sync);
     else
@@ -2310,4 +2314,24 @@ bool MergeTreeDataMergerMutator::checkOperationIsNotCanceled(const MergeListEntr
     return true;
 }
 
+/// Daisy : starts
+/// Merge sequence info from parts in a partition to new part
+SequenceInfoPtr MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, ContextPtr context)
+{
+    std::vector<SequenceInfoPtr> sequences;
+
+    for (const auto & part : parts)
+    {
+        if (part->seq_info)
+        {
+            if (!part->seq_info->sequence_ranges.empty() || (part->seq_info->idempotent_keys && !part->seq_info->idempotent_keys->empty()))
+            {
+                sequences.push_back(part->seq_info);
+            }
+        }
+    }
+
+    return DB::mergeSequenceInfo(sequences, data.committedSN(), context->getSettingsRef().max_idempotent_ids, log);
+}
+/// Daisy : ends
 }

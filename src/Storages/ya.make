@@ -11,6 +11,7 @@ PEERDIR(
 
 
 SRCS(
+<<<<<<< HEAD
     AlterCommands.cpp
     ColumnDefault.cpp
     ColumnsDescription.cpp
@@ -216,6 +217,8 @@ SRCS(
     getStructureOfRemoteTable.cpp
     registerStorages.cpp
     transformQueryForExternalDatabase.cpp
+=======
+>>>>>>> DistributedMergeTree table engine (#2)
 
 )
 

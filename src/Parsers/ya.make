@@ -143,6 +143,7 @@ SRCS(
     parseIdentifierOrStringLiteral.cpp
     parseIntervalKind.cpp
     parseQuery.cpp
+    parseQueryPipe.cpp
     parseUserName.cpp
     queryToString.cpp
 

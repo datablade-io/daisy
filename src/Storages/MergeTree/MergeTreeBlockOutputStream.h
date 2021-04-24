@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SequenceInfo.h"
+
 #include <DataStreams/IBlockOutputStream.h>
 #include <Storages/StorageInMemoryMetadata.h>
 
@@ -30,11 +32,19 @@ public:
     void write(const Block & block) override;
     void writePrefix() override;
 
+    /// Daisy : starts
+    void setSequenceInfo(const SequenceInfoPtr & seq_info_) { seq_info = seq_info_; }
+    /// Daisy : ends
+
 private:
     StorageMergeTree & storage;
     StorageMetadataPtr metadata_snapshot;
     size_t max_parts_per_block;
     ContextPtr context;
+
+    /// Daisy : starts
+    SequenceInfoPtr seq_info;
+    /// Daisy : ends
 };
 
 }

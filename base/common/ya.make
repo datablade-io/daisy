@@ -40,6 +40,7 @@ SRCS(
     DateLUTImpl.cpp
     JSON.cpp
     LineReader.cpp
+    SimpleJSON.cpp
     StringRef.cpp
     argsToConfig.cpp
     coverage.cpp
