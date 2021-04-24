@@ -76,6 +76,11 @@ private:
     bool createDatabaseDistributed(ASTCreateQuery & create);
     /// Daisy : end
 
+    /// Daisy : start
+    bool createTableDistributed(const String & database, ASTCreateQuery & create);
+    bool createDatabaseDistributed(ASTCreateQuery & create);
+    /// Daisy : end
+
     /// Calculate list of columns, constraints, indices, etc... of table. Rewrite query in canonical way.
     TableProperties setProperties(ASTCreateQuery & create) const;
     void validateTableStructure(const ASTCreateQuery & create, const TableProperties & properties) const;
