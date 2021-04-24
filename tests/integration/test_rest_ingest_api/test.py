@@ -155,4 +155,3 @@ def test_poll_status_in_batch_case(table, query, status):
     if resp.status_code == 200:
         assert len(result['status']) == 2
     assert status['result'] in resp.text
-    
