@@ -14,7 +14,6 @@
 
 namespace DB
 {
-
 class StorageMergeTree;
 
 /** A StorageDistributedMergeTree is an table engine that uses merge tree and replicated via
@@ -28,6 +27,7 @@ class StorageMergeTree;
 class StorageDistributedMergeTree final : public ext::shared_ptr_helper<StorageDistributedMergeTree>, public MergeTreeData
 {
     friend struct ext::shared_ptr_helper<StorageDistributedMergeTree>;
+
 public:
     void startup() override;
     void shutdown() override;
@@ -101,15 +101,15 @@ public:
 
     std::optional<JobAndPool> getDataProcessingJob() override;
 
-    QueryProcessingStage::Enum
-    getQueryProcessingStage(ContextPtr, QueryProcessingStage::Enum to_stage, SelectQueryInfo &) const override;
+    QueryProcessingStage::Enum getQueryProcessingStage(ContextPtr, QueryProcessingStage::Enum to_stage, SelectQueryInfo &) const override;
 
 private:
     /// Partition helpers
 
     void dropPartition(const ASTPtr & partition, bool detach, bool drop_part, ContextPtr context, bool throw_if_noop = true) override;
 
-    PartitionCommandsResultInfo attachPartition(const ASTPtr & partition, const StorageMetadataPtr & metadata_snapshot, bool part, ContextPtr context) override;
+    PartitionCommandsResultInfo
+    attachPartition(const ASTPtr & partition, const StorageMetadataPtr & metadata_snapshot, bool part, ContextPtr context) override;
 
     void replacePartitionFrom(const StoragePtr & source_table, const ASTPtr & partition, bool replace, ContextPtr context) override;
 
@@ -136,11 +136,10 @@ private:
 
     ClusterPtr getCluster() const;
 
-    ClusterPtr skipUnusedShards(
-        ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, ContextPtr context) const;
+    ClusterPtr
+    skipUnusedShards(ClusterPtr cluster, const ASTPtr & query_ptr, const StorageMetadataPtr & metadata_snapshot, ContextPtr context) const;
 
-    void
-    readRemote(QueryPlan & query_plan, SelectQueryInfo & query_info, ContextPtr context, QueryProcessingStage::Enum processed_stage);
+    void readRemote(QueryPlan & query_plan, SelectQueryInfo & query_info, ContextPtr context, QueryProcessingStage::Enum processed_stage);
 
 public:
     IColumn::Selector createSelector(const ColumnWithTypeAndName & result) const;
@@ -155,7 +154,10 @@ public:
 
     size_t getRandomShardIndex();
     Int32 currentShard() const { return shard; }
-    std::pair<String, Int32> getIngestStatus(const String & poll_id) const { return ingesting_blocks.status(poll_id); }
+    void getIngestionStatuses(const std::vector<String> & poll_ids, std::vector<IngestingBlocks::IngestStatus> & statuses) const
+    {
+        ingesting_blocks.getStatuses(poll_ids, statuses);
+    }
 
     IDistributedWriteAheadLog::RecordSequenceNumber lastSequenceNumber() const;
 

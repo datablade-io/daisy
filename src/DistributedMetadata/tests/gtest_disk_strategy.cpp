@@ -29,7 +29,7 @@ TEST(PlacementService, PlaceNodesByDiskSpace)
     for (int i = 0; i < 100; i++)
     {
         String node = std::to_string(i);
-        NodeMetricsPtr node_metrics = std::make_shared<NodeMetrics>(node);
+        NodeMetricsPtr node_metrics = std::make_shared<NodeMetrics>(node, node);
         node_metrics->disk_space.emplace(default_policy, default_disks[i]);
         node_metrics->disk_space.emplace(cold_policy, cold_disks[i]);
         container.emplace(node, node_metrics);
@@ -94,7 +94,7 @@ TEST(PlacementService, PlaceNodesByTableCounts)
     for (int i = 0; i < 100; i++)
     {
         String node = std::to_string(i);
-        NodeMetricsPtr node_metrics = std::make_shared<NodeMetrics>(node);
+        NodeMetricsPtr node_metrics = std::make_shared<NodeMetrics>(node, node);
         node_metrics->disk_space.emplace(default_policy, 100);
         node_metrics->num_of_tables = num_of_tables[i];
         container.emplace(node, node_metrics);

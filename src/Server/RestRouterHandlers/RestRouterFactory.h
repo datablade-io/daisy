@@ -50,8 +50,8 @@ public:
             });
 
         factory.registerRouterHandler(
-            "/dae/v1/ingest/statuses/(?P<poll_id>.+)",
-            "GET",
+            "/dae/v1/ingest/statuses",
+            "POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<IngestStatusHandler>(query_context);
             });

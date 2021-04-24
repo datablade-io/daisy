@@ -10,6 +10,7 @@
 #include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
+#include <city.h>
 
 namespace DB
 {
@@ -110,6 +111,21 @@ std::vector<String> PlacementService::placed(const String & database, const Stri
     return hosts;
 }
 
+String PlacementService::getNodeIdentityByChannel(const String & channel) const
+{
+    std::shared_lock guard(rwlock);
+
+    for (const auto & [node_identity, node_metrics] : nodes_metrics)
+    {
+        if(!node_metrics->staled && node_metrics->channel == channel)
+        {
+            return node_metrics->host;
+        }
+    }
+
+    return "";
+}
+
 void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & records)
 {
     /// Node metrics schema: node, disk_free
@@ -129,7 +145,7 @@ void PlacementService::processRecords(const IDistributedWriteAheadLog::RecordPtr
 
 void PlacementService::mergeMetrics(const String & key, const IDistributedWriteAheadLog::RecordPtr & record)
 {
-    for (const auto & item : {"_host", "_http_port", "_tcp_port", "_tables"})
+    for (const auto & item : {"_host", "_channel", "_http_port", "_tcp_port", "_tables"})
     {
         if (!record->headers.contains(item))
         {
@@ -139,6 +155,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     }
 
     const String & host = record->headers["_host"];
+    const String & channel_id = record->headers["_channel"];
     const String & http_port = record->headers["_http_port"];
     const String & tcp_port = record->headers["_tcp_port"];
     const Int64 table_counts = std::stoll(record->headers["_tables"]);
@@ -160,7 +177,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
     if (iter == nodes_metrics.end())
     {
         /// New node metrics.
-        node_metrics = std::make_shared<NodeMetrics>(host);
+        node_metrics = std::make_shared<NodeMetrics>(host, channel_id);
         nodes_metrics.emplace(key, node_metrics);
     }
     else
@@ -193,6 +210,7 @@ void PlacementService::mergeMetrics(const String & key, const IDistributedWriteA
             LOG_INFO(log, "Node identity={} host={} recovered from staleness", key, host);
         }
     }
+    node_metrics->channel = channel_id;
     node_metrics->node_identity = key;
     node_metrics->http_port = http_port;
     node_metrics->tcp_port = tcp_port;
@@ -257,6 +275,7 @@ void PlacementService::doBroadcast()
     record.partition_key = 0;
     record.setIdempotentKey(global_context->getNodeIdentity());
     record.headers["_host"] = THIS_HOST;
+    record.headers["_channel"] = global_context->getChannel();
     record.headers["_http_port"] = global_context->getConfigRef().getString("http_port", "8123");
     record.headers["_tcp_port"] = global_context->getConfigRef().getString("tcp_port", "9000");
     record.headers["_version"] = "1";

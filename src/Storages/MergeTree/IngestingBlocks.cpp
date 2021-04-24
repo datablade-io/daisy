@@ -132,6 +132,30 @@ std::pair<String, Int32> IngestingBlocks::status(const String & id) const
     return std::make_pair("Unknown", -1);
 }
 
+void IngestingBlocks::getStatuses(const std::vector<String> & poll_ids, std::vector<IngestingBlocks::IngestStatus> & statuses) const
+{
+    std::shared_lock guard(rwlock);
+    for (const auto & id : poll_ids)
+    {
+        auto iter = blockIds.find(id);
+        if (iter == blockIds.end())
+        {
+            statuses.push_back({id, "Unknown", -1});
+            continue;
+        }
+
+        Int32 progress = (iter->second.total - iter->second.ids.size()) * 100 / iter->second.total;
+
+        if (iter->second.err != 0)
+            statuses.push_back({id, "Failed", progress});
+
+        if (progress < 100)
+            statuses.push_back({id, "Processing", progress});
+        else
+            statuses.push_back({id, "Succeeded", progress});
+    }
+}
+
 size_t IngestingBlocks::outstandingBlocks() const
 {
     size_t total = 0;
