@@ -15,6 +15,9 @@ void registerFileSegmentationEngineCSV(FormatFactory & factory);
 void registerFileSegmentationEngineJSONEachRow(FormatFactory & factory);
 void registerFileSegmentationEngineRegexp(FormatFactory & factory);
 void registerFileSegmentationEngineJSONAsString(FormatFactory & factory);
+/// Daisy : starts
+void registerFileSegmentationEngineRawStoreEachRow(FormatFactory & factory);
+/// Daisy : ends
 
 /// Formats for both input/output.
 
@@ -78,6 +81,9 @@ void registerInputFormatProcessorRegexp(FormatFactory & factory);
 void registerInputFormatProcessorJSONAsString(FormatFactory & factory);
 void registerInputFormatProcessorLineAsString(FormatFactory & factory);
 void registerInputFormatProcessorCapnProto(FormatFactory & factory);
+/// Daisy : starts
+void registerInputFormatProcessorRawStoreEachRow(FormatFactory & factory);
+/// Daisy : ends
 
 /// Non trivial prefix and suffix checkers for disabling parallel parsing.
 void registerNonTrivialPrefixAndSuffixCheckerJSONEachRow(FormatFactory & factory);
@@ -92,6 +98,9 @@ void registerFormats()
     registerFileSegmentationEngineJSONEachRow(factory);
     registerFileSegmentationEngineRegexp(factory);
     registerFileSegmentationEngineJSONAsString(factory);
+    /// Daisy : starts
+    registerFileSegmentationEngineRawStoreEachRow(factory);
+    /// Daisy : ends
 
     registerInputFormatNative(factory);
     registerOutputFormatNative(factory);
@@ -120,6 +129,9 @@ void registerFormats()
     registerOutputFormatProcessorMsgPack(factory);
     registerInputFormatProcessorRawBLOB(factory);
     registerOutputFormatProcessorRawBLOB(factory);
+    /// Daisy : starts
+    registerInputFormatProcessorRawStoreEachRow(factory);
+    /// Daisy : ends
 
     registerInputFormatProcessorORC(factory);
     registerOutputFormatProcessorORC(factory);

@@ -598,6 +598,9 @@ void IMergeTreeDataPart::loadColumnsChecksumsIndexes(bool require_columns_checks
         checkConsistency(require_columns_checksums);
     loadDefaultCompressionCodec();
 
+    /// Daisy : starts
+    loadSequenceInfo();
+    /// Daisy : ends
 }
 
 void IMergeTreeDataPart::loadProjections(bool require_columns_checksums, bool check_consistency)
@@ -1035,6 +1038,18 @@ void IMergeTreeDataPart::loadColumns(bool require)
     setColumns(loaded_columns);
 }
 
+/// Daisy : starts
+void IMergeTreeDataPart::loadSequenceInfo()
+{
+    String path = getFullRelativePath() + "sn.txt";
+    if (volume->getDisk()->exists(path))
+    {
+        auto in = openForReading(volume->getDisk(), path);
+        seq_info = SequenceInfo::read(*in);
+    }
+}
+/// Daisy : ends
+
 bool IMergeTreeDataPart::shallParticipateInMerges(const StoragePolicyPtr & storage_policy) const
 {
     /// `IMergeTreeDataPart::volume` describes space where current part belongs, and holds
@@ -1216,6 +1231,10 @@ void IMergeTreeDataPart::remove() const
 
             disk->removeSharedFileIfExists(fs::path(to) / DEFAULT_COMPRESSION_CODEC_FILE_NAME, *keep_shared_data);
             disk->removeSharedFileIfExists(fs::path(to) / DELETE_ON_DESTROY_MARKER_FILE_NAME, *keep_shared_data);
+
+            /// Daisy : starts
+            disk->removeSharedFileIfExists(fs::path(to) / "sn.txt", *keep_shared_data);
+            /// Daisy : ends
 
             disk->removeDirectory(to);
         }

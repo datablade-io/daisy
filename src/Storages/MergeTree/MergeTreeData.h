@@ -135,6 +135,10 @@ public:
     constexpr static auto FORMAT_VERSION_FILE_NAME = "format_version.txt";
     constexpr static auto DETACHED_DIR_NAME = "detached";
 
+    /// Daisy : starts
+    constexpr static auto COMMITTED_SN_FILE_NAME = "committed_sn.txt";
+    /// Daisy : ends
+
     /// Auxiliary structure for index comparison. Keep in mind lifetime of MergeTreePartInfo.
     struct DataPartStateAndInfo
     {
@@ -854,6 +858,12 @@ public:
     /// Mutex for currently_submerging_parts and currently_emerging_parts
     mutable std::mutex currently_submerging_emerging_mutex;
 
+    /// Daisy : starts
+    bool isVirtual() const { return relative_data_path.empty(); }
+    virtual Int64 committedSN() const { return committed_sn; }
+    virtual void setCommittedSN(Int64 committed_sn_) { committed_sn = committed_sn_; }
+    /// Daisy : ends
+
 protected:
 
     friend class IMergeTreeDataPart;
@@ -1128,6 +1138,10 @@ private:
 
     /// Returns default settings for storage with possible changes from global config.
     virtual std::unique_ptr<MergeTreeSettings> getDefaultSettings() const = 0;
+
+    /// Daisy : starts
+    std::atomic<Int64> committed_sn = -1;
+    /// Daisy : ends
 };
 
 /// RAII struct to record big parts that are submerging or emerging.

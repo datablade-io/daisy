@@ -136,11 +136,18 @@ public:
     void setFinal();
 
     const char * getQueryKindString() const override { return "Select"; }
+    /// Daisy: starts. HACK
+    void setSubQueryPipe(const std::string & subquery) { subquery_pipe = subquery; }
+    /// Daisy: ends
 
 protected:
     void formatImpl(const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const override;
 
 private:
+    /// Daisy: starts. HACK
+    String subquery_pipe;
+    /// Daisy: ends
+
     std::unordered_map<Expression, size_t> positions;
 
     ASTPtr & getExpression(Expression expr);

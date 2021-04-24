@@ -113,6 +113,10 @@ FormatSettings getFormatSettings(ContextPtr context, const Settings & settings)
     format_settings.arrow.low_cardinality_as_dictionary = settings.output_format_arrow_low_cardinality_as_dictionary;
     format_settings.arrow.import_nested = settings.input_format_arrow_import_nested;
     format_settings.orc.import_nested = settings.input_format_orc_import_nested;
+    /// Daisy : starts
+    format_settings.rawstore.rawstore_time_extraction_type = settings.rawstore_time_extraction_type;
+    format_settings.rawstore.rawstore_time_extraction_rule = settings.rawstore_time_extraction_rule;
+    /// Daisy : ends
 
     /// Validate avro_schema_registry_url with RemoteHostFilter when non-empty and in Server context
     if (format_settings.schema.is_server)

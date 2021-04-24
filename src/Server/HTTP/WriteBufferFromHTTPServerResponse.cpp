@@ -47,18 +47,20 @@ void WriteBufferFromHTTPServerResponse::writeSummary()
     WriteBufferFromOwnString progress_string_writer;
     accumulated_progress.writeJSON(progress_string_writer);
 
+    /// Daisy : starts
     if (send_progress_mode < SendProgressMode::progress_via_body)
     {
-        /// sent summary via header
+        /// Sent summary via header
         if (response_header_ostr)
             *response_header_ostr << "X-ClickHouse-Summary: " << progress_string_writer.str() << "\r\n" << std::flush;
     }
     else
     {
-        /// sent summary via body
+        /// Sent summary via body
         if (response_body_ostr)
             *response_body_ostr << "X-ClickHouse-Summary: " << progress_string_writer.str() << "\n" << std::flush;
     }
+    /// Daisy : ends
 }
 
 void WriteBufferFromHTTPServerResponse::writeProgress()
@@ -72,6 +74,7 @@ void WriteBufferFromHTTPServerResponse::writeProgress()
     WriteBufferFromOwnString progress_string_writer;
     accumulated_progress.writeJSON(progress_string_writer);
 
+    /// Daisy : starts
     if (send_progress_mode == SendProgressMode::progress_via_header)
     {
         if (response_header_ostr)
@@ -89,6 +92,7 @@ void WriteBufferFromHTTPServerResponse::writeProgress()
         if (response_body_ostr)
             *response_body_ostr << "X-ClickHouse-Progress: " << progress_string_writer.str() << "\n" << std::flush;
     }
+    /// Daisy : ends
 }
 
 void WriteBufferFromHTTPServerResponse::finishSendHeaders()

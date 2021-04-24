@@ -183,6 +183,13 @@ struct FormatSettings
     {
         bool import_nested = false;
     } orc;
+    /// Daisy : starts
+    struct
+    {
+        String rawstore_time_extraction_type;
+        String rawstore_time_extraction_rule;
+    } rawstore;
+    /// Daisy : ends
 };
 
 }

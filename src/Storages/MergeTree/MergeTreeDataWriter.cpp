@@ -1,5 +1,6 @@
 #include <Storages/MergeTree/MergeTreeDataWriter.h>
 #include <Storages/MergeTree/MergedBlockOutputStream.h>
+#include <Storages/MergeTree/SequenceInfo.h>
 #include <Columns/ColumnConst.h>
 #include <Common/HashTable/HashMap.h>
 #include <Common/Exception.h>
@@ -268,7 +269,7 @@ Block MergeTreeDataWriter::mergeBlock(const Block & block, SortDescription sort_
 }
 
 MergeTreeData::MutableDataPartPtr MergeTreeDataWriter::writeTempPart(
-    BlockWithPartition & block_with_partition, const StorageMetadataPtr & metadata_snapshot, ContextPtr context)
+    BlockWithPartition & block_with_partition, const StorageMetadataPtr & metadata_snapshot, const SequenceInfoPtr & seq_info, ContextPtr context)
 {
     Block & block = block_with_partition.block;
 
@@ -403,6 +404,10 @@ MergeTreeData::MutableDataPartPtr MergeTreeDataWriter::writeTempPart(
         updateTTL(ttl_entry, new_data_part->ttl_infos, new_data_part->ttl_infos.recompression_ttl[ttl_entry.result_column], block, false);
 
     new_data_part->ttl_infos.update(move_ttl_infos);
+
+    /// Daisy : starts
+    new_data_part->seq_info = seq_info;
+    /// Daisy : ends
 
     /// This effectively chooses minimal compression method:
     ///  either default lz4 or compression method with zero thresholds on absolute and relative part size.
