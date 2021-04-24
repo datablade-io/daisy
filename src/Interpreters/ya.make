@@ -21,6 +21,7 @@ SRCS(
     ActionLocksManager.cpp
     ActionsDAG.cpp
     ActionsVisitor.cpp
+    AddTimeParamVisitor.cpp
     AggregateDescription.cpp
     Aggregator.cpp
     ApplyWithAliasVisitor.cpp
@@ -30,10 +31,12 @@ SRCS(
     ArrayJoinAction.cpp
     AsynchronousMetricLog.cpp
     AsynchronousMetrics.cpp
+    BlockUtils.cpp
     BloomFilter.cpp
     CatBoostModel.cpp
     ClientInfo.cpp
     Cluster.cpp
+    ClusterProxy/DistributedSelectStreamFactory.cpp
     ClusterProxy/SelectStreamFactory.cpp
     ClusterProxy/executeQuery.cpp
     CollectJoinOnKeysVisitor.cpp
@@ -47,6 +50,7 @@ SRCS(
     DatabaseAndTableWithAlias.cpp
     DatabaseCatalog.cpp
     DictionaryReader.cpp
+    EliminateSubqueryVisitor.cpp
     EmbeddedDictionaries.cpp
     ExecuteScalarSubqueriesVisitor.cpp
     ExpressionActions.cpp
@@ -128,6 +132,7 @@ SRCS(
     QueryLog.cpp
     QueryNormalizer.cpp
     QueryParameterVisitor.cpp
+    QueryProfileVisitor.cpp
     QueryThreadLog.cpp
     RemoveInjectiveFunctionsVisitor.cpp
     RenameColumnVisitor.cpp
@@ -161,6 +166,7 @@ SRCS(
     evaluateConstantExpression.cpp
     executeDDLQueryOnCluster.cpp
     executeQuery.cpp
+    executeSelectQuery.cpp
     getClusterName.cpp
     getHeaderForProcessingStage.cpp
     getTableExpressions.cpp

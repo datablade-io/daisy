@@ -250,6 +250,10 @@ private:
 
     bool checkOperationIsNotCanceled(const MergeListEntry & merge_entry) const;
 
+    /// Daisy : starts
+    /// Merge sequence info of parts in a partition
+    SequenceInfoPtr mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, ContextPtr context);
+    /// Daisy : ends
 
 private:
     MergeTreeData & data;
