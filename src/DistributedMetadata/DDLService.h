@@ -50,7 +50,6 @@ private:
     void failDDL(const String & query_id, const String & user, const String & query = "", const String reason = "") const;
 
     bool validateSchema(const Block & block, const std::vector<String> & col_names) const;
-    void cleanDWALs(const std::vector<String> & dwal_names);
 
 private:
     String http_port;
