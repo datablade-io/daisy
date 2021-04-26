@@ -32,11 +32,10 @@ namespace
         NESTED_FIELD = size_t(-2)
     };
 
-    const std::vector<const std::shared_ptr<re2::RE2>> extract_rules = {
-        std::make_shared<re2::RE2>(R"###(\d{8}T(\d{2}(\d{4}(\.\d+)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
-        std::make_shared<re2::RE2>(R"###(\d{8}(\d{6})?(\.\d+)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
-        std::make_shared<re2::RE2>(R"###(\d{4}-\d\d(-\d\d([ T]\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###")
-    };
+    const std::vector<const std::shared_ptr<re2::RE2>> extract_rules
+        = {std::make_shared<re2::RE2>(R"###(\d{8}T(\d{2}(\d{4}(\.\d+)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
+           std::make_shared<re2::RE2>(R"###(\d{8}(\d{6})?(\.\d+)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
+           std::make_shared<re2::RE2>(R"###(\d{4}-\d\d(-\d\d([ T]\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###")};
 }
 
 
@@ -265,7 +264,7 @@ void RawStoreInputFormat::readJSONObject(MutableColumns & columns)
         extractTimeFromRawByJSON(*columns[time_col_idx], *columns[raw_col_idx]);
     else if (format_settings.rawstore.rawstore_time_extraction_type == "regex" && time_extraction_regex != nullptr)
         extractTimeFromRawByRegex(*columns[time_col_idx], *columns[raw_col_idx]);
-    else if (format_settings.rawstore.rawstore_time_extraction_type.empty())
+    else
         extractTimeFromRaw(*columns[time_col_idx], *columns[raw_col_idx]);
 }
 
