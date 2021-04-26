@@ -880,7 +880,10 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
                 }
 
                 /// Daisy : starts
-                broadcastCatalogIfNecessary(ast, context);
+                if (context->isDistributed())
+                {
+                    broadcastCatalogIfNecessary(ast, context);
+                }
                 /// Daisy : ends
             };
 
