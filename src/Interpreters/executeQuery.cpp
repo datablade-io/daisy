@@ -93,6 +93,11 @@ namespace
 /// broadcast the table definitions to notify all CatalogService
 void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextPtr & context)
 {
+    if (context->isDistributed())
+    {
+        return;
+    }
+
     if (auto create = ast->as<ASTCreateQuery>())
     {
         if ((!create->database.empty() || !create->table.empty()) && !context->isDistributedDDLOperation())
