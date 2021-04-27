@@ -93,6 +93,11 @@ namespace
 /// broadcast the table definitions to notify all CatalogService
 void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextPtr & context)
 {
+    if (context->isDistributed())
+    {
+        return;
+    }
+
     if (auto create = ast->as<ASTCreateQuery>())
     {
         if ((!create->database.empty() || !create->table.empty()) && !context->isDistributedDDLOperation())
@@ -880,10 +885,7 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
                 }
 
                 /// Daisy : starts
-                if (context->isDistributed())
-                {
-                    broadcastCatalogIfNecessary(ast, context);
-                }
+                broadcastCatalogIfNecessary(ast, context);
                 /// Daisy : ends
             };
 
