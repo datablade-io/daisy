@@ -32,10 +32,12 @@ namespace
         NESTED_FIELD = size_t(-2)
     };
 
-    const std::vector<const std::shared_ptr<re2::RE2>> extract_rules
+    const std::vector<const std::shared_ptr<re2::RE2>> EXTRACT_RULES
         = {std::make_shared<re2::RE2>(R"###(\d{8}T(\d{2}(\d{4}(\.\d+)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
            std::make_shared<re2::RE2>(R"###(\d{8}(\d{6})?(\.\d+)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
            std::make_shared<re2::RE2>(R"###(\d{4}-\d\d(-\d\d([ T]\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###")};
+
+    const size_t MAX_REGEX_SCAN_SIZE = 500;
 }
 
 
@@ -349,19 +351,18 @@ void RawStoreInputFormat::extractTimeFromRawByRegex(IColumn & time_col, IColumn 
 void RawStoreInputFormat::extractTimeFromRaw(IColumn & time_col, IColumn & raw_col)
 {
     StringRef raw;
-    if (raw_col.getDataType() == TypeIndex::String)
-        raw = raw_col.getDataAt(raw_col.size() - 1);
-    else
+    if (raw_col.getDataType() != TypeIndex::String)
         throw Exception("_raw column is not String type", ErrorCodes::INCORRECT_DATA);
 
-    re2::StringPiece in{raw.data, raw.size};
+    raw = raw_col.getDataAt(raw_col.size() - 1);
+    re2::StringPiece in{raw.data, std::min(raw.size, MAX_REGEX_SCAN_SIZE)};
 
     re2::StringPiece matches[1];
     bool matched = false;
 
     if (!auto_extract && !time_extraction_regex)
     {
-        for (const auto & regex : extract_rules)
+        for (const auto & regex : EXTRACT_RULES)
         {
             matched = regex->Match(in, 0, in.size(), re2::RE2::Anchor::UNANCHORED, matches, 1);
             if (matched)

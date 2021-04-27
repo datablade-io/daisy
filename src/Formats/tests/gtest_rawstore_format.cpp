@@ -118,11 +118,11 @@ TEST(RawStoreFormatTest, RegexExtract)
     checkOutput(format_settings, str, "2021-03-21 00:10:23.000");
 }
 
-void checkISOFormat(std::vector<std::pair<String, String>> && testcases)
+void checkISOFormat(std::vector<std::pair<String, String>> testcases)
 {
     FormatSettings format_settings;
     format_settings.date_time_input_format = FormatSettings::DateTimeInputFormat::BestEffort;
-    for (auto & tc : testcases)
+    for (const auto & tc : testcases)
     {
         String str = "{\"_raw\": \"" + tc.first + ", [Apache] This is a error.\"}";
         checkOutput(format_settings, str, tc.second);
