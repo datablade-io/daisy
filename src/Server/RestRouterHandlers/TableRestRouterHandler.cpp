@@ -333,5 +333,4 @@ String TableRestRouterHandler::buildResponse() const
     return resp_str_stream.str();
 }
 
-
 }
