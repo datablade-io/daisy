@@ -174,10 +174,8 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
         const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
         const auto & column_type = DataTypeFactory::instance().get(col_decl.type);
 
-        /// name
         cloumn_mapping_json.set("name", col_decl.name);
-
-        /// type
+        
         String type = column_type->getName();
         if (column_type->isNullable())
         {
