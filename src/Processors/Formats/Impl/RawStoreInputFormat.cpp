@@ -32,11 +32,13 @@ namespace
         NESTED_FIELD = size_t(-2)
     };
 
+    /// FIXME: To support other time format in future like RFC1123 et al
     const std::vector<const std::shared_ptr<re2::RE2>> EXTRACT_RULES
         = {std::make_shared<re2::RE2>(R"###(\d{8}T(\d{2}(\d{4}(\.\d+)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
            std::make_shared<re2::RE2>(R"###(\d{8}(\d{6})?(\.\d+)?(([+-]\d\d(:?\d\d)?)|Z)?)###"),
            std::make_shared<re2::RE2>(R"###(\d{4}-\d\d(-\d\d([ T]\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?)?(([+-]\d\d(:?\d\d)?)|Z)?)###")};
 
+    /// FIXME: make it configurable via settings flag
     const size_t MAX_REGEX_SCAN_SIZE = 500;
 }
 

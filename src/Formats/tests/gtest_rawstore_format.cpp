@@ -49,7 +49,7 @@ void checkOutput(FormatSettings & format_, String & in, String exp)
     {
         ColumnWithTypeAndName col;
         col.name = "_time";
-        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale);
+        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale, String{"Asia/Shanghai"});
         sample.insert(std::move(col));
     }
 
@@ -314,7 +314,7 @@ TEST(RawStoreFormatTest, Exceptions)
     {
         ColumnWithTypeAndName col;
         col.name = "_time";
-        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale);
+        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale, String{"Asia/Shanghai"});
         sample.insert(std::move(col));
     }
 
@@ -364,7 +364,7 @@ TEST(RawStoreFormatTest, ExceptionOfConstructor)
     {
         ColumnWithTypeAndName col;
         col.name = "_time";
-        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale);
+        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale, String{"Asia/Shanghai"});
         sample.insert(std::move(col));
     }
 
@@ -420,7 +420,7 @@ TEST(RawStoreFormatTest, InvalidBlock)
     {
         ColumnWithTypeAndName col;
         col.name = "_time";
-        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale);
+        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale, String{"Asia/Shanghai"});
         sample1.insert(std::move(col));
     }
 
@@ -450,7 +450,7 @@ TEST(RawStoreFormatTest, InvalidBlock)
     {
         ColumnWithTypeAndName col;
         col.name = "time";
-        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale);
+        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale, String{"Asia/Shanghai"});
         sample2.insert(std::move(col));
     }
     format_settings.rawstore.rawstore_time_extraction_type = "regex";
@@ -478,7 +478,7 @@ TEST(RawStoreFormatTest, InvalidBlock)
     {
         ColumnWithTypeAndName col;
         col.name = "_time";
-        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale);
+        col.type = std::make_shared<DataTypeDateTime64>(DataTypeDateTime64::default_scale, String{"Asia/Shanghai"});
         sample3.insert(std::move(col));
     }
     String str1 = "{"
