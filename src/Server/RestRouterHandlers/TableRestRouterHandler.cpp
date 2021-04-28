@@ -4,8 +4,6 @@
 #include <Core/Block.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeNullable.h>
-#include <IO/ReadBufferFromString.h>
-#include <Interpreters/InterpreterCreateQuery.h>
 #include <Interpreters/executeQuery.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
@@ -165,39 +163,7 @@ String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*p
     return processQuery("DROP TABLE " + database_name + "." + table_name);
 }
 
-void TableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, const CatalogService::TablePtrs & tables) const
-{
-    Poco::JSON::Array tables_mapping_json;
-
-    for (const auto & table : tables)
-    {
-        /// FIXME : Later based on engin seting dstinguish table
-        if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") == String::npos)
-        {
-            Poco::JSON::Object table_mapping_json;
-
-            const String & query = table->create_table_query;
-            const auto & query_ptr = parseQuerySyntax(query);
-
-            const auto & create = query_ptr->as<const ASTCreateQuery &>();
-            String ttl = queryToString(*create.storage->ttl_table);
-
-            table_mapping_json.set("name", table->name);
-            table_mapping_json.set("engine", table->engine);
-            table_mapping_json.set("order_by_expression", table->sorting_key);
-            table_mapping_json.set("partition_by_expression", table->partition_key);
-            table_mapping_json.set("_time_column", table->primary_key);
-            table_mapping_json.set("ttl", ttl);
-
-            buildColumnsJSON(table_mapping_json, std::shared_ptr<ASTColumns>(create.columns_list));
-            tables_mapping_json.add(table_mapping_json);
-        }
-    }
-
-    resp.set("data", tables_mapping_json);
-}
-
-void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, const ASTColumnsPtr & columns_list) const
+void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, const ASTColumns * columns_list) const
 {
     const auto & columns_ast = columns_list->columns;
     Poco::JSON::Array columns_mapping_json;

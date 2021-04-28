@@ -37,7 +37,7 @@ void RawstoreTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, 
 
     for (const auto & table : tables)
     {
-        /// FIXME : Later based on engin seting dstinguish rawstore
+        /// FIXME : Later based on engin seting distinguish rawstore
         if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") != String::npos)
         {
             Poco::JSON::Object table_mapping_json;
@@ -53,7 +53,7 @@ void RawstoreTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, 
             table_mapping_json.set("partition_by_expression", table->partition_key);
             table_mapping_json.set("ttl", ttl);
 
-            buildColumnsJSON(table_mapping_json, std::shared_ptr<ASTColumns>(create.columns_list));
+            buildColumnsJSON(table_mapping_json, create.columns_list);
             tables_mapping_json.add(table_mapping_json);
         }
     }
