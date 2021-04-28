@@ -190,14 +190,12 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
         }
         cloumn_mapping_json.set("type", type);
 
-        /// default
         if (col_decl.default_expression)
         {
             cloumn_mapping_json.set("default", queryToString(col_decl.default_expression));
         }
         else
         {
-            /// alias
             String alias = col_decl.tryGetAlias();
             if (!alias.empty())
             {
@@ -205,19 +203,16 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
             }
         }
 
-        /// comment
         if (col_decl.comment)
         {
             cloumn_mapping_json.set("comment", queryToString(col_decl.comment));
         }
 
-        /// codec
         if (col_decl.codec)
         {
             cloumn_mapping_json.set("codec", queryToString(col_decl.codec));
         }
 
-        /// ttl
         if (col_decl.ttl)
         {
             cloumn_mapping_json.set("ttl", queryToString(col_decl.ttl));
