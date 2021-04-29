@@ -17,6 +17,9 @@ ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=12
 RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
 RUN apt-get clean
 
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
 RUN apt-get update \
     && apt-get install \
         apt-transport-https \

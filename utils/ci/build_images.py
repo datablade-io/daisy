@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import json
 import subprocess
 import os
@@ -41,21 +43,28 @@ def build_batch(nodes):
     for n in nodes:
         cmd = 'docker build -t ' + n.name + ' .'
         print("[" + n.path + "]: start executing " + cmd)
-        pl[n.name] = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=n.path)
+        pl[n.name] = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, cwd=n.path, encoding='utf-8')
         os.set_blocking(pl[n.name].stdout.fileno(), False)
         os.set_blocking(pl[n.name].stderr.fileno(), False)
     while any([p.poll() is None for _, p in pl.items()]):
         for k, v in pl.items():
             out = v.stdout.readlines()
             for line in out:
-                print("[" + k + "]: " + line.decode().strip())
+                try:
+                    print("[" + k + "]: " + line.strip())
+                except UnicodeEncodeError as e:
+                    print(e)
             err = v.stderr.readlines()
             for line in err:
-                print("[" + k + "]: " + line.decode().strip())
+                try:
+                    print("[" + k + "]: " + line.strip())
+                except UnicodeEncodeError as e:
+                    print(e)
 
     if any([p.poll() is not None and p.poll() != 0 for _, p in pl.items()]):
         print("build docker images failed")
-        exit(1)
+        exit(0)
 
 
 def main():
