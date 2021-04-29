@@ -10,6 +10,9 @@ ARG gosu_ver=1.10
 
 VOLUME /packages/
 
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
 # update to allow installing dependencies of clickhouse automatically
 RUN apt update; \
     DEBIAN_FRONTEND=noninteractive \
