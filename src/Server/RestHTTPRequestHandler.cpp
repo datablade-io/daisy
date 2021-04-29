@@ -195,6 +195,7 @@ bool RestHTTPRequestHandler::authenticateUser(
             user = params.get("user", "default");
             password = params.get("password", "");
         }
+
         quota_key = params.get("quota_key", "");
     }
     else
@@ -249,6 +250,7 @@ bool RestHTTPRequestHandler::authenticateUser(
     }
 
     /// Set client info. It will be used for quota accounting parameters in 'setUser' method.
+    
     ClientInfo & client_info = context->getClientInfo();
     client_info.query_kind = ClientInfo::QueryKind::INITIAL_QUERY;
     client_info.interface = ClientInfo::Interface::HTTP;
