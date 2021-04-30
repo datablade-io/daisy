@@ -54,6 +54,19 @@ namespace
             /// Table already exists. FIXME: enhance table creation idempotent by adding query id
             return ErrorCodes::UNRETRIABLE_ERROR;
         }
+
+        if (msg.find("Code: 60") != std::string_view::npos)
+        {
+            /// Table does not exist.
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
+
+        if (msg.find("Code: 81") != std::string_view::npos)
+        {
+            /// Database does not exist.
+            return ErrorCodes::UNRETRIABLE_ERROR;
+        }
+
         /// FIXME, other un-retriable error codes
         return ErrorCodes::UNKNOWN_EXCEPTION;
     }
@@ -214,7 +227,6 @@ Int32 DDLService::sendRequest(
         }
 
         Poco::Net::HTTPResponse response;
-        /// FIXME: handle table exists, table not exists etc error explicitly
         auto & istr = session->receiveResponse(response);
         auto status = response.getStatus();
         if (status == Poco::Net::HTTPResponse::HTTP_OK)
@@ -257,36 +269,36 @@ Int32 DDLService::sendRequest(
     return ErrorCodes::UNKNOWN_EXCEPTION;
 }
 
-/// Try indefininitely
 Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
-    /// FIXME, retry several times and report error
     Int32 err = ErrorCodes::OK;
 
-    while (!stopped.test())
+    unsigned int i = 0;
+    while (true)
     {
-        try
+        err = sendRequest(payload, uri, method, query_id);
+        if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
         {
-            err = sendRequest(payload, uri, method, query_id);
-            if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
-            {
-                return err;
-            }
+            return err;
         }
-        catch (...)
-        {
-            LOG_ERROR(log, "Failed to send request to uri={} exception={}", uri.toString(), getCurrentExceptionMessage(true, true));
-        }
+        LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), toString(err), toString(i + 1));
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        if (++i < RETRY_TIMES)
+        {
+            LOG_INFO(log, "Sleep for a while and will try to send request again.");
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (2 << i)));
+        }
+        else
+        {
+            LOG_ERROR(log, "Failed to send request to uri={} errorCode={}", uri.toString(), toString(err));
+            return err;
+        }
     }
-
-    return err;
 }
 
 void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
 {
-    Block & block = record->block;
+    const Block & block = record->block;
     assert(block.has("query_id"));
     if (!validateSchema(block, {"payload", "database", "table", "shards", "replication_factor", "query_id", "user", "timestamp"}))
     {
@@ -308,12 +320,12 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table, shards, replication_factor}};
     doCreateDWal(ctx);
 
-    if (block.has("hosts"))
+    if (record->headers.contains("hosts"))
     {
         /// If `hosts` exists in the block, we already placed the replicas
         /// then we move to the execution stage
 
-        String hosts_val = block.getByName("hosts").column->getDataAt(0).toString();
+        String hosts_val = record->headers.at("hosts");
         std::vector<String> hosts;
         boost::algorithm::split(hosts, hosts_val, boost::is_any_of(","));
         assert(!hosts.empty());
@@ -321,12 +333,11 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         std::vector<Poco::URI> target_hosts{
             toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database, getURIEndpoint(record->headers)), http_port)};
 
-        /// Create table on each target host accordign to placement
+        /// Create table on each target host according to placement
         for (Int32 i = 0; i < replication_factor; ++i)
         {
             for (Int32 j = 0; j < shards; ++j)
             {
-                /// FIXME, check table engine, grammar check
                 target_hosts[i * shards + j].setQueryParameters(
                     Poco::URI::QueryParameters{{"distributed_ddl", "false"}, {"shard", std::to_string(j)}});
                 auto err = doDDL(payload, target_hosts[i * shards + j], Poco::Net::HTTPRequest::HTTP_POST, query_id);
@@ -366,27 +377,25 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         }
 
         /// We got the placement, commit the placement decision
-        /// Add `hosts` column to block
-        /// FIXME: put the hosts in header
-        auto string_type = DataTypeFactory::instance().get(getTypeName(TypeIndex::String));
-        auto host_col = string_type->createColumn();
+        /// Add `hosts` into to record header
         String hosts{boost::algorithm::join(target_hosts, ",")};
-        host_col->insertData(hosts.data(), hosts.size());
-        ColumnWithTypeAndName host_col_with_type(std::move(host_col), string_type, "hosts");
-        block.insert(host_col_with_type);
+        record->headers["hosts"] = hosts;
 
-        /// FIXME, retries, error handling
-        auto result = dwal->append(*record.get(), dwal_append_ctx);
-        if (result.err != ErrorCodes::OK)
+        for (auto i = 0; i < RETRY_TIMES; ++i)
         {
-            LOG_ERROR(log, "Failed to commit placement decision for create table payload={}", payload);
-            failDDL(query_id, user, payload, "Internal server error");
+            auto result = dwal->append(*record.get(), dwal_append_ctx);
+            if (result.err == ErrorCodes::OK)
+            {
+                LOG_INFO(log, "Successfully find placement for create table payload={} placement={}", payload, hosts);
+                progressDDL(query_id, user, payload, "shard replicas placed");
+                return;
+            }
+
+            LOG_WARNING(log, "Failed to commit placement decision for create table payload={}, tried {} times", payload, toString(i + 1));
         }
-        else
-        {
-            LOG_INFO(log, "Successfully find placement for create table payload={} placement={}", payload, hosts);
-            progressDDL(query_id, user, payload, "shard replicas placed");
-        }
+
+        LOG_ERROR(log, "Failed to commit placement decision for create table payload={}", payload);
+        failDDL(query_id, user, payload, "Internal server error");
     }
 }
 
@@ -483,27 +492,30 @@ void DDLService::mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, con
 
 void DDLService::commit(Int64 last_sn)
 {
-    /// FIXME, retries
-    try
+    for (auto i = 0; i < RETRY_TIMES; ++i)
     {
-        auto err = dwal->commit(last_sn, dwal_consume_ctx);
-        if (unlikely(err != 0))
+        try
         {
-            /// It is ok as next commit will override this commit if it makes through.
-            /// If it failed and then crashes, we will redo and we will find resource
-            /// already exists or resource not exists errors which shall be handled in
-            /// DDL processing functions. In this case, for idempotent DDL like create
-            /// table or delete table, it shall be OK. For alter table, it may depend ?
-            LOG_ERROR(log, "Failed to commit offset={} error={}", last_sn, err);
+            auto err = dwal->commit(last_sn, dwal_consume_ctx);
+            if (unlikely(err != 0))
+            {
+                /// It is ok as next commit will override this commit if it makes through.
+                /// If it failed and then crashes, we will redo and we will find resource
+                /// already exists or resource not exists errors which shall be handled in
+                /// DDL processing functions. In this case, for idempotent DDL like create
+                /// table or delete table, it shall be OK. For alter table, it may depend ?
+                LOG_ERROR(log, "Failed to commit offset={} error={} tried_times={}", last_sn, err, toString(i));
+            }
         }
-    }
-    catch (...)
-    {
-        LOG_ERROR(
-            log,
-            "Failed to commit offset={} exception={}",
-            last_sn,
-            getCurrentExceptionMessage(true, true));
+        catch (...)
+        {
+            LOG_ERROR(
+                log,
+                "Failed to commit offset={} exception={}, tried_times={}",
+                last_sn,
+                getCurrentExceptionMessage(true, true),
+                toString(i));
+        }
     }
 }
 
