@@ -281,6 +281,7 @@ Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const Str
         {
             return err;
         }
+
         LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), toString(err), toString(i + 1));
 
         if (++i < RETRY_TIMES)
