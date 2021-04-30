@@ -467,7 +467,7 @@ void DDLService::mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, con
     }
 
     String api_path_fmt = "";
-    if(method == Poco::Net::HTTPRequest::HTTP_POST)
+    if (method == Poco::Net::HTTPRequest::HTTP_POST)
     {
         api_path_fmt = DDL_DATABSE_POST_API_PATH_FMT;
     }
@@ -475,7 +475,12 @@ void DDLService::mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, con
     {
         api_path_fmt = DDL_DATABSE_DELETE_API_PATH_FMT;
     }
-   
+    else
+    {
+        assert(false);
+        LOG_ERROR(log, "Unsupported method={}", method);
+    }
+
     std::vector<Poco::URI> target_hosts{toURIs(hosts, fmt::format(api_path_fmt, database), http_port)};
 
     /// FIXME: make sure `target_hosts` is a complete list of hosts which

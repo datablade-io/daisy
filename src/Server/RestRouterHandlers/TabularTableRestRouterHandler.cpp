@@ -51,27 +51,28 @@ void TabularTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, c
     for (const auto & table : tables)
     {
         /// FIXME : Later based on engin seting distinguish table
-        if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") == String::npos)
+        if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") != String::npos)
         {
-            Poco::JSON::Object table_mapping_json;
-
-            const String & query = table->create_table_query;
-            const auto & query_ptr = parseQuerySyntax(query);
-            const auto & create = query_ptr->as<const ASTCreateQuery &>();
-
-            table_mapping_json.set("name", table->name);
-            table_mapping_json.set("engine", table->engine);
-            table_mapping_json.set("order_by_expression", table->sorting_key);
-            table_mapping_json.set("partition_by_expression", table->partition_key);
-            if(create.storage->ttl_table)
-            {
-                String ttl = queryToString(*create.storage->ttl_table);
-                table_mapping_json.set("ttl", ttl);
-            }
-
-            buildColumnsJSON(table_mapping_json, create.columns_list);
-            tables_mapping_json.add(table_mapping_json);
+            continue;
         }
+
+        const String & query = table->create_table_query;
+        const auto & query_ptr = parseQuerySyntax(query);
+        const auto & create = query_ptr->as<const ASTCreateQuery &>();
+
+        Poco::JSON::Object table_mapping_json;
+        table_mapping_json.set("name", table->name);
+        table_mapping_json.set("engine", table->engine);
+        table_mapping_json.set("order_by_expression", table->sorting_key);
+        table_mapping_json.set("partition_by_expression", table->partition_key);
+
+        if (create.storage->ttl_table)
+        {
+            table_mapping_json.set("ttl", queryToString(*create.storage->ttl_table));
+        }
+
+        buildColumnsJSON(table_mapping_json, create.columns_list);
+        tables_mapping_json.add(table_mapping_json);
     }
 
     resp.set("data", tables_mapping_json);
