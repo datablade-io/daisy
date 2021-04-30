@@ -43,32 +43,35 @@ namespace
     const String DDL_DATABSE_POST_API_PATH_FMT = "/dae/v1/ddl/databases";
     const String DDL_DATABSE_DELETE_API_PATH_FMT = "/dae/v1/ddl/databases/{}";
 
+    /// FIXME, add other un-retriable error codes
+    const std::vector<String> UNRETRIABLE_ERROR_CODES{
+        "57", /// Table already exists.
+        "60", /// Table does not exist.
+        "81", /// Database does not exist.
+        "82", /// Database already  exists.
+    };
+
+    bool isUnRetriableError(const String & err_msg)
+    {
+        for (auto err_code : UNRETRIABLE_ERROR_CODES)
+        {
+            if (err_msg.find("Code: " + err_code) != std::string_view::npos)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     int toErrorCode(std::istream & istr)
     {
         std::stringstream error_message; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
         error_message << istr.rdbuf();
         /// FIXME, revise HTTP status code for the legacy HTTP API
         const auto & msg = error_message.str();
-        if (msg.find("Code: 57") != std::string_view::npos)
-        {
-            /// Table already exists. FIXME: enhance table creation idempotent by adding query id
-            return ErrorCodes::UNRETRIABLE_ERROR;
-        }
 
-        if (msg.find("Code: 60") != std::string_view::npos)
-        {
-            /// Table does not exist.
-            return ErrorCodes::UNRETRIABLE_ERROR;
-        }
-
-        if (msg.find("Code: 81") != std::string_view::npos)
-        {
-            /// Database does not exist.
-            return ErrorCodes::UNRETRIABLE_ERROR;
-        }
-
-        /// FIXME, other un-retriable error codes
-        return ErrorCodes::UNKNOWN_EXCEPTION;
+        return isUnRetriableError(msg) ? ErrorCodes::UNRETRIABLE_ERROR : ErrorCodes::UNKNOWN_EXCEPTION;
     }
 
     int toErrorCode(const Poco::Exception & e)
@@ -270,9 +273,7 @@ Int32 DDLService::sendRequest(const String & payload, const Poco::URI & uri, con
 Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     Int32 err = ErrorCodes::OK;
-
-    unsigned int i = 0;
-    while (true)
+    for (unsigned int i = 0; i < RETRY_TIMES; ++i)
     {
         err = sendRequest(payload, uri, method, query_id);
         if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
@@ -282,17 +283,15 @@ Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const Str
 
         LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), toString(err), toString(i + 1));
 
-        if (++i < RETRY_TIMES)
+        if (i < RETRY_TIMES - 1)
         {
             LOG_INFO(log, "Sleep for a while and will try to send request again.");
             std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (2 << i)));
         }
-        else
-        {
-            LOG_ERROR(log, "Failed to send request to uri={} errorCode={}", uri.toString(), toString(err));
-            return err;
-        }
     }
+
+    LOG_ERROR(log, "Failed to send request to uri={} errorCode={}", uri.toString(), toString(err));
+    return err;
 }
 
 void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
