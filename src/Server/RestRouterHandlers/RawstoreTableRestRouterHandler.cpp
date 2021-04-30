@@ -38,25 +38,27 @@ void RawstoreTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, 
     for (const auto & table : tables)
     {
         /// FIXME : Later based on engin seting distinguish rawstore
-        if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") != String::npos)
+        if (table->create_table_query.find("`_raw` String COMMENT 'rawstore'") == String::npos)
         {
-            const String & query = table->create_table_query;
-            const auto & query_ptr = parseQuerySyntax(query);
-            const auto & create = query_ptr->as<const ASTCreateQuery &>();
-
-            Poco::JSON::Object table_mapping_json;
-            table_mapping_json.set("name", table->name);
-            table_mapping_json.set("engine", table->engine);
-            table_mapping_json.set("order_by_expression", table->sorting_key);
-            table_mapping_json.set("partition_by_expression", table->partition_key);
-
-            if (create.storage->ttl_table)
-            {
-                table_mapping_json.set("ttl", queryToString(*create.storage->ttl_table));
-            }
-
-            tables_mapping_json.add(table_mapping_json);
+            continue;
         }
+
+        const String & query = table->create_table_query;
+        const auto & query_ptr = parseQuerySyntax(query);
+        const auto & create = query_ptr->as<const ASTCreateQuery &>();
+
+        Poco::JSON::Object table_mapping_json;
+        table_mapping_json.set("name", table->name);
+        table_mapping_json.set("engine", table->engine);
+        table_mapping_json.set("order_by_expression", table->sorting_key);
+        table_mapping_json.set("partition_by_expression", table->partition_key);
+
+        if (create.storage->ttl_table)
+        {
+            table_mapping_json.set("ttl", queryToString(*create.storage->ttl_table));
+        }
+
+        tables_mapping_json.add(table_mapping_json);
     }
 
     resp.set("data", tables_mapping_json);
