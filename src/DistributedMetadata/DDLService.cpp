@@ -201,8 +201,7 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
     return true;
 }
 
-Int32 DDLService::sendRequest(
-    const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
+Int32 DDLService::sendRequest(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     /// One second for connect/send/receive
     ConnectionTimeouts timeouts({1, 0}, {1, 0}, {5, 0});
@@ -231,8 +230,7 @@ Int32 DDLService::sendRequest(
         auto status = response.getStatus();
         if (status == Poco::Net::HTTPResponse::HTTP_OK)
         {
-            LOG_INFO(
-                log, "Executed DDL operation on uri={} successfully, method={}, payload={}", uri.toString(), method, payload);
+            LOG_INFO(log, "Executed DDL operation on uri={} successfully, method={}, payload={}", uri.toString(), method, payload);
             return ErrorCodes::OK;
         }
         else
