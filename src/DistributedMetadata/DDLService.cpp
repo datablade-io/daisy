@@ -283,7 +283,7 @@ Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const Str
             return err;
         }
 
-        LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), toString(err), i + 1);
+        LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), err, i + 1);
 
         if (i < MAX_RETRIES - 1)
         {
@@ -292,7 +292,7 @@ Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const Str
         }
     }
 
-    LOG_ERROR(log, "Failed to send request to uri={} errorCode={}", uri.toString(), toString(err));
+    LOG_ERROR(log, "Failed to send request to uri={} errorCode={}", uri.toString(), err);
     return err;
 }
 
