@@ -43,6 +43,8 @@ namespace
     const String DDL_DATABSE_POST_API_PATH_FMT = "/dae/v1/ddl/databases";
     const String DDL_DATABSE_DELETE_API_PATH_FMT = "/dae/v1/ddl/databases/{}";
 
+    constexpr Int32 MAX_RETRIES = 3;
+
     /// FIXME, add other un-retriable error codes
     const std::vector<String> UNRETRIABLE_ERROR_CODES{
         "57", /// Table already exists.
@@ -53,9 +55,9 @@ namespace
 
     bool isUnRetriableError(const String & err_msg)
     {
-        for (auto err_code : UNRETRIABLE_ERROR_CODES)
+        for (const auto & err_code : UNRETRIABLE_ERROR_CODES)
         {
-            if (err_msg.find("Code: " + err_code) != std::string_view::npos)
+            if (err_msg.find("Code: " + err_code) != String::npos)
             {
                 return true;
             }
@@ -273,7 +275,7 @@ Int32 DDLService::sendRequest(const String & payload, const Poco::URI & uri, con
 Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     Int32 err = ErrorCodes::OK;
-    for (unsigned int i = 0; i < RETRY_TIMES; ++i)
+    for (unsigned int i = 0; i < MAX_RETRIES; ++i)
     {
         err = sendRequest(payload, uri, method, query_id);
         if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
@@ -281,9 +283,9 @@ Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const Str
             return err;
         }
 
-        LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), toString(err), toString(i + 1));
+        LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), toString(err), i + 1);
 
-        if (i < RETRY_TIMES - 1)
+        if (i < MAX_RETRIES - 1)
         {
             LOG_INFO(log, "Sleep for a while and will try to send request again.");
             std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (2 << i)));
@@ -379,7 +381,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         String hosts{boost::algorithm::join(target_hosts, ",")};
         record->headers["hosts"] = hosts;
 
-        for (auto i = 0; i < RETRY_TIMES; ++i)
+        for (auto i = 0; i < MAX_RETRIES; ++i)
         {
             auto result = dwal->append(*record.get(), dwal_append_ctx);
             if (result.err == ErrorCodes::OK)
@@ -389,7 +391,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
                 return;
             }
 
-            LOG_WARNING(log, "Failed to commit placement decision for create table payload={}, tried {} times", payload, toString(i + 1));
+            LOG_WARNING(log, "Failed to commit placement decision for create table payload={}, tried {} times", payload, i + 1);
         }
 
         LOG_ERROR(log, "Failed to commit placement decision for create table payload={}", payload);
@@ -490,7 +492,7 @@ void DDLService::mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, con
 
 void DDLService::commit(Int64 last_sn)
 {
-    for (auto i = 0; i < RETRY_TIMES; ++i)
+    for (auto i = 0; i < MAX_RETRIES; ++i)
     {
         try
         {
@@ -502,17 +504,12 @@ void DDLService::commit(Int64 last_sn)
                 /// already exists or resource not exists errors which shall be handled in
                 /// DDL processing functions. In this case, for idempotent DDL like create
                 /// table or delete table, it shall be OK. For alter table, it may depend ?
-                LOG_ERROR(log, "Failed to commit offset={} error={} tried_times={}", last_sn, err, toString(i));
+                LOG_ERROR(log, "Failed to commit offset={} error={} tried_times={}", last_sn, err, i);
             }
         }
         catch (...)
         {
-            LOG_ERROR(
-                log,
-                "Failed to commit offset={} exception={}, tried_times={}",
-                last_sn,
-                getCurrentExceptionMessage(true, true),
-                toString(i));
+            LOG_ERROR(log, "Failed to commit offset={} exception={}, tried_times={}", last_sn, getCurrentExceptionMessage(true, true), i);
         }
     }
 }

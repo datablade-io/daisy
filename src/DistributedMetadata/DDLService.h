@@ -53,7 +53,6 @@ private:
 
 private:
     String http_port;
-    static constexpr Int32 RETRY_TIMES = 3;
 
     CatalogService & catalog;
     PlacementService & placement;
