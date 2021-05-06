@@ -15,6 +15,7 @@
 #include "PrometheusRequestHandler.h"
 #include "RestHTTPRequestHandler.h"
 #include "WebUIRequestHandler.h"
+#include "RestStatusHandler.h"
 
 
 namespace DB
@@ -184,6 +185,10 @@ void addDefaultHandlersFactory(HTTPRequestHandlerFactoryMain & factory, IServer 
     auto rest_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<RestHTTPRequestHandler>>(server, "dae");
     rest_handler->attachNonStrictPath("/dae");
     factory.addHandler(rest_handler);
+
+    auto rest_status_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<RestStatusHandler>>(server, "daisy");
+    rest_status_handler->attachNonStrictPath("/daisy");
+    factory.addHandler(rest_status_handler);
     /// Daisy: end.
 
     auto query_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<DynamicQueryHandler>>(server, "query");
