@@ -43,6 +43,7 @@ SRCS(
     RestRouterHandlers/TableRestRouterHandler.cpp
     RestRouterHandlers/TabularTableRestRouterHandler.cpp
     RestRouterHandlers/TaskRestRouterHandler.cpp
+    RestStatusHandler.cpp
     StaticRequestHandler.cpp
     TCPHandler.cpp
     WebUIRequestHandler.cpp

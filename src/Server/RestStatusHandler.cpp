@@ -10,13 +10,16 @@
 #include <Server/HTTP/WriteBufferFromHTTPServerResponse.h>
 #include <Poco/Path.h>
 
-#include <boost/algorithm/string/split.hpp>
-
 namespace DB
 {
 namespace ErrorCodes
 {
     extern const int UNKNOWN_TYPE_OF_QUERY;
+}
+
+namespace
+{
+    std::map<String, String> colname_bldkey_mapping = {{"VERSION_DESCRIBE", "version"}, {"BUILD_TIME", "time"}};
 }
 
 void RestStatusHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse & response)
@@ -31,7 +34,7 @@ void RestStatusHandler::handleRequest(HTTPServerRequest & request, HTTPServerRes
     LOG_TRACE(log, "Request uri: {}", request.getURI());
 
     /// Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
-    request_context->setCurrentQueryId(params.get("query_id",""));
+    request_context->setCurrentQueryId(params.get("query_id", ""));
 
     /// Setup common response headers etc
     response.setContentType("application/json; charset=UTF-8");
@@ -82,7 +85,6 @@ bool RestStatusHandler::validateSchema(const Block & block, const std::vector<St
 
 void RestStatusHandler::buildInfoFromBlock(const Block & block, Poco::JSON::Object & resp) const
 {
-    Poco::JSON::Object build_info;
     if (!validateSchema(block, {"name", "value"}))
     {
         return;
@@ -91,32 +93,20 @@ void RestStatusHandler::buildInfoFromBlock(const Block & block, Poco::JSON::Obje
     const auto & name = block.findByName("name")->column;
     const auto & value = block.findByName("value")->column;
 
+    Poco::JSON::Object build_info;
     for (size_t i = 0; i < name->size(); ++i)
     {
         const String & col_name = name->getDataAt(i).toString();
         const String & col_value = value->getDataAt(i).toString();
 
-        if (col_name == "VERSION_FULL")
+        const auto & it = colname_bldkey_mapping.find(col_name);
+        if (it != colname_bldkey_mapping.end())
         {
-            Strings version_fulls;
-            boost::split(version_fulls, col_value, boost::is_any_of(" "));
-
-            build_info.set("name", version_fulls[0]);
-        }
-        else if (col_name == "VERSION_DESCRIBE")
-        {
-            build_info.set("version", col_value);
-        }
-        else if (col_name == "BUILD_TIME")
-        {
-            build_info.set("time", col_value);
-        }
-        else
-        {
-            assert(0);
-            LOG_ERROR(log, "Unknown name={}", col_name);
+            build_info.set(it->second, col_value);
         }
     }
+
+    build_info.set("name", "Daisy");
     resp.set("build", build_info);
 }
 
