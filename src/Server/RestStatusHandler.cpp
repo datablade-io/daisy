@@ -96,13 +96,10 @@ void RestStatusHandler::buildInfoFromBlock(const Block & block, Poco::JSON::Obje
     Poco::JSON::Object build_info;
     for (size_t i = 0; i < name->size(); ++i)
     {
-        const String & col_name = name->getDataAt(i).toString();
-        const String & col_value = value->getDataAt(i).toString();
-
-        const auto & it = colname_bldkey_mapping.find(col_name);
+        const auto & it = colname_bldkey_mapping.find(name->getDataAt(i).toString());
         if (it != colname_bldkey_mapping.end())
         {
-            build_info.set(it->second, col_value);
+            build_info.set(it->second, value->getDataAt(i).toString());
         }
     }
 
