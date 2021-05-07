@@ -275,7 +275,7 @@ Int32 DDLService::sendRequest(const String & payload, const Poco::URI & uri, con
 Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const
 {
     Int32 err = ErrorCodes::OK;
-    for (unsigned int i = 0; i < MAX_RETRIES; ++i)
+    for (auto i = 0; i < MAX_RETRIES; ++i)
     {
         err = sendRequest(payload, uri, method, query_id);
         if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
@@ -283,7 +283,7 @@ Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const Str
             return err;
         }
 
-        LOG_WARNING(log, "Failed to send request to uri={} errorCode={} tried {} times.", uri.toString(), err, i + 1);
+        LOG_WARNING(log, "Failed to send request to uri={} error_code={} tried {} times.", uri.toString(), err, i + 1);
 
         if (i < MAX_RETRIES - 1)
         {
@@ -292,7 +292,7 @@ Int32 DDLService::doDDL(const String & payload, const Poco::URI & uri, const Str
         }
     }
 
-    LOG_ERROR(log, "Failed to send request to uri={} errorCode={}", uri.toString(), err);
+    LOG_ERROR(log, "Failed to send request to uri={} error_code={}", uri.toString(), err);
     return err;
 }
 
