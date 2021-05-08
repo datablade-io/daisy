@@ -10,6 +10,10 @@ get_property (BUILD_INCLUDE_DIRECTORIES DIRECTORY ${ClickHouse_SOURCE_DIR} PROPE
 
 get_property(TZDATA_VERSION GLOBAL PROPERTY TZDATA_VERSION_PROP)
 
+# Daisy: start.
+string (TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M:%S" UTC)
+# Daisy: end.
+
 configure_file (StorageSystemBuildOptions.generated.cpp.in ${CONFIG_BUILD})
 
 include("${ClickHouse_SOURCE_DIR}/cmake/dbms_glob_sources.cmake")
