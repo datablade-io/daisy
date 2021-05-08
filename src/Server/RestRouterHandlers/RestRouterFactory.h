@@ -115,7 +115,7 @@ public:
             });
 
         factory.registerRouterHandler(
-            "/dae/(?P<status>\\w+)",
+            "/dae/(?P<status>ping|info)$",
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<DB::RestStatusHandler>(query_context);

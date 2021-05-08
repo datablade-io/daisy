@@ -25,13 +25,10 @@ String RestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /*payload*/
     {
         String query = "SELECT name, value FROM system.build_options WHERE name IN ('VERSION_FULL','VERSION_DESCRIBE','BUILD_TIME');";
 
-        Poco::JSON::Object resp;
-        executeSelectQuery(query, query_context, [this, &resp](Block && block) { return this->buildInfoFromBlock(block, resp); });
+        String resp = "";
+        executeSelectQuery(query, query_context, [this, &resp](Block && block) { return this->buildResponse(block, resp); });
 
-        std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        resp.stringify(resp_str_stream, 0);
-
-        return resp_str_stream.str();
+        return resp;
     }
     else if (status == "ping")
     {
@@ -45,7 +42,7 @@ String RestStatusHandler::executeGet(const Poco::JSON::Object::Ptr & /*payload*/
     }
 }
 
-void RestStatusHandler::buildInfoFromBlock(const Block & block, Poco::JSON::Object & resp) const
+void RestStatusHandler::buildResponse(const Block & block, String & resp) const
 {
     const auto & name = block.findByName("name")->column;
     const auto & value = block.findByName("value")->column;
@@ -60,7 +57,13 @@ void RestStatusHandler::buildInfoFromBlock(const Block & block, Poco::JSON::Obje
         }
     }
     build_info.set("name", "Daisy");
-    resp.set("build", build_info);
+    
+    Poco::JSON::Object json_resp;
+    json_resp.set("build", build_info);
+
+    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+    json_resp.stringify(resp_str_stream, 0);
+    resp = resp_str_stream.str();
 }
 
 }

@@ -12,8 +12,7 @@ public:
 
 private:
     String executeGet(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
-    bool validateSchema(const Block & block, const std::vector<String> & col_names) const;
-    void buildInfoFromBlock(const Block & block, Poco::JSON::Object & resp) const;
+    void buildResponse(const Block & block, String & resp) const;
 };
 
 }
