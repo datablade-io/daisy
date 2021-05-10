@@ -17,7 +17,6 @@
 
 namespace DB
 {
-
 namespace ErrorCodes
 {
     extern const int BAD_REQUEST_PARAMETER;
@@ -39,7 +38,7 @@ public:
     /// and sends back HTTP `500` to clients
     String execute(HTTPServerRequest & request, HTTPServerResponse & response, Int32 & http_status)
     {
-        setupQueryParams(request);
+        setupHTTPContext(request);
 
         http_status = HTTPResponse::HTTP_OK;
 
@@ -84,7 +83,13 @@ public:
         return query_parameters->get(name, default_value);
     }
 
+    const String & getAcceptEncoding() const { return accepted_encoding; }
+
+    Int64 getContentLength() const { return content_length; }
+
     bool hasQueryParameter(const String & name) const { return query_parameters->has(name); }
+
+    virtual bool outputStreaming() const { return false; }
 
 public:
     static String jsonErrorResponse(const String & error_msg, int error_code, const String & query_id)
@@ -183,6 +188,13 @@ private:
     virtual bool validateDelete(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
     virtual bool validatePatch(const Poco::JSON::Object::Ptr & /* payload */, String & /* error_msg */) const { return true; }
 
+    void setupHTTPContext(const HTTPServerRequest & request)
+    {
+        accepted_encoding = request.get("Accept-Encoding", "");
+        content_length = request.getContentLength64();
+        setupQueryParams(request);
+    }
+
     void setupQueryParams(const HTTPServerRequest & request) { query_parameters = std::make_unique<HTMLForm>(request); }
 
 protected:
@@ -191,6 +203,8 @@ protected:
 
     std::unordered_map<String, String> path_parameters;
     std::unique_ptr<HTMLForm> query_parameters;
+    String accepted_encoding;
+    Int64 content_length;
 };
 
 using RestRouterHandlerPtr = std::shared_ptr<RestRouterHandler>;

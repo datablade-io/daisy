@@ -50,7 +50,6 @@ SRCS(
     DatabaseAndTableWithAlias.cpp
     DatabaseCatalog.cpp
     DictionaryReader.cpp
-    EliminateSubqueryVisitor.cpp
     EmbeddedDictionaries.cpp
     ExecuteScalarSubqueriesVisitor.cpp
     ExpressionActions.cpp
@@ -157,6 +156,7 @@ SRCS(
     TranslateQualifiedNamesVisitor.cpp
     TreeOptimizer.cpp
     TreeRewriter.cpp
+    UnnestSubqueryVisitor.cpp
     WindowDescription.cpp
     addMissingDefaults.cpp
     addTypeConversionToAST.cpp
@@ -164,6 +164,16 @@ SRCS(
     convertFieldToType.cpp
     createBlockSelector.cpp
     evaluateConstantExpression.cpp
+    examples/hash_map.cpp
+    examples/hash_map3.cpp
+    examples/hash_map_lookup.cpp
+    examples/hash_map_string.cpp
+    examples/hash_map_string_2.cpp
+    examples/hash_map_string_3.cpp
+    examples/hash_map_string_small.cpp
+    examples/string_hash_map.cpp
+    examples/string_hash_set.cpp
+    examples/two_level_hash_map.cpp
     executeDDLQueryOnCluster.cpp
     executeQuery.cpp
     executeSelectQuery.cpp

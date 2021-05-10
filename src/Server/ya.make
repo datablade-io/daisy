@@ -42,6 +42,7 @@ SRCS(
     RestRouterHandlers/RestStatusHandler.cpp
     RestRouterHandlers/SQLAnalyzerRestRouterHandler.cpp
     RestRouterHandlers/SchemaValidator.cpp
+    RestRouterHandlers/SearchHandler.cpp
     RestRouterHandlers/TableRestRouterHandler.cpp
     RestRouterHandlers/TabularTableRestRouterHandler.cpp
     RestRouterHandlers/TaskRestRouterHandler.cpp
