@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import json
 import subprocess
 import os
@@ -48,10 +50,10 @@ def build_batch(nodes):
         for k, v in pl.items():
             out = v.stdout.readlines()
             for line in out:
-                print("[" + k + "]: " + line.decode().strip())
+                print("[" + k + "]: " + line.decode('utf-8').strip())
             err = v.stderr.readlines()
             for line in err:
-                print("[" + k + "]: " + line.decode().strip())
+                print("[" + k + "]: " + line.decode('utf-8').strip())
 
     if any([p.poll() is not None and p.poll() != 0 for _, p in pl.items()]):
         print("build docker images failed")
