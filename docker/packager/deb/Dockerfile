@@ -1,6 +1,9 @@
 # docker build -t yandex/clickhouse-deb-builder .
 FROM ubuntu:20.04
 
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
 ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=11
 
 RUN apt-get update \
