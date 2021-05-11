@@ -2,13 +2,10 @@
 #include "SchemaValidator.h"
 
 #include <Core/Block.h>
-#include <Databases/DatabaseFactory.h>
+#include <DistributedMetadata/CatalogService.h>
 #include <Interpreters/executeQuery.h>
 #include <Parsers/ASTCreateQuery.h>
-#include <DistributedMetadata/CatalogService.h>
 #include <Parsers/ParserCreateQuery.h>
-#include <Storages/ColumnsDescription.h>
-#include <DataTypes/DataTypeFactory.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/parseQuery.h>
 
@@ -20,7 +17,6 @@
 
 namespace DB
 {
-
 namespace ErrorCodes
 {
     extern const int ALTER_OF_COLUMN_IS_FORBIDDEN;
@@ -60,7 +56,7 @@ std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
     }
 };
 
-String getColumnDefination(const Poco::JSON::Object::Ptr & payload)
+String getCreateColumnDefination(const Poco::JSON::Object::Ptr & payload)
 {
     std::vector<String> create_segments;
     create_segments.push_back(payload->get("name"));
@@ -97,92 +93,8 @@ String getColumnDefination(const Poco::JSON::Object::Ptr & payload)
     return boost::algorithm::join(create_segments, " ");
 }
 
-}
-
-bool ColumnRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
+String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, String & column_name)
 {
-    return validateSchema(CREATE_SCHEMA, payload, error_msg);
-}
-
-bool ColumnRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
-{
-    return validateSchema(UPDATE_SCHEMA, payload, error_msg);
-}
-
-String ColumnRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
-{
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
-    {
-        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        payload->stringify(payload_str_stream, 0);
-        query_context->setQueryParameter("_payload", payload_str_stream.str());
-        query_context->setQueryParameter("query_method", Poco::Net::HTTPRequest::HTTP_POST);
-        query_context->setDistributedDDLOperation(true);
-    }
-
-    const String & database_name = getPathParameter("database");
-    const String & table_name = getPathParameter("table");
-    const String & column_name = payload->get("name");
-
-    if (columnExist(database_name, table_name, column_name))
-    {
-        return jsonErrorResponse(fmt::format("Column {} already exists.", column_name), ErrorCodes::ALTER_OF_COLUMN_IS_FORBIDDEN);
-    }
-
-    std::vector<String> create_segments;
-    create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
-    create_segments.push_back("ADD COLUMN ");
-    create_segments.push_back(getColumnDefination(payload));
-    const String & query = boost::algorithm::join(create_segments, " ");
-
-    return processQuery(query, http_status);
-}
-
-String ColumnRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & http_status) const
-{
-    const String & column_name = getPathParameter("column");
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
-    {
-        query_context->setQueryParameter("_payload", "{}");
-        query_context->setQueryParameter("column", column_name);
-        query_context->setQueryParameter("query_method", Poco::Net::HTTPRequest::HTTP_DELETE);
-        query_context->setDistributedDDLOperation(true);
-    }
-
-    const String & database_name = getPathParameter("database");
-    const String & table_name = getPathParameter("table");
-
-    if (!columnExist(database_name, table_name, column_name))
-    {
-        return jsonErrorResponse(fmt::format("Column {} does not exist.", column_name), ErrorCodes::ALTER_OF_COLUMN_IS_FORBIDDEN);
-    }
-
-    String query = "ALTER TABLE " + database_name + "." + table_name + " DROP COLUMN " + column_name;
-
-    return processQuery(query, http_status);
-}
-
-String ColumnRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
-{
-    String column_name = getPathParameter("column");
-    const String & database_name = getPathParameter("database");
-    const String & table_name = getPathParameter("table");
-
-    if (!columnExist(database_name, table_name, column_name))
-    {
-        return jsonErrorResponse(fmt::format("Column {} does not exist.", column_name), ErrorCodes::ALTER_OF_COLUMN_IS_FORBIDDEN);
-    }
-
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
-    {
-        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        payload->stringify(payload_str_stream, 0);
-        query_context->setQueryParameter("_payload", payload_str_stream.str());
-        query_context->setQueryParameter("column", column_name);
-        query_context->setQueryParameter("query_method", Poco::Net::HTTPRequest::HTTP_PATCH);
-        query_context->setDistributedDDLOperation(true);
-    }
-
     std::vector<String> update_segments;
     if (payload->has("name"))
     {
@@ -215,7 +127,96 @@ String ColumnRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & pay
         update_segments.push_back(" MODIFY COLUMN " + column_name + " CODEC(" + payload->get("compression_codec").toString() + ")");
     }
 
-    const String & query = "ALTER TABLE " + database_name + "." + table_name + " " + boost::algorithm::join(update_segments, ",");
+    return boost::algorithm::join(update_segments, ",");
+}
+
+}
+
+bool ColumnRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
+{
+    return validateSchema(CREATE_SCHEMA, payload, error_msg);
+}
+
+bool ColumnRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
+{
+    return validateSchema(UPDATE_SCHEMA, payload, error_msg);
+}
+
+String ColumnRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+{
+    const String & database_name = getPathParameter("database");
+    const String & table_name = getPathParameter("table");
+    const String & column_name = payload->get("name");
+
+    if (columnExist(database_name, table_name, column_name))
+    {
+        return jsonErrorResponse(fmt::format("Column {} already exists.", column_name), ErrorCodes::ALTER_OF_COLUMN_IS_FORBIDDEN);
+    }
+
+    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    {
+        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        payload->stringify(payload_str_stream, 0);
+        query_context->setQueryParameter("_payload", payload_str_stream.str());
+        query_context->setQueryParameter("query_method", Poco::Net::HTTPRequest::HTTP_POST);
+        query_context->setDistributedDDLOperation(true);
+    }
+
+    std::vector<String> create_segments;
+    create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
+    create_segments.push_back("ADD COLUMN ");
+    create_segments.push_back(getCreateColumnDefination(payload));
+    const String & query = boost::algorithm::join(create_segments, " ");
+
+    return processQuery(query, http_status);
+}
+
+String ColumnRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+{
+    String column_name = getPathParameter("column");
+    const String & database_name = getPathParameter("database");
+    const String & table_name = getPathParameter("table");
+
+    if (!columnExist(database_name, table_name, column_name))
+    {
+        return jsonErrorResponse(fmt::format("Column {} does not exist.", column_name), ErrorCodes::ALTER_OF_COLUMN_IS_FORBIDDEN);
+    }
+
+    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    {
+        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        payload->stringify(payload_str_stream, 0);
+        query_context->setQueryParameter("_payload", payload_str_stream.str());
+        query_context->setQueryParameter("column", column_name);
+        query_context->setQueryParameter("query_method", Poco::Net::HTTPRequest::HTTP_PATCH);
+        query_context->setDistributedDDLOperation(true);
+    }
+
+    const String & query = "ALTER TABLE " + database_name + "." + table_name + " " + getUpdateColumnDefination(payload, column_name);
+
+    return processQuery(query, http_status);
+}
+
+String ColumnRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & http_status) const
+{
+    const String & column_name = getPathParameter("column");
+    const String & database_name = getPathParameter("database");
+    const String & table_name = getPathParameter("table");
+
+    if (!columnExist(database_name, table_name, column_name))
+    {
+        return jsonErrorResponse(fmt::format("Column {} does not exist.", column_name), ErrorCodes::ALTER_OF_COLUMN_IS_FORBIDDEN);
+    }
+
+    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    {
+        query_context->setQueryParameter("_payload", "{}");
+        query_context->setQueryParameter("column", column_name);
+        query_context->setQueryParameter("query_method", Poco::Net::HTTPRequest::HTTP_DELETE);
+        query_context->setDistributedDDLOperation(true);
+    }
+
+    String query = "ALTER TABLE " + database_name + "." + table_name + " DROP COLUMN " + column_name;
 
     return processQuery(query, http_status);
 }
@@ -295,4 +296,5 @@ ASTPtr ColumnRestRouterHandler::parseQuerySyntax(const String & create_table_que
 
     return ast;
 }
+
 }
