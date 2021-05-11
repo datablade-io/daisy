@@ -51,10 +51,10 @@ def build_batch(nodes):
         for k, v in pl.items():
             out = v.stdout.readlines()
             for line in out:
-                print("[" + k + "]: " + line.decode('utf-8').strip())
+                print("[" + k + "]: " + line.strip())
             err = v.stderr.readlines()
             for line in err:
-                print("[" + k + "]: " + line.decode('utf-8').strip())
+                print("[" + k + "]: " + line.strip())
 
     if any([p.poll() is not None and p.poll() != 0 for _, p in pl.items()]):
         print("build docker images failed")
