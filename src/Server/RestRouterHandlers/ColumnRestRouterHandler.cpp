@@ -1,17 +1,11 @@
 #include "ColumnRestRouterHandler.h"
+#include "CommonUtils.h"
 #include "SchemaValidator.h"
 
 #include <Core/Block.h>
 #include <DistributedMetadata/CatalogService.h>
-#include <Interpreters/executeQuery.h>
+#include <Parsers/ASTColumnDeclaration.h>
 #include <Parsers/ASTCreateQuery.h>
-#include <Parsers/ParserCreateQuery.h>
-#include <Parsers/ParserQuery.h>
-#include <Parsers/parseQuery.h>
-
-#if !defined(ARCADIA_BUILD)
-#    include <Parsers/New/parseQuery.h> // Y_IGNORE
-#endif
 
 #include <boost/algorithm/string/join.hpp>
 
@@ -55,81 +49,6 @@ std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
                 }
     }
 };
-
-String getCreateColumnDefination(const Poco::JSON::Object::Ptr & payload)
-{
-    std::vector<String> create_segments;
-    create_segments.push_back(payload->get("name"));
-
-    if (payload->has("nullable") && payload->get("nullable"))
-    {
-        create_segments.push_back(" Nullable(" + payload->get("type").toString() + ")");
-    }
-    else
-    {
-        create_segments.push_back(" " + payload->get("type").toString());
-    }
-
-    if (payload->has("default"))
-    {
-        create_segments.push_back(" DEFAULT " + payload->get("default").toString());
-    }
-
-    if (payload->has("compression_codec"))
-    {
-        create_segments.push_back(" CODEC(" + payload->get("compression_codec").toString() + ")");
-    }
-
-    if (payload->has("ttl_expression"))
-    {
-        create_segments.push_back(" TTL " + payload->get("ttl_expression").toString());
-    }
-
-    if (payload->has("skipping_index_expression"))
-    {
-        create_segments.push_back(", " + payload->get("skipping_index_expression").toString());
-    }
-
-    return boost::algorithm::join(create_segments, " ");
-}
-
-String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, String & column_name)
-{
-    std::vector<String> update_segments;
-    if (payload->has("name"))
-    {
-        update_segments.push_back(" RENAME COLUMN " + column_name + " TO " + payload->get("name").toString());
-        column_name = payload->get("name").toString();
-    }
-
-    if (payload->has("comment"))
-    {
-        update_segments.push_back(" COMMENT COLUMN " + column_name + " COMMENT " + payload->get("comment").toString());
-    }
-
-    if (payload->has("type"))
-    {
-        update_segments.push_back(" MODIFY COLUMN " + column_name + " " + payload->get("type").toString());
-    }
-
-    if (payload->has("default"))
-    {
-        update_segments.push_back(" MODIFY COLUMN " + column_name + " DEFAULT " + payload->get("default").toString());
-    }
-
-    if (payload->has("ttl_expression"))
-    {
-        update_segments.push_back(" MODIFY COLUMN " + column_name + " TTL " + payload->get("ttl_expression").toString());
-    }
-
-    if (payload->has("compression_codec"))
-    {
-        update_segments.push_back(" MODIFY COLUMN " + column_name + " CODEC(" + payload->get("compression_codec").toString() + ")");
-    }
-
-    return boost::algorithm::join(update_segments, ",");
-}
-
 }
 
 bool ColumnRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
@@ -142,7 +61,7 @@ bool ColumnRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & payl
     return validateSchema(UPDATE_SCHEMA, payload, error_msg);
 }
 
-String ColumnRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+String ColumnRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
@@ -165,13 +84,13 @@ String ColumnRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payl
     std::vector<String> create_segments;
     create_segments.push_back("ALTER TABLE " + database_name + "." + table_name);
     create_segments.push_back("ADD COLUMN ");
-    create_segments.push_back(getCreateColumnDefination(payload));
+    create_segments.push_back(ColumnUtils::getCreateColumnDefination(payload));
     const String & query = boost::algorithm::join(create_segments, " ");
 
-    return processQuery(query, http_status);
+    return QueryUtils::processQuery(query, query_context);
 }
 
-String ColumnRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
+String ColumnRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
     String column_name = getPathParameter("column");
     const String & database_name = getPathParameter("database");
@@ -192,12 +111,12 @@ String ColumnRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & pay
         query_context->setDistributedDDLOperation(true);
     }
 
-    const String & query = "ALTER TABLE " + database_name + "." + table_name + " " + getUpdateColumnDefination(payload, column_name);
+    const String & query = "ALTER TABLE " + database_name + "." + table_name + " " + ColumnUtils::getUpdateColumnDefination(payload, column_name);
 
-    return processQuery(query, http_status);
+    return QueryUtils::processQuery(query, query_context);
 }
 
-String ColumnRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & http_status) const
+String ColumnRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
 {
     const String & column_name = getPathParameter("column");
     const String & database_name = getPathParameter("database");
@@ -218,30 +137,7 @@ String ColumnRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*
 
     String query = "ALTER TABLE " + database_name + "." + table_name + " DROP COLUMN " + column_name;
 
-    return processQuery(query, http_status);
-}
-
-String ColumnRestRouterHandler::processQuery(const String & query, Int32 & /* http_status */) const
-{
-    BlockIO io{executeQuery(query, query_context, false /* internal */)};
-
-    if (io.pipeline.initialized())
-    {
-        return "TableRestRouterHandler execute io.pipeline.initialized not implemented";
-    }
-    io.onFinish();
-
-    return buildResponse();
-}
-
-String ColumnRestRouterHandler::buildResponse() const
-{
-    Poco::JSON::Object resp;
-    resp.set("query_id", query_context->getCurrentQueryId());
-    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    resp.stringify(resp_str_stream, 0);
-
-    return resp_str_stream.str();
+    return QueryUtils::processQuery(query, query_context);
 }
 
 bool ColumnRestRouterHandler::columnExist(const String & database_name, const String & table_name, const String & column_name) const
@@ -254,7 +150,7 @@ bool ColumnRestRouterHandler::columnExist(const String & database_name, const St
         return false;
     }
 
-    const auto & query_ptr = parseQuerySyntax(tables[0]->create_table_query);
+    const auto & query_ptr = QueryUtils::parseQuerySyntax(tables[0]->create_table_query, query_context);
     const auto & create = query_ptr->as<const ASTCreateQuery &>();
     const auto & columns_ast = create.columns_list->columns;
 
@@ -269,32 +165,4 @@ bool ColumnRestRouterHandler::columnExist(const String & database_name, const St
 
     return false;
 }
-
-ASTPtr ColumnRestRouterHandler::parseQuerySyntax(const String & create_table_query) const
-{
-    const size_t & max_query_size = query_context->getSettingsRef().max_query_size;
-    const auto & max_parser_depth = query_context->getSettingsRef().max_parser_depth;
-    const char * begin = create_table_query.data();
-    const char * end = create_table_query.data() + create_table_query.size();
-
-    ASTPtr ast;
-
-#if !defined(ARCADIA_BUILD)
-    if (query_context->getSettingsRef().use_antlr_parser)
-    {
-        ast = parseQuery(begin, end, max_query_size, max_parser_depth, query_context->getCurrentDatabase());
-    }
-    else
-    {
-        ParserQuery parser(end);
-        ast = parseQuery(parser, begin, end, "", max_query_size, max_parser_depth);
-    }
-#else
-    ParserQuery parser(end);
-    ast = parseQuery(parser, begin, end, "", max_query_size, max_parser_depth);
-#endif
-
-    return ast;
-}
-
 }

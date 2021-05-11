@@ -1,4 +1,5 @@
 #include "RawstoreTableRestRouterHandler.h"
+#include "CommonUtils.h"
 #include "SchemaValidator.h"
 
 #include <Parsers/ASTCreateQuery.h>
@@ -43,8 +44,7 @@ void RawstoreTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, 
             continue;
         }
 
-        const String & query = table->create_table_query;
-        const auto & query_ptr = parseQuerySyntax(query);
+        const auto & query_ptr = QueryUtils::parseQuerySyntax(table->create_table_query, query_context);
         const auto & create = query_ptr->as<const ASTCreateQuery &>();
 
         Poco::JSON::Object table_mapping_json;
