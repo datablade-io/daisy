@@ -30,6 +30,7 @@ pipeline {
                         sh "[ -d \"./reports/check-style\" ] || rm -rf reports"
                         sh "mkdir -p reports/check-style"
                         sh "./utils/check-style/check-style-all > reports/check-style/report.txt"
+                        archiveArtifacts artifacts: 'reports/check-style/report.txt', followSymlinks: false
                     }
                 }
 
@@ -41,6 +42,7 @@ pipeline {
                             sh "scan-build-12 -v -V -o scan-build-results ninja -j8"
                             sh "codechecker analyze compile_commands.json -o ../reports/codechecker"
                             sh "codechecker parse ../reports/codechecker -e html -o ../reports/codechecker/reports_html"
+                            archiveArtifacts artifacts: 'reports/codechecker/reports_html/*', followSymlinks: false
                         }
                     }
                 }
@@ -64,12 +66,6 @@ pipeline {
                     }
                 }
 
-                post {
-                    always {
-                        archiveArtifacts artifacts: 'reports/check-style/report.txt', followSymlinks: false
-                        archiveArtifacts artifacts: 'reports/codechecker/reports_html/*', followSymlinks: false
-                    }
-                }
 
             }
         }
