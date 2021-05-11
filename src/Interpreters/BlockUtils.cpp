@@ -112,6 +112,16 @@ void appendBlock(Block && block, ContextPtr context, IDistributedWriteAheadLog::
         record.headers["table_type"] = context->getQueryParameters().at("table_type");
     }
 
+    if (context->getQueryParameters().contains("column"))
+    {
+        record.headers["column"] = context->getQueryParameters().at("column");
+    }
+
+    if (context->getQueryParameters().contains("query_method"))
+    {
+        record.headers["query_method"] = context->getQueryParameters().at("query_method");
+    }
+
     auto wal = DistributedWriteAheadLogPool::instance(context->getGlobalContext()).getDefault();
     if (!wal)
     {

@@ -5,20 +5,15 @@
 #include "TaskStatusService.h"
 
 #include <Core/Block.h>
-#include <Core/ColumnWithTypeAndName.h>
-#include <DataTypes/DataTypeFactory.h>
-#include <DataTypes/DataTypeString.h>
 #include <DistributedWriteAheadLog/DistributedWriteAheadLogKafka.h>
 #include <IO/HTTPCommon.h>
 #include <Interpreters/Context.h>
-#include <common/logger_useful.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Util/AbstractConfiguration.h>
 
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/split.hpp>
-
 
 namespace DB
 {
@@ -38,8 +33,11 @@ namespace
     const String DDL_DATA_RETENTION_KEY = DDL_KEY_PREFIX + "data_retention";
     const String DDL_DEFAULT_TOPIC = "__system_ddls";
 
-    const String DDL_TABLE_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/{}/{}";
     const String DDL_TABLE_POST_API_PATH_FMT = "/dae/v1/ddl/{}/{}";
+    const String DDL_TABLE_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/{}/{}";
+    const String DDL_COLUMN_POST_API_PATH_FMT = "/dae/v1/ddl/{}/{}/columns";
+    const String DDL_COLUMN_PATCH_API_PATH_FMT = "/dae/v1/ddl/{}/{}/columns/{}";
+    const String DDL_COLUMN_DELETE_API_PATH_FMT = "/dae/v1/ddl/{}/{}/columns/{}";
     const String DDL_DATABSE_POST_API_PATH_FMT = "/dae/v1/ddl/databases";
     const String DDL_DATABSE_DELETE_API_PATH_FMT = "/dae/v1/ddl/databases/{}";
 
@@ -92,6 +90,10 @@ namespace
         if (headers.contains("table_type") && headers.at("table_type") == "rawstore")
         {
             return "rawstores";
+        }
+        else if (headers.contains("table_type") && headers.at("table_type") == "column")
+        {
+            return "columns";
         }
         return "tables";
     }
@@ -405,7 +407,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     }
 }
 
-void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const String & method) const
+void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, String method) const
 {
     Block & block = record->block;
     assert(block.has("query_id"));
@@ -421,10 +423,34 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
     String user = block.getByName("user").column->getDataAt(0).toString();
     String payload = block.getByName("payload").column->getDataAt(0).toString();
 
-    std::vector<Poco::URI> target_hosts{toURIs(
-        placement.placed(database, table),
-        fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, getURIEndpoint(record->headers), table),
-        http_port)};
+    const String & end_point = getURIEndpoint(record->headers);
+    String api_path = "";
+
+    if (end_point == "columns")
+    {
+        method = record->headers.at("query_method");
+
+        if (method == Poco::Net::HTTPRequest::HTTP_POST)
+        {
+            api_path = fmt::format(DDL_COLUMN_POST_API_PATH_FMT, database, table);
+        }
+        else if (method == Poco::Net::HTTPRequest::HTTP_PATCH)
+        {
+            const String & column = record->headers.at("column");
+            api_path = fmt::format(DDL_COLUMN_PATCH_API_PATH_FMT, database, table, column);
+        }
+        else if (method == Poco::Net::HTTPRequest::HTTP_DELETE)
+        {
+            const String & column = record->headers.at("column");
+            api_path = fmt::format(DDL_COLUMN_DELETE_API_PATH_FMT, database, table, column);
+        }
+    }
+    else
+    {
+        api_path = fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, end_point, table);
+    }
+
+    std::vector<Poco::URI> target_hosts{toURIs(placement.placed(database, table), api_path, http_port)};
 
     if (target_hosts.empty())
     {
@@ -549,38 +575,38 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
 {
     for (auto & record : records)
     {
-        if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_TABLE)
+        switch (record->op_code)
         {
-            createTable(record);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_TABLE)
-        {
-            mutateTable(record, Poco::Net::HTTPRequest::HTTP_DELETE);
+            case IDistributedWriteAheadLog::OpCode::CREATE_TABLE: {
+                createTable(record);
+                break;
+            }
+            case IDistributedWriteAheadLog::OpCode::ALTER_TABLE: {
+                mutateTable(record, Poco::Net::HTTPRequest::HTTP_PATCH);
+                break;
+            }
+            case IDistributedWriteAheadLog::OpCode::DELETE_TABLE: {
+                mutateTable(record, Poco::Net::HTTPRequest::HTTP_DELETE);
 
-            /// Delete DWAL
-            String database = record->block.getByName("database").column->getDataAt(0).toString();
-            String table = record->block.getByName("table").column->getDataAt(0).toString();
-            std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table}};
-            doDeleteDWal(ctx);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_TABLE)
-        {
-            mutateTable(record, Poco::Net::HTTPRequest::HTTP_PATCH);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_DATABASE)
-        {
-            mutateDatabase(record, Poco::Net::HTTPRequest::HTTP_POST);
-        }
-        else if (record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_DATABASE)
-        {
-            mutateDatabase(record, Poco::Net::HTTPRequest::HTTP_DELETE);
-
-            /// FIXME : Clean up tables DWAL in the database
-        }
-        else
-        {
-            assert(0);
-            LOG_ERROR(log, "Unknown operation={}", static_cast<Int32>(record->op_code));
+                /// Delete DWAL
+                String database = record->block.getByName("database").column->getDataAt(0).toString();
+                String table = record->block.getByName("table").column->getDataAt(0).toString();
+                std::any ctx{DistributedWriteAheadLogKafkaContext{database + "." + table}};
+                doDeleteDWal(ctx);
+                break;
+            }
+            case IDistributedWriteAheadLog::OpCode::CREATE_DATABASE: {
+                mutateDatabase(record, Poco::Net::HTTPRequest::HTTP_POST);
+                break;
+            }
+            case IDistributedWriteAheadLog::OpCode::DELETE_DATABASE: {
+                mutateDatabase(record, Poco::Net::HTTPRequest::HTTP_DELETE);
+                break;
+            }
+            default: {
+                assert(0);
+                LOG_ERROR(log, "Unknown operation={}", static_cast<Int32>(record->op_code));
+            }
         }
     }
 

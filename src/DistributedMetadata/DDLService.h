@@ -31,7 +31,7 @@ private:
     Int32 sendRequest(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
     Int32 doDDL(const String & payload, const Poco::URI & uri, const String & method, const String & query_id) const;
     void createTable(IDistributedWriteAheadLog::RecordPtr record);
-    void mutateTable(IDistributedWriteAheadLog::RecordPtr record, const String & method) const;
+    void mutateTable(IDistributedWriteAheadLog::RecordPtr record, String method) const;
     void mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, const String & method) const;
     void commit(Int64 last_sn);
 
