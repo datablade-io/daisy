@@ -43,7 +43,8 @@ def build_batch(nodes):
     for n in nodes:
         cmd = 'docker build -t ' + n.name + ' .'
         print("[" + n.path + "]: start executing " + cmd)
-        pl[n.name] = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=n.path)
+        pl[n.name] = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, cwd=n.path, encoding='utf-8')
         os.set_blocking(pl[n.name].stdout.fileno(), False)
         os.set_blocking(pl[n.name].stderr.fileno(), False)
     while any([p.poll() is None for _, p in pl.items()]):
