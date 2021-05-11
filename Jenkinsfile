@@ -11,22 +11,29 @@ pipeline {
             agent { label 'bj' }
             steps {
                 checkout scm
-                sh "git submodule update --init --recursive"
                 archiveSource()
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Builder') {
             agent { label 'ph'}
-            steps {
-                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
-                sh "python3 utils/ci/build_images.py"
-            }
-        }
+            stages {
+                stage('Build Docker Image') {
+                    steps {
+                        fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                        sh "python3 utils/ci/build_images.py"
+                    }
+                }
 
-        stage('Build Binary') {
-            steps {
-                echo "build in docker, and publish docker image with different tag"
+                stage('Build Binary') {
+                    steps {
+                        echo "build in docker, and publish docker image with different tag"
+                    }
+                }
+
+                stage('clean workspace') {
+                    cleanWs()
+                }
             }
         }
     }
