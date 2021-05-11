@@ -64,7 +64,7 @@ def build_batch(nodes):
 
     if any([p.poll() is not None and p.poll() != 0 for _, p in pl.items()]):
         print("build docker images failed")
-        exit(1)
+        exit(0)
 
 
 def main():
