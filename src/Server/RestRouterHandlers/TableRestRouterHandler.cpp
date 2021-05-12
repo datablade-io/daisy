@@ -25,7 +25,9 @@ namespace DB
     
 namespace ErrorCodes
 {
+    extern const int TABLE_ALREADY_EXISTS;
     extern const int UNKNOWN_DATABASE;
+    extern const int UNKNOWN_TABLE;
 }
 
 std::map<String, std::map<String, String> > TableRestRouterHandler::update_schema = {
@@ -112,6 +114,13 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
 
 String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
 {
+    const auto & database_name = getPathParameter("database");
+    const auto & table_name = payload->get("name").toString();
+    if (tableExists(database_name, table_name))
+    {
+        return jsonErrorResponse(fmt::format("Table {}.{} already exists.", database_name, table_name), ErrorCodes::TABLE_ALREADY_EXISTS);
+    }
+
     const auto & shard = getQueryParameter("shard");
     const auto & query = getCreationSQL(payload, shard);
 
@@ -130,6 +139,11 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
 {
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
+
+    if (!tableExists(database_name, table_name))
+    {
+        return jsonErrorResponse(fmt::format("Table {}.{} doesn't exist", database_name, table_name), ErrorCodes::UNKNOWN_TABLE);
+    }
 
     LOG_INFO(log, "Updating table {}.{}", database_name, table_name);
     std::vector<String> create_segments;
@@ -152,14 +166,19 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
 {
+    const String & database_name = getPathParameter("database");
+    const String & table_name = getPathParameter("table");
+
+    if (!tableExists(database_name, table_name))
+    {
+        return jsonErrorResponse(fmt::format("Table {}.{} doesn't exist", database_name, table_name), ErrorCodes::UNKNOWN_TABLE);
+    }
+
     if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
     {
         query_context->setDistributedDDLOperation(true);
         query_context->setQueryParameter("_payload", "{}");
     }
-
-    const String & database_name = getPathParameter("database");
-    const String & table_name = getPathParameter("table");
     return processQuery("DROP TABLE " + database_name + "." + table_name);
 }
 
@@ -324,6 +343,13 @@ String TableRestRouterHandler::buildResponse() const
     resp.stringify(resp_str_stream, 0);
 
     return resp_str_stream.str();
+}
+
+bool TableRestRouterHandler::tableExists(const String & database, const String & table) const
+{
+    const auto & catalog_service = CatalogService::instance(query_context);
+    const auto & tables = catalog_service.findTableByName(database, table);
+    return !tables.empty();
 }
 
 }

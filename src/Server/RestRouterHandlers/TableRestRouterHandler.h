@@ -42,6 +42,9 @@ protected:
     virtual String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const = 0;
     virtual String getOrderByExpr(
         const Poco::JSON::Object::Ptr & payload, const String & time_column, const String & default_order_by_granularity) const = 0;
+
+private:
+    bool tableExists(const String & database, const String & table) const;
 };
 
 }
