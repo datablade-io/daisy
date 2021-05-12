@@ -7,10 +7,7 @@ namespace DB
 class ColumnRestRouterHandler final : public RestRouterHandler
 {
 public:
-    explicit ColumnRestRouterHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "Column")
-    {
-        query_context->setQueryParameter("table_type", "column");
-    }
+    explicit ColumnRestRouterHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "Column") { }
     ~ColumnRestRouterHandler() override { }
 
 private:
@@ -22,7 +19,7 @@ private:
     String executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const override;
 
 private:
-    bool columnExist(const String & database_name, const String & table_name, const String & column_name) const;
+    std::pair<bool, String> columnExist(const String & database_name, const String & table_name, const String & column_name) const;
 };
 
 }

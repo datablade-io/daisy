@@ -98,30 +98,26 @@ namespace
         return "tables";
     }
 
-    String getTableOrColumnApiPath(
-        const std::unordered_map<String, String> & headers, const String & database, const String & table, String & method)
+    String getColumnApiPath(
+        const std::unordered_map<String, String> & headers, const String & database, const String & table, const String & method)
     {
-        const String & end_point = getURIEndpoint(headers);
-
-        if (end_point == "columns")
+        if (method == Poco::Net::HTTPRequest::HTTP_POST)
         {
-            method = headers.at("query_method");
-
-            if (method == Poco::Net::HTTPRequest::HTTP_POST)
-            {
-                return fmt::format(DDL_COLUMN_POST_API_PATH_FMT, database, table);
-            }
-            else if (method == Poco::Net::HTTPRequest::HTTP_PATCH)
-            {
-                return fmt::format(DDL_COLUMN_PATCH_API_PATH_FMT, database, table, headers.at("column"));
-            }
-            else if (method == Poco::Net::HTTPRequest::HTTP_DELETE)
-            {
-                return fmt::format(DDL_COLUMN_DELETE_API_PATH_FMT, database, table, headers.at("column"));
-            }
+            return fmt::format(DDL_COLUMN_POST_API_PATH_FMT, database, table);
         }
-
-        return fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, end_point, table);
+        else if (method == Poco::Net::HTTPRequest::HTTP_PATCH)
+        {
+            return fmt::format(DDL_COLUMN_PATCH_API_PATH_FMT, database, table, headers.at("column"));
+        }
+        else if (method == Poco::Net::HTTPRequest::HTTP_DELETE)
+        {
+            return fmt::format(DDL_COLUMN_DELETE_API_PATH_FMT, database, table, headers.at("column"));
+        }
+        else
+        {
+            assert(true);
+            return "";
+        }
     }
 
     std::vector<Poco::URI> toURIs(const std::vector<String> & hosts, const String & path, const String & default_port)
@@ -449,8 +445,19 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, String
     String user = block.getByName("user").column->getDataAt(0).toString();
     String payload = block.getByName("payload").column->getDataAt(0).toString();
 
-    std::vector<Poco::URI> target_hosts{
-        toURIs(placement.placed(database, table), getTableOrColumnApiPath(record->headers, database, table, method), http_port)};
+    std::vector<Poco::URI> target_hosts;
+    if (record->headers.contains("column"))
+    {
+        method = record->headers.at("query_method");
+        target_hosts = toURIs(placement.placed(database, table), getColumnApiPath(record->headers, database, table, method), http_port);
+    }
+    else
+    {
+        target_hosts = toURIs(
+            placement.placed(database, table),
+            fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, database, getURIEndpoint(record->headers), table),
+            http_port);
+    }
 
     if (target_hosts.empty())
     {
