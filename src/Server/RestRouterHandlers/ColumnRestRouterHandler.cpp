@@ -66,9 +66,9 @@ String ColumnRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payl
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
     const String & column_name = payload->get("name");
-    auto [is_exist, message] = columnExist(database_name, table_name, column_name);
+    auto [table_exist, column_exist, message] = columnExist(database_name, table_name, column_name);
 
-    if (is_exist)
+    if (!table_exist || column_exist)
     {
         return message;
     }
@@ -96,9 +96,9 @@ String ColumnRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & pay
     String column_name = getPathParameter("column");
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
-    auto [is_exist, message] = columnExist(database_name, table_name, column_name);
+    auto [table_exist, column_exist, message] = columnExist(database_name, table_name, column_name);
 
-    if (!is_exist)
+    if (!table_exist || !column_exist)
     {
         return message;
     }
@@ -124,9 +124,9 @@ String ColumnRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*
     const String & column_name = getPathParameter("column");
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
-    auto [is_exist, message] = columnExist(database_name, table_name, column_name);
+    auto [table_exist, column_exist, message] = columnExist(database_name, table_name, column_name);
 
-    if (!is_exist)
+    if (!table_exist || !column_exist)
     {
         return message;
     }
@@ -144,7 +144,7 @@ String ColumnRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*
     return QueryUtils::processQuery(query, query_context);
 }
 
-std::pair<bool, String>
+std::tuple<bool, bool, String>
 ColumnRestRouterHandler::columnExist(const String & database_name, const String & table_name, const String & column_name) const
 {
     const auto & catalog_service = CatalogService::instance(query_context);
@@ -152,7 +152,7 @@ ColumnRestRouterHandler::columnExist(const String & database_name, const String 
 
     if (tables.empty())
     {
-        return std::make_pair(false, fmt::format("TABLE {} does not exist.", table_name));
+        return {false, false, fmt::format("TABLE {} does not exist.", table_name)};
     }
 
     const auto & query_ptr = QueryUtils::parseQuerySyntax(tables[0]->create_table_query, query_context);
@@ -164,10 +164,10 @@ ColumnRestRouterHandler::columnExist(const String & database_name, const String 
         const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
         if (col_decl.name == column_name)
         {
-            return std::make_pair(true, fmt::format("Column {} already exists.", column_name));
+            return {true, true, fmt::format("Column {} already exists.", column_name)};
         }
     }
 
-    return std::make_pair(false, fmt::format("Column {} does not exist.", column_name));
+    return {true, false, fmt::format("Column {} does not exist.", column_name)};
 }
 }
