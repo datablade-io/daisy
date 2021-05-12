@@ -91,10 +91,6 @@ namespace
         {
             return "rawstores";
         }
-        else if (headers.contains("table_type") && headers.at("table_type") == "column")
-        {
-            return "columns";
-        }
         return "tables";
     }
 
