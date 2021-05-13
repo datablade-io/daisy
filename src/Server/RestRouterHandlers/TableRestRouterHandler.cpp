@@ -271,7 +271,7 @@ String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & pa
     std::vector<String> create_segments;
     create_segments.push_back("CREATE TABLE " + database_name + "." + payload->get("name").toString());
     create_segments.push_back("(");
-    create_segments.push_back(ColumnUtils::getCreateColumnDefination(payload));
+    create_segments.push_back(getColumnsDefinition(payload));
     create_segments.push_back(")");
     create_segments.push_back("ENGINE = " + getEngineExpr(payload));
     create_segments.push_back("PARTITION BY " + getPartitionExpr(payload, getDefaultPartitionGranularity()));
