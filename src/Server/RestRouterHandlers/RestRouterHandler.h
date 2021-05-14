@@ -36,30 +36,36 @@ public:
     /// a correct `http_status` code will be set by trying best.
     /// This function may throw, and caller will need catch the exception
     /// and sends back HTTP `500` to clients
-    String execute(HTTPServerRequest & request, HTTPServerResponse & response, Int32 & http_status)
+    void execute(HTTPServerRequest & request, HTTPServerResponse & response)
     {
         setupHTTPContext(request);
 
-        http_status = HTTPResponse::HTTP_OK;
+        Int32 http_status = HTTPResponse::HTTP_OK;
+        String response_payload;
 
-        if (streaming())
+        if (streamingInput())
         {
-            return execute(request.getStream(), response, http_status);
+            response_payload = execute(request.getStream(), http_status);
         }
         else
         {
-            String data = "{}";
-
-            auto size = request.getContentLength();
-            if (size > 0)
+            auto payload{parseRequest(request)};
+            if (streamingOutput())
             {
-                data.resize(size);
-                request.getStream().readStrict(data.data(), size);
+                /// For keep-alive to work.
+                if (request.getVersion() == HTTPServerRequest::HTTP_1_1)
+                    response.setChunkedTransferEncoding(true);
+                execute(payload, response);
             }
+            else
+                response_payload = execute(payload, http_status);
+        }
 
-            Poco::JSON::Parser parser;
-            auto payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
-            return execute(payload, http_status);
+        /// Only send response_payload when streamingOutput is false, otherwise it will cause output messed up when compressison is enabled.
+        if (!streamingOutput())
+        {
+            response.setStatusAndReason(HTTPResponse::HTTPStatus(http_status));
+            *response.send() << response_payload << std::endl;
         }
     }
 
@@ -76,6 +82,21 @@ public:
         }
     }
 
+    static Poco::JSON::Object::Ptr parseRequest(HTTPServerRequest & request)
+    {
+        String data = "{}";
+
+        auto size = request.getContentLength();
+        if (size > 0)
+        {
+            data.resize(size);
+            request.getStream().readStrict(data.data(), size);
+        }
+
+        Poco::JSON::Parser parser;
+        return parser.parse(data).extract<Poco::JSON::Object::Ptr>();
+    }
+
     void setPathParameter(const String & name, const String & value) { path_parameters[name] = value; }
 
     const String & getQueryParameter(const String & name, const String & default_value = "") const
@@ -89,7 +110,7 @@ public:
 
     bool hasQueryParameter(const String & name) const { return query_parameters->has(name); }
 
-    virtual bool outputStreaming() const { return false; }
+    virtual bool streamingOutput() const { return false; }
 
 public:
     static String jsonErrorResponse(const String & error_msg, int error_code, const String & query_id)
@@ -101,7 +122,6 @@ public:
         error_resp.set("code", error_code);
         error_resp.set("request_id", query_id);
         error_resp.stringify(error_str_stream, 0);
-
         return error_str_stream.str();
     }
 
@@ -113,12 +133,18 @@ protected:
 
 private:
     /// Override this function if derived handler need read data in a streaming way from http input
-    virtual bool streaming() const { return false; }
+    virtual bool streamingInput() const { return false; }
 
-    /// Streaming `execute`, so far Ingest API probably needs override this function
-    virtual String execute(ReadBuffer & /* input */, HTTPServerResponse & /* response */, Int32 & http_status) const
+    /// Handle the request in streaming way, so far Ingest API probably needs override this function
+    virtual String execute(ReadBuffer & /* input */, Int32 & http_status) const { return handleNotImplemented(http_status); }
+
+    /// Sending response in a streaming way
+    virtual void execute(const Poco::JSON::Object::Ptr & /* payload */, HTTPServerResponse & response) const
     {
-        return handleNotImplemented(http_status);
+        Int32 http_status = 200;
+        auto response_payload{handleNotImplemented(http_status)};
+        response.setStatusAndReason(HTTPResponse::HTTPStatus(http_status));
+        *response.send() << response_payload << std::endl;
     }
 
     String handleNotImplemented(Int32 & http_status) const

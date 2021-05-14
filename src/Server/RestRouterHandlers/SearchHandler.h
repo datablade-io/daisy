@@ -12,14 +12,12 @@ public:
     explicit SearchHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "Search") { }
     ~SearchHandler() override = default;
 
-    String execute(ReadBuffer & input, HTTPServerResponse & response, Int32 & http_status) const override;
+    void execute(const Poco::JSON::Object::Ptr & payload, HTTPServerResponse & response) const override;
 
-    bool outputStreaming() const override { return true; }
+    bool streamingOutput() const override { return true; }
 
 private:
-    bool streaming() const override { return true; }
-
-    static std::map<String, std::map<String, String>> search_schema;
+    bool streamingInput() const override { return false; }
 
     static bool validatePayload(const Poco::JSON::Object::Ptr & payload, String & error);
 

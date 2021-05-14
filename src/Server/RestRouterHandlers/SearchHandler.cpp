@@ -22,29 +22,19 @@ namespace ErrorCodes
     extern const int BAD_REQUEST_PARAMETER;
 }
 
-std::map<String, std::map<String, String>> SearchHandler::search_schema
-    = {{"required", {{"query", "string"}}},
-       {"optional", {{"mode", "string"}, {"end_time", "string"}, {"start_time", "string"}, {"offset", "int"}, {"page_size", "int"}}}};
-
-String SearchHandler::execute(ReadBuffer & input, HTTPServerResponse & response, Int32 & http_status) const
+namespace
 {
-    auto send_error = [&http_status, &response](const String && error_msg)
-    {
-        http_status = HTTPResponse::HTTP_BAD_REQUEST;
-        response.setStatusAndReason(HTTPResponse::HTTPStatus(http_status));
-        *response.send() << error_msg << std::endl;
-        return error_msg;
-    };
+    const std::map<String, std::map<String, String>> SEARCH_SCHEMA
+        = {{"required", {{"query", "string"}}},
+           {"optional", {{"mode", "string"}, {"end_time", "string"}, {"start_time", "string"}, {"offset", "int"}, {"page_size", "int"}}}};
+}
 
-    String data = "{}";
-    auto size = getContentLength();
-    if (size > 0)
-    {
-        data.resize(size);
-        input.readStrict(data.data(), size);
-    }
-    Poco::JSON::Parser parser;
-    auto payload = parser.parse(data).extract<Poco::JSON::Object::Ptr>();
+void SearchHandler::execute(const Poco::JSON::Object::Ptr & payload,  HTTPServerResponse & response) const
+{
+    auto send_error = [&response](const String && error_msg) {
+        response.setStatusAndReason(HTTPResponse::HTTP_BAD_REQUEST);
+        *response.send() << error_msg << std::endl;
+    };
 
     String error;
     if (!validatePayload(payload, error))
@@ -70,7 +60,7 @@ String SearchHandler::execute(ReadBuffer & input, HTTPServerResponse & response,
         /// Send the error message into already used (and possibly compressed) stream.
         /// Note that the error message will possibly be sent after some data.
         /// Also HTTP code 200 could have already been sent.
-        http_status = HTTPResponse::HTTP_INTERNAL_SERVER_ERROR;
+        Int32 http_status = HTTPResponse::HTTP_INTERNAL_SERVER_ERROR;
         response.setStatusAndReason(HTTPResponse::HTTPStatus(http_status));
         bool data_sent = out->count() != out->offset();
 
@@ -83,8 +73,6 @@ String SearchHandler::execute(ReadBuffer & input, HTTPServerResponse & response,
         out->next();
         out->finalize();
     }
-
-    return "";
 }
 
 String SearchHandler::getQuery(const Poco::JSON::Object::Ptr & payload) const
@@ -124,7 +112,7 @@ String SearchHandler::getQuery(const Poco::JSON::Object::Ptr & payload) const
 bool SearchHandler::validatePayload(const Poco::JSON::Object::Ptr & payload, String & error)
 {
     error.clear();
-    if (!validateSchema(search_schema, payload, error))
+    if (!validateSchema(SEARCH_SCHEMA, payload, error))
         return false;
 
     if (payload->has("mode"))
