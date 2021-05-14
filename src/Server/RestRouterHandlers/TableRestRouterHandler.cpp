@@ -99,7 +99,8 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
         return jsonErrorResponse(fmt::format("Databases {} does not exist.", database_name), ErrorCodes::UNKNOWN_DATABASE);
     }
 
-    const auto & tables = catalog.findTableByDB(database_name);
+    const auto & catalog_service = CatalogService::instance(query_context);
+    const auto & tables = catalog_service.findTableByDB(database_name);
 
     Poco::JSON::Object resp;
     buildTablesJSON(resp, tables);
@@ -116,7 +117,7 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
 {
     const auto & database_name = getPathParameter("database");
     const auto & table_name = payload->get("name").toString();
-    if (catalog.tableExists(database_name, table_name))
+    if (CatalogService::instance(query_context).tableExists(database_name, table_name))
     {
         http_status = HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse(fmt::format("Table {}.{} already exists.", database_name, table_name), ErrorCodes::TABLE_ALREADY_EXISTS);
@@ -141,7 +142,7 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
 
-    if (!catalog.tableExists(database_name, table_name))
+    if (!CatalogService::instance(query_context).tableExists(database_name, table_name))
     {
         http_status = HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse(fmt::format("Table {}.{} doesn't exist", database_name, table_name), ErrorCodes::UNKNOWN_TABLE);
@@ -171,7 +172,7 @@ String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*p
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
 
-    if (!catalog.tableExists(database_name, table_name))
+    if (!CatalogService::instance(query_context).tableExists(database_name, table_name))
     {
         http_status = HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse(fmt::format("Table {}.{} doesn't exist", database_name, table_name), ErrorCodes::UNKNOWN_TABLE);

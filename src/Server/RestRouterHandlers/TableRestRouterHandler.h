@@ -10,10 +10,7 @@ class ASTColumns;
 class TableRestRouterHandler : public RestRouterHandler
 {
 public:
-    TableRestRouterHandler(ContextPtr query_context_, const String & router_name)
-        : RestRouterHandler(query_context_, router_name), catalog(CatalogService::instance(query_context_))
-    {
-    }
+    TableRestRouterHandler(ContextPtr query_context_, const String & router_name) : RestRouterHandler(query_context_, router_name) { }
     ~TableRestRouterHandler() override { }
 
 protected:
@@ -45,9 +42,6 @@ protected:
     virtual String getColumnsDefinition(const Poco::JSON::Object::Ptr & payload) const = 0;
     virtual String getOrderByExpr(
         const Poco::JSON::Object::Ptr & payload, const String & time_column, const String & default_order_by_granularity) const = 0;
-
-private:
-    CatalogService & catalog;
 };
 
 }
