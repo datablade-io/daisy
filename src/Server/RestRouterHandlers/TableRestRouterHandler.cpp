@@ -88,18 +88,18 @@ bool TableRestRouterHandler::validatePatch(const Poco::JSON::Object::Ptr & paylo
     return validateSchema(update_schema, payload, error_msg);
 }
 
-String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & /*http_status */) const
+String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */, Int32 & http_status) const
 {
     const String & database_name = getPathParameter("database");
     const auto & database = DatabaseCatalog::instance().tryGetDatabase(database_name);
 
     if (!database)
     {
+        http_status = HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse(fmt::format("Databases {} does not exist.", database_name), ErrorCodes::UNKNOWN_DATABASE);
     }
 
-    const auto & catalog_service = CatalogService::instance(query_context);
-    const auto & tables = catalog_service.findTableByDB(database_name);
+    const auto & tables = catalog.findTableByDB(database_name);
 
     Poco::JSON::Object resp;
     buildTablesJSON(resp, tables);
@@ -112,12 +112,13 @@ String TableRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* pay
     return resp_str;
 }
 
-String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
+String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
     const auto & database_name = getPathParameter("database");
     const auto & table_name = payload->get("name").toString();
-    if (tableExists(database_name, table_name))
+    if (catalog.tableExists(database_name, table_name))
     {
+        http_status = HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse(fmt::format("Table {}.{} already exists.", database_name, table_name), ErrorCodes::TABLE_ALREADY_EXISTS);
     }
 
@@ -135,13 +136,14 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
     return processQuery(query);
 }
 
-String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & /*http_status*/) const
+String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
 {
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
 
-    if (!tableExists(database_name, table_name))
+    if (!catalog.tableExists(database_name, table_name))
     {
+        http_status = HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse(fmt::format("Table {}.{} doesn't exist", database_name, table_name), ErrorCodes::UNKNOWN_TABLE);
     }
 
@@ -164,13 +166,14 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
     return processQuery(query);
 }
 
-String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & /*http_status*/) const
+String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & http_status) const
 {
     const String & database_name = getPathParameter("database");
     const String & table_name = getPathParameter("table");
 
-    if (!tableExists(database_name, table_name))
+    if (!catalog.tableExists(database_name, table_name))
     {
+        http_status = HTTPResponse::HTTP_BAD_REQUEST;
         return jsonErrorResponse(fmt::format("Table {}.{} doesn't exist", database_name, table_name), ErrorCodes::UNKNOWN_TABLE);
     }
 
@@ -344,12 +347,4 @@ String TableRestRouterHandler::buildResponse() const
 
     return resp_str_stream.str();
 }
-
-bool TableRestRouterHandler::tableExists(const String & database, const String & table) const
-{
-    const auto & catalog_service = CatalogService::instance(query_context);
-    const auto & tables = catalog_service.findTableByName(database, table);
-    return !tables.empty();
-}
-
 }
