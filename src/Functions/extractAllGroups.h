@@ -2,8 +2,12 @@
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnConst.h>
 #include <Columns/ColumnString.h>
+#include <Columns/ColumnTuple.h>
+#include <Columns/ColumnsNumber.h>
 #include <DataTypes/DataTypeArray.h>
+#include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypeString.h>
+#include <DataTypes/DataTypesNumber.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunctionImpl.h>
 #include <Functions/Regexps.h>
@@ -28,7 +32,8 @@ namespace ErrorCodes
 enum class ExtractAllGroupsResultKind
 {
     VERTICAL,
-    HORIZONTAL
+    HORIZONTAL,
+    VERTICAL_RICH,
 };
 
 
@@ -68,8 +73,17 @@ public:
         };
         validateFunctionArgumentTypes(*this, arguments, args);
 
-        /// Two-dimensional array of strings, each `row` of top array represents matching groups.
-        return std::make_shared<DataTypeArray>(std::make_shared<DataTypeArray>(std::make_shared<DataTypeString>()));
+        if constexpr (Kind == ExtractAllGroupsResultKind::VERTICAL_RICH) {
+            return std::make_shared<DataTypeArray>(
+                    std::make_shared<DataTypeArray>(
+                            std::make_shared<DataTypeTuple>(DataTypes{
+                                    std::make_shared<DataTypeUInt32>(),
+                                    std::make_shared<DataTypeUInt32>()})));
+        }
+        else {
+            /// Two-dimensional array of strings, each `row` of top array represents matching groups.
+            return std::make_shared<DataTypeArray>(std::make_shared<DataTypeArray>(std::make_shared<DataTypeString>()));
+        }
     }
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
@@ -145,7 +159,7 @@ public:
                 root_offsets_data[i] = current_root_offset;
             }
         }
-        else
+        else if constexpr (Kind == ExtractAllGroupsResultKind::HORIZONTAL)
         {
             PODArray<StringPiece, 0> all_matches;
             /// Number of times RE matched on each row of haystack column.
@@ -239,6 +253,56 @@ public:
                 root_offsets_col->insertValue(nested_offsets_col->size());
                 row_offset = next_row_offset;
             }
+        }
+        else if constexpr (Kind == ExtractAllGroupsResultKind::VERTICAL_RICH)
+        {
+            root_offsets_data.resize(input_rows_count);
+
+            auto index_col = ColumnUInt32::create();
+            auto length_col = ColumnUInt32::create();
+
+            ColumnUInt32::Container & index_data = index_col->getData();
+            ColumnUInt32::Container & length_data = length_col->getData();
+
+            for (size_t i = 0; i < input_rows_count; ++i) {
+                StringRef current_row = column_haystack->getDataAt(i);
+
+                // Extract all non-intersecting matches from haystack except group #0.
+                const auto *pos = current_row.data;
+                const auto *end = pos + current_row.size;
+                while (pos < end
+                       && regexp->Match({pos, static_cast<size_t>(end - pos)},
+                                        0, end - pos, regexp->UNANCHORED, matched_groups.data(),
+                                        matched_groups.size())) {
+                    // 1 is to exclude group #0 which is whole re match.
+                    for (size_t group = 1; group <= groups_count; ++group) {
+                        // haystack: "abc=11, def=22"
+                        // needles: ["abc", "11"]["def, "22"]
+                        // ->
+                        // result: [[(0,3),(4,2)],[(8,3),(12,2)]
+                        index_data.push_back(matched_groups[group].data()-current_row.data);
+                        length_data.push_back(matched_groups[group].size());
+                    }
+
+                    /// If match is empty - it's technically Ok but we have to shift one character nevertheless
+                    /// to avoid infinite loop.
+                    pos = matched_groups[0].data() + std::max<size_t>(1, matched_groups[0].size());
+
+                    current_nested_offset += groups_count;
+                    nested_offsets_data.push_back(current_nested_offset);
+
+                    ++current_root_offset;
+                }
+
+                root_offsets_data[i] = current_root_offset;
+            }
+            MutableColumns result;
+            result.emplace_back(std::move(index_col));
+            result.emplace_back(std::move(length_col));
+            auto pos_len_tuple = ColumnTuple::create(std::move(result));
+            ColumnArray::MutablePtr nested_array_col = ColumnArray::create(std::move(pos_len_tuple), std::move(nested_offsets_col));
+            ColumnArray::MutablePtr root_array_col = ColumnArray::create(std::move(nested_array_col), std::move(root_offsets_col));
+            return root_array_col;
         }
 
         ColumnArray::MutablePtr nested_array_col = ColumnArray::create(std::move(data_col), std::move(nested_offsets_col));
