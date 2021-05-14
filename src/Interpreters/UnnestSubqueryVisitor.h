@@ -32,7 +32,7 @@ private:
         bool & asterisk_in_subquery,
         std::unordered_map<String, ASTPtr> & subquery_selects_map,
         ASTs & subquery_selects);
-    bool isValid(const ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects_map);
+    bool isValid(const ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects_map) const;
 };
 
 using UnnestSubqueryVisitor = UnnestSubqueryVisitorData::Visitor;

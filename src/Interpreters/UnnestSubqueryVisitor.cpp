@@ -177,7 +177,7 @@ bool UnnestSubqueryVisitorData::mergeable(
     return true;
 }
 
-bool UnnestSubqueryVisitorData::isValid(const ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects_map)
+bool UnnestSubqueryVisitorData::isValid(const ASTPtr & ast, const std::unordered_map<String, ASTPtr> & subquery_selects_map) const
 {
     if (ast->as<ASTAsterisk>() || ast->as<ASTQualifiedAsterisk>())
     {
