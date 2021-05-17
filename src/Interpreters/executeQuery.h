@@ -3,6 +3,7 @@
 #include <Core/QueryProcessingStage.h>
 #include <DataStreams/BlockIO.h>
 #include <Processors/QueryPipeline.h>
+#include <Parsers/IAST.h>
 
 namespace DB
 {
@@ -52,5 +53,9 @@ BlockIO executeQuery(
     bool may_have_embedded_data,
     bool allow_processors /// If can use processors pipeline
 );
+
+/// Daisy : starts
+ASTPtr executeQueryPrase(const String & query, ContextPtr query_context);
+/// Daisy : ends
 
 }

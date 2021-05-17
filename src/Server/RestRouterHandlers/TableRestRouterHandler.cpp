@@ -118,15 +118,12 @@ String TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & paylo
     const auto & shard = getQueryParameter("shard");
     const auto & query = getCreationSQL(payload, shard);
 
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    if (isDistributedDDL())
     {
-        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        payload->stringify(payload_str_stream, 0);
-        query_context->setQueryParameter("_payload", payload_str_stream.str());
-        query_context->setDistributedDDLOperation(true);
+        setupDistributedQueryParameters({}, payload);
     }
 
-    return QueryUtils::processQuery(query, query_context);
+    return processQuery(query, query_context);
 }
 
 String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payload, Int32 & http_status) const
@@ -147,16 +144,12 @@ String TableRestRouterHandler::executePatch(const Poco::JSON::Object::Ptr & payl
 
     const String & query = boost::algorithm::join(create_segments, " ");
 
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    if (isDistributedDDL())
     {
-        query_context->setDistributedDDLOperation(true);
-
-        std::stringstream payload_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-        payload->stringify(payload_str_stream, 0);
-        query_context->setQueryParameter("_payload", payload_str_stream.str());
+        setupDistributedQueryParameters({}, payload);
     }
 
-    return QueryUtils::processQuery(query, query_context);
+    return processQuery(query, query_context);
 }
 
 String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*payload*/, Int32 & http_status) const
@@ -170,12 +163,12 @@ String TableRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /*p
         return jsonErrorResponse(fmt::format("Table {}.{} doesn't exist", database_name, table_name), ErrorCodes::UNKNOWN_TABLE);
     }
 
-    if (query_context->isDistributed() && getQueryParameter("distributed_ddl") != "false")
+    if (isDistributedDDL())
     {
-        query_context->setDistributedDDLOperation(true);
-        query_context->setQueryParameter("_payload", "{}");
+        setupDistributedQueryParameters({});
     }
-    return QueryUtils::processQuery("DROP TABLE " + database_name + "." + table_name, query_context);
+
+    return processQuery("DROP TABLE " + database_name + "." + table_name, query_context);
 }
 
 void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, const ASTColumns * columns_list) const

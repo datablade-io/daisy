@@ -103,23 +103,23 @@ Block buildBlock(
     return block;
 }
 
-void appendBlock(Block && block, ContextPtr context, IDistributedWriteAheadLog::OpCode opCode, const Poco::Logger * log)
+void appendDDLBlock(
+    Block && block,
+    ContextPtr context,
+    const std::vector<String> & parameter_names,
+    IDistributedWriteAheadLog::OpCode opCode,
+    const Poco::Logger * log)
 {
     IDistributedWriteAheadLog::Record record{opCode, std::move(block)};
     record.headers["_version"] = "1";
-    if (context->getQueryParameters().contains("table_type"))
-    {
-        record.headers["table_type"] = context->getQueryParameters().at("table_type");
-    }
 
-    if (context->getQueryParameters().contains("column"))
+    for (const auto & parameter_name : parameter_names)
     {
-        record.headers["column"] = context->getQueryParameters().at("column");
-    }
-
-    if (context->getQueryParameters().contains("query_method"))
-    {
-        record.headers["query_method"] = context->getQueryParameters().at("query_method");
+        auto iter = context->getQueryParameters().find(parameter_name);
+        if (iter != context->getQueryParameters().end())
+        {
+            record.headers[parameter_name] = iter->second;
+        }
     }
 
     auto wal = DistributedWriteAheadLogPool::instance(context->getGlobalContext()).getDefault();

@@ -411,6 +411,35 @@ bool CatalogService::tableExists(const String & database, const String & table) 
     return indexed_by_name.find(std::make_pair(database, table)) != indexed_by_name.end();
 }
 
+std::pair<bool, bool> CatalogService::columnExists(const String & database, const String & table, const String & column) const
+{
+    String create_table_query;
+    {
+        std::shared_lock guard{catalog_rwlock};
+        auto iter = indexed_by_name.find(std::make_pair(database, table));
+        if (iter == indexed_by_name.end())
+        {
+            return {false, false};
+        }
+        create_table_query = iter->second.begin()->second->create_table_query;
+    }
+
+    const auto & query_ptr = executeQueryPrase(create_table_query, global_context);
+    const auto & create = query_ptr->as<const ASTCreateQuery &>();
+    const auto & columns_ast = create.columns_list->columns;
+
+    for (auto ast_it = columns_ast->children.begin(); ast_it != columns_ast->children.end(); ++ast_it)
+    {
+        const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
+        if (col_decl.name == column)
+        {
+            return {true, true};
+        }
+    }
+
+    return {true, false};
+}
+
 ClusterPtr CatalogService::tableCluster(const String & database, const String & table, Int32 replication_factor, Int32 shards)
 {
     /// FIXME : pick the right replica to service the query request
@@ -576,12 +605,25 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
 /// Merge a snapshot of tables from one host
 void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode snapshot)
 {
+    std::unique_lock guard{catalog_rwlock};
+
     if (snapshot.empty())
-    {
+    {   
+        /// Clear the table corresponding residual data
+        auto iter = indexed_by_node.find(node->identity);
+
+        if (iter != indexed_by_node.end())
+        {
+            for (const auto & p : iter->second)
+            {
+                indexed_by_id.erase(p.second->uuid);
+                indexed_by_name.erase(indexed_by_name.find(std::make_pair(p.second->database, p.second->name)));
+            }
+
+            iter->second.clear();
+        }
         return;
     }
-
-    std::unique_lock guard{catalog_rwlock};
 
     auto iter = indexed_by_node.find(node->identity);
     if (iter == indexed_by_node.end())

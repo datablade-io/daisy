@@ -110,6 +110,7 @@ public:
     TablePtrs findTableByDB(const String & database) const;
 
     bool tableExists(const String & database, const String & table) const;
+    std::pair<bool, bool> columnExists(const String & database, const String & table, const String & column) const;
 
     TablePtrs tables() const;
     std::vector<String> databases() const;
