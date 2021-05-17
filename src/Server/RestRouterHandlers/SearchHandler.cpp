@@ -7,10 +7,6 @@
 #include <IO/WriteBufferFromString.h>
 #include <IO/WriteHelpers.h>
 #include <Interpreters/executeQuery.h>
-#include <Parsers/ASTSelectQuery.h>
-#include <Parsers/ASTSelectWithUnionQuery.h>
-#include <Parsers/ParserQuery.h>
-#include <Parsers/parseQuery.h>
 
 #include <re2/re2.h>
 
@@ -37,13 +33,11 @@ void SearchHandler::execute(const Poco::JSON::Object::Ptr & payload,  HTTPServer
     };
 
     String error;
-    if (!validatePayload(payload, error))
+    if (!validatePost(payload, error))
         return send_error(jsonErrorResponse(error, ErrorCodes::BAD_REQUEST_PARAMETER));
 
+    /// FIXME : enforce SELECT query at low level to avoid this sql parsing here
     const auto & query = getQuery(payload);
-    if (!validateQuery(query, error))
-        return send_error(jsonErrorResponse(error, ErrorCodes::BAD_REQUEST_PARAMETER));
-
     LOG_INFO(log, "Execute query: {}", query);
     ReadBufferFromString in{query};
 
@@ -78,12 +72,18 @@ void SearchHandler::execute(const Poco::JSON::Object::Ptr & payload,  HTTPServer
 String SearchHandler::getQuery(const Poco::JSON::Object::Ptr & payload) const
 {
     /// Setup query settings
-    const auto & mode = payload->has("mode") ? payload->get("mode").toString() : "standard";
+    const auto & mode = payload->has("mode") ? payload->get("mode").toString() : "verbose";
 
     /// FIXME: to support 'realtime' mode in future
     /// FIXME: change the behavior of 'verbose' mode. Currently in frontier service, 'standard' and 'verbose' mode are the same
     if (mode == "standard" || mode.empty() || mode == "verbose")
         query_context->setDefaultFormat("JSONCompactEachRowWithNamesAndTypes");
+
+    if (mode == "verbose")
+    {
+        query_context->setSetting("asterisk_include_materialized_columns", true);
+        query_context->setSetting("asterisk_include_alias_columns", true);
+    }
 
     const auto & start_time = payload->has("start_time") ? payload->get("start_time").toString() : "";
     if (!start_time.empty())
@@ -94,8 +94,6 @@ String SearchHandler::getQuery(const Poco::JSON::Object::Ptr & payload) const
         query_context->setTimeParamEnd(end_time);
 
     query_context->setSetting("unnest_subqueries", true);
-    query_context->setSetting("asterisk_include_materialized_columns", true);
-    query_context->setSetting("asterisk_include_alias_columns", true);
 
     std::vector<String> query_parts;
     query_parts.push_back(fmt::format("SELECT * FROM ({})", payload->get("query").toString()));
@@ -109,10 +107,9 @@ String SearchHandler::getQuery(const Poco::JSON::Object::Ptr & payload) const
     return boost::algorithm::join(query_parts, " ");
 }
 
-bool SearchHandler::validatePayload(const Poco::JSON::Object::Ptr & payload, String & error)
+bool SearchHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
 {
-    error.clear();
-    if (!validateSchema(SEARCH_SCHEMA, payload, error))
+    if (!validateSchema(SEARCH_SCHEMA, payload, error_msg))
         return false;
 
     if (payload->has("mode"))
@@ -120,7 +117,7 @@ bool SearchHandler::validatePayload(const Poco::JSON::Object::Ptr & payload, Str
         const auto & mode = payload->getValue<String>("mode");
         if (mode != "standard" && mode != "verbose")
         {
-            error = fmt::format("Invalid 'mode': {}, only support 'standard', 'verbose'", mode);
+            error_msg = fmt::format("Invalid 'mode': {}, only support 'standard', 'verbose'", mode);
             return false;
         }
     }
@@ -131,38 +128,13 @@ bool SearchHandler::validatePayload(const Poco::JSON::Object::Ptr & payload, Str
     {
         if (payload->getValue<int>("offset") < 0 || payload->getValue<int>("page_size") <= 0)
         {
-            error = "Invalid 'limit' or 'page_size";
+            error_msg = "Invalid 'limit' or 'page_size";
             return false;
         }
     }
     else if (has_limit || has_page_size)
     {
-        error = "Missing 'limit' or 'page_size";
-        return false;
-    }
-
-    return true;
-}
-
-bool SearchHandler::validateQuery(const String & query, String & error) const
-{
-    error.clear();
-    const auto & settings = query_context->getSettingsRef();
-    ParserQuery query_parser(query.data() + query.size());
-    try
-    {
-        const auto ast
-            = parseQuery(query_parser, query.data(), query.data() + query.size(), "", settings.max_query_size, settings.max_parser_depth);
-        if (!ast->as<ASTSelectQuery>() && !ast->as<ASTSelectWithUnionQuery>())
-        {
-            error = "Only support SELECT query";
-            return false;
-        }
-    }
-    catch (Exception & e)
-    {
-        LOG_WARNING(log, "Parse query {} fail, exception: {}", query, e.message());
-        error = "Invalid query, if 'FORMAT' keyword is in 'query', please remove it.";
+        error_msg = "Missing 'limit' or 'page_size";
         return false;
     }
 

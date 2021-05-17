@@ -233,8 +233,8 @@ def test_search_api(origin_query, new_query):
             "query": "insert into A values ('2021-01-01 00:00:00', 789)",
         },
         {
-            "status": 400,
-            "result": ["request_id", "408", "Invalid query"]
+            "status": 500,
+            "result": ["request_id", "62"]
         }
     )
 

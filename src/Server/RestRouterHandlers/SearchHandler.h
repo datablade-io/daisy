@@ -17,13 +17,9 @@ public:
     bool streamingOutput() const override { return true; }
 
 private:
-    bool streamingInput() const override { return false; }
-
-    static bool validatePayload(const Poco::JSON::Object::Ptr & payload, String & error);
+    bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;
 
     String getQuery(const Poco::JSON::Object::Ptr & payload) const;
-
-    bool validateQuery(const String & query, String & error) const;
 
     std::shared_ptr<WriteBufferFromHTTPServerResponse> getOutputBuffer(HTTPServerResponse & response) const;
 };
