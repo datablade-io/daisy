@@ -18,29 +18,36 @@ namespace ErrorCodes
 
 namespace
 {
-    std::map<String, std::map<String, String>> CREATE_SCHEMA
-        = {{"required",
-            {
-                {"name", "string"},
-                {"type", "string"},
-            }},
-           {"optional",
-            {{"nullable", "bool"},
-             {"default", "string"},
-             {"compression_codec", "string"},
-             {"ttl_expression", "string"},
-             {"skipping_index_expression", "string"}}}};
+std::map<String, std::map<String, String> > CREATE_SCHEMA = {
+    {"required",{
+                    {"name","string"},
+                    {"type", "string"},
+                }
+    },
+    {"optional", {
+                    {"nullable", "bool"},
+                    {"default", "string"},
+                    {"compression_codec", "string"},
+                    {"ttl_expression", "string"},
+                    {"skipping_index_expression", "string"}
+                }
+    }
+};
 
-    std::map<String, std::map<String, String>> UPDATE_SCHEMA
-        = {{"required", {}},
-           {"optional",
-            {{"name", "string"},
-             {"comment", "string"},
-             {"type", "string"},
-             {"ttl_expression", "string"},
-             {"default", "string"},
-             {"skipping_index_expression", "string"}}}};
-
+std::map<String, std::map<String, String> > UPDATE_SCHEMA = {
+    {"required",{
+                }
+    },
+    {"optional", {
+                    {"name", "string"},
+                    {"comment", "string"},
+                    {"type", "string"},
+                    {"ttl_expression", "string"},
+                    {"default", "string"},
+                    {"skipping_index_expression", "string"}
+                }
+    }
+};
 }
 
 bool ColumnRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const
