@@ -5,6 +5,10 @@ import psycopg2
 from helpers.cluster import ClickHouseCluster
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
+# Daisy: start.
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends.
+
 cluster = ClickHouseCluster(__file__)
 node1 = cluster.add_instance('node1', main_configs=[
     'configs/config.xml',
