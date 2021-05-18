@@ -1,4 +1,4 @@
-# docker build -t yandex/clickhouse-integration-tests-runner .
+# docker build -t daisy/clickhouse-integration-tests-runner .
 FROM ubuntu:18.04
 
 RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
@@ -61,6 +61,7 @@ RUN apt-get update \
 RUN dockerd --version; docker --version
 
 RUN python3 -m pip install -U pip
+RUN python3 -m pip install -U setuptools
 RUN python3 -m pip config set global.index-url http://mirrors.aliyun.com/pypi/simple
 RUN python3 -m pip config set install.trusted-host mirrors.aliyun.com
 
@@ -88,6 +89,9 @@ RUN python3 -m pip install \
     tzlocal \
     urllib3 \
     requests-kerberos
+
+COPY requirements.txt /
+RUN while read requirement; do python3 -m pip install -U $requirement; done < /requirements.txt
 
 COPY modprobe.sh /usr/local/bin/modprobe
 COPY dockerd-entrypoint.sh /usr/local/bin/

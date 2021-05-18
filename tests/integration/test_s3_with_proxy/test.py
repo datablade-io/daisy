@@ -12,10 +12,6 @@ pytestmark = pytest.mark.skip(reason="daisy cicd")
 logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler())
 
-# Daisy: start.
-pytestmark = pytest.mark.skip(reason="daisy cicd")
-# Daisy: ends.
-
 # Runs simple proxy resolver in python env container.
 def run_resolver(cluster):
     container_id = cluster.get_container_id('resolver')

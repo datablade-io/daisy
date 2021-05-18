@@ -4,8 +4,6 @@ set -e
 mkdir -p /etc/docker/
 cat > /etc/docker/daemon.json << EOF
 {
-    "ipv6": true,
-    "fixed-cidr-v6": "fd00::/8",
     "ip-forward": true,
     "insecure-registries" : ["dockerhub-proxy.sas.yp-c.yandex.net:5000"],
     "registry-mirrors" : ["http://dockerhub-proxy.sas.yp-c.yandex.net:5000"]
@@ -28,11 +26,12 @@ done
 set -e
 
 echo "Start tests"
-export CLICKHOUSE_TESTS_SERVER_BIN_PATH=/clickhouse
-export CLICKHOUSE_TESTS_CLIENT_BIN_PATH=/clickhouse
-export CLICKHOUSE_TESTS_BASE_CONFIG_DIR=/clickhouse-config
-export CLICKHOUSE_ODBC_BRIDGE_BINARY_PATH=/clickhouse-odbc-bridge
-export CLICKHOUSE_LIBRARY_BRIDGE_BINARY_PATH=/clickhouse-library-bridge
+export CLICKHOUSE_TESTS_SERVER_BIN_PATH=/programs/clickhouse
+export CLICKHOUSE_TESTS_CLIENT_BIN_PATH=/programs/clickhouse
+export CLICKHOUSE_TESTS_BASE_CONFIG_DIR=/clickhouse-config/
+export CLICKHOUSE_ODBC_BRIDGE_BINARY_PATH=/programs/clickhouse-odbc-bridge
+export CLICKHOUSE_LIBRARY_BRIDGE_BINARY_PATH=/programs/clickhouse-library-bridge
+export DOCKER_COMPOSE_DIR=/compose/
 
 export DOCKER_MYSQL_GOLANG_CLIENT_TAG=${DOCKER_MYSQL_GOLANG_CLIENT_TAG:=latest}
 export DOCKER_MYSQL_JAVA_CLIENT_TAG=${DOCKER_MYSQL_JAVA_CLIENT_TAG:=latest}
