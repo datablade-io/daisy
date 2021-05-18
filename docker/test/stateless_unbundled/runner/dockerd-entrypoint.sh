@@ -2,6 +2,7 @@
 
 set -e -x
 export PATH=$PATH:/programs
+export LLVM_PROFILE_FILE='/tests_output/coverage_reports/clickhouse_%h_%p_%m.profraw'
 mkdir -p /var/log/clickhouse-server/
 
 clickhouse server --config-file=/etc/clickhouse-server/config.xml --log-file=/var/log/clickhouse-server/clickhouse-server.log --errorlog-file=/var/log/clickhouse-server/clickhouse-server.err.log --daemon

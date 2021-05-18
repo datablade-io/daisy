@@ -18,33 +18,33 @@
 
 def Sanitizer_Tests(String sanitizer, String id) {
     def TEST_TAG = "${BUILD_NUMBER}_${sanitizer}"
-    if (id == '1') {
+    if (id == 'integration') {
         return {
-            stage ("${sanitizer}-Test-1: integration tests in docker") {
+            stage ("${sanitizer}-Test-Integration: integration tests in docker") {
                 sh "mkdir -p tests-${id} && rm -rf tests-${id}/* && cp -r ../tests/integration tests-${id}/"
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run -i --rm --name ${TEST_TAG}_daisy_integration_tests --privileged -v $CLICKHOUSE_BIN_DIR:/programs -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR:/clickhouse-config -v ${WORKSPACE}/tests-${id}/integration:/ClickHouse/tests/integration -v $CLICKHOUSE_HOME/src/Server/grpc_protos:/ClickHouse/src/Server/grpc_protos -v ${WORKSPACE}/reports:/tests_output -v ${TEST_TAG}_clickhouse_integration_tests_volume:/var/lib/docker -e PYTEST_OPTS=\"--html=/tests_output/${TEST_TAG}_IntegrationTest.html --self-contained-html \" -e TEST_TAG=${TEST_TAG} daisy/clickhouse-integration-tests-runner"
             }
         }
-    } else if (id == '2') {
+    } else if (id == 'statelest') {
         return {
-            stage ("${sanitizer}-Test-2: statelest tests in docker") {
+            stage ("${sanitizer}-Test-Statelest: statelest tests in docker") {
                 sh "mkdir -p tests-${id} && rm -rf tests-${id}/* && cp -r ../tests/queries tests-${id}/"
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run --net=none -i --rm --name ${TEST_TAG}_daisy_statelest_tests -v $CLICKHOUSE_BIN_DIR:/programs -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/config.xml:/etc/clickhouse-server/config.xml -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/users.xml:/etc/clickhouse-server/users.xml -v $CLICKHOUSE_HOME/tests/clickhouse-test:/usr/bin/clickhouse-test -v ${WORKSPACE}/tests-${id}/queries:/queries -v ${WORKSPACE}/reports:/tests_output -e TEST_TAG=${TEST_TAG} daisy/clickhouse-statelest-tests-runner"
             }
         }
-    } else if (id == '3') {
+    } else if (id == 'stateful') {
         return {
-            stage ("${sanitizer}-Test-3: stateful tests in docker") {
+            stage ("${sanitizer}-Test-Stateful: stateful tests in docker") {
                 sh "mkdir -p tests-${id} && rm -rf tests-${id}/* && cp -r ../tests/queries tests-${id}/"
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run --net=none -i --rm --name ${TEST_TAG}_daisy_stateful_tests -v $CLICKHOUSE_BIN_DIR:/programs -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/config.xml:/etc/clickhouse-server/config.xml -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/users.xml:/etc/clickhouse-server/users.xml -v $CLICKHOUSE_HOME/tests/clickhouse-test:/usr/bin/clickhouse-test -v ${WORKSPACE}/tests-${id}/queries:/queries -v ${WORKSPACE}/reports:/tests_output -e TEST_TAG=${TEST_TAG} daisy/clickhouse-stateful-tests-runner"
             }
         }
-    } else if (id == '4') {
+    } else if (id == 'unit') {
         return {
-            stage ("${sanitizer}-Test-4: unit tests in docker") {
+            stage ("${sanitizer}-Test-Unit: unit tests in docker") {
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run --net=none -i --rm --name ${TEST_TAG}_daisy_unit_tests -v ${WORKSPACE}/build/src/unit_tests_dbms:/unit_tests_dbms -v ${WORKSPACE}/reports:/test_output -e TEST_TAG=${TEST_TAG} daisy/clickhouse-unit-tests-runner "
             }
@@ -58,7 +58,7 @@ pipeline {
         skipDefaultCheckout()
     }
     parameters {
-        string(name: 'TESTS', defaultValue: '1,2,3,4', description: 'Tests ID')
+        string(name: 'TESTS', defaultValue: 'integration,statelest,stateful,unit', description: 'Tests Identifier')
     }
     stages {
         stage('Fetch Source Code') {
