@@ -464,7 +464,7 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
     String user = block.getByName("user").column->getDataAt(0).toString();
     String payload = block.getByName("payload").column->getDataAt(0).toString();
 
-    auto target_hosts = getTargetURIs(record->headers, database, table, method);
+    auto target_hosts = getTargetURIs(record, database, table, method);
 
     if (target_hosts.empty())
     {
@@ -651,17 +651,19 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
 }
 
 std::vector<Poco::URI> DDLService::getTargetURIs(
-    const std::unordered_map<String, String> & headers, const String & database, const String & table, const String & method) const
+    IDistributedWriteAheadLog::RecordPtr record, const String & database, const String & table, const String & method) const
 {
-    if (headers.contains("column"))
-    {   
+    if (record->op_code == IDistributedWriteAheadLog::OpCode::CREATE_COLUMN
+        || record->op_code == IDistributedWriteAheadLog::OpCode::ALTER_COLUMN
+        || record->op_code == IDistributedWriteAheadLog::OpCode::DELETE_COLUMN)
+    {
         /// Column DDL request
-        return toURIs(placement.placed(database, table), getColumnApiPath(headers, database, table, method), http_port);
+        return toURIs(placement.placed(database, table), getColumnApiPath(record->headers, database, table, method), http_port);
     }
     else
     {
         /// Table DDL request
-        return toURIs(placement.placed(database, table), getTableApiPath(headers, database, table, method), http_port);
+        return toURIs(placement.placed(database, table), getTableApiPath(record->headers, database, table, method), http_port);
     }
 }
 

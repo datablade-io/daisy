@@ -50,8 +50,8 @@ private:
     void failDDL(const String & query_id, const String & user, const String & query = "", const String reason = "") const;
 
     bool validateSchema(const Block & block, const std::vector<String> & col_names) const;
-    std::vector<Poco::URI> getTargetURIs(
-        const std::unordered_map<String, String> & headers, const String & database, const String & table, const String & method) const;
+    std::vector<Poco::URI>
+    getTargetURIs(IDistributedWriteAheadLog::RecordPtr record, const String & database, const String & table, const String & method) const;
 
 private:
     String http_port;

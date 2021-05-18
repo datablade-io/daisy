@@ -57,10 +57,7 @@ void executeSelectQuery(const String & query, ContextPtr query_context, const st
     {
         executeQueryWithoutProcessor(io.in, callback);
     }
-    else
-    {
-        io.onFinish();
-    }
+    io.onFinish();
 }
 
 }

@@ -439,34 +439,35 @@ void CatalogService::deleteCatalogForNode(const NodePtr & node)
     std::unique_lock guard{catalog_rwlock};
 
     auto iter = indexed_by_node.find(node->identity);
-    if (iter != indexed_by_node.end())
+    if (iter == indexed_by_node.end())
     {
-        for (const auto & p : iter->second)
-        {
-            auto iter_by_name = indexed_by_name.find(std::make_pair(p.second->database, p.second->name));
-            assert(iter_by_name != indexed_by_name.end());
-
-            /// Deleted table, remove from `indexed_by_name` and `indexed_by_id`
-            auto removed = iter_by_name->second.erase(std::make_pair(p.second->node_identity, p.second->shard));
-            assert(removed == 1);
-            (void)removed;
-
-            if (iter_by_name->second.empty())
-            {
-                indexed_by_name.erase(iter_by_name);
-            }
-
-            {
-                std::unique_lock storage_guard{storage_rwlock};
-                removed = indexed_by_id.erase(p.second->uuid);
-                assert(removed == 1);
-                (void)removed;
-            }
-        }
-        iter->second.clear();
+        return;
     }
 
-    return;
+    for (const auto & p : iter->second)
+    {
+        auto iter_by_name = indexed_by_name.find(std::make_pair(p.second->database, p.second->name));
+        assert(iter_by_name != indexed_by_name.end());
+
+        /// Deleted table, remove from `indexed_by_name` and `indexed_by_id`
+        auto removed = iter_by_name->second.erase(std::make_pair(p.second->node_identity, p.second->shard));
+        assert(removed == 1);
+        (void)removed;
+
+        if (iter_by_name->second.empty())
+        {
+            indexed_by_name.erase(iter_by_name);
+        }
+
+        {
+            std::unique_lock storage_guard{storage_rwlock};
+            removed = indexed_by_id.erase(p.second->uuid);
+            assert(removed == 1);
+            (void)removed;
+        }
+    }
+
+    iter->second.clear();
 }
 
 ClusterPtr CatalogService::tableCluster(const String & database, const String & table, Int32 replication_factor, Int32 shards)
