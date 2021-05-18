@@ -3,6 +3,10 @@ import pymysql.cursors
 import pytest
 from helpers.cluster import ClickHouseCluster
 
+# Daisy: start.
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends.
+
 CONFIG_FILES = ['configs/dictionaries/mysql_dict1.xml', 'configs/dictionaries/mysql_dict2.xml',
                 'configs/remote_servers.xml']
 CONFIG_FILES += ['configs/enable_dictionaries.xml', 'configs/log_conf.xml']
