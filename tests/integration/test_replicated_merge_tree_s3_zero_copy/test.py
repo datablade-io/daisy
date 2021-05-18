@@ -5,6 +5,10 @@ import string
 import pytest
 from helpers.cluster import ClickHouseCluster
 
+# Daisy: starts
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends
+
 logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler())
 

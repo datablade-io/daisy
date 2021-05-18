@@ -8,6 +8,9 @@ from helpers.cluster import ClickHouseCluster
 cluster = ClickHouseCluster(__file__)
 node = cluster.add_instance('node', with_mongo=True)
 
+# Daisy: starts
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends
 
 @pytest.fixture(scope="module")
 def started_cluster():

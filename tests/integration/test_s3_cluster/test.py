@@ -5,6 +5,10 @@ import pytest
 from helpers.cluster import ClickHouseCluster
 from helpers.test_tools import TSV
 
+# Daisy: starts
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends
+
 logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler())
 
@@ -127,3 +131,4 @@ def test_wrong_cluster(started_cluster):
         'minio', 'minio123', 'CSV', 'name String, value UInt32, polygon Array(Array(Tuple(Float64, Float64)))')""")
     
     assert "not found" in error
+

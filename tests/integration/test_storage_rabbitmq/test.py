@@ -15,6 +15,10 @@ from helpers.test_tools import TSV
 
 from . import rabbitmq_pb2
 
+# Daisy: starts
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends
+
 cluster = ClickHouseCluster(__file__)
 instance = cluster.add_instance('instance',
                                 main_configs=['configs/rabbitmq.xml', 'configs/log_conf.xml'],
