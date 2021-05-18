@@ -142,10 +142,6 @@ pipeline {
                         CLICKHOUSE_HOME="${WORKSPACE}/"
                         CLICKHOUSE_BIN_DIR="${WORKSPACE}/build/programs/"
                         CLICKHOUSE_TESTS_BASE_CONFIG_DIR="${WORKSPACE}/programs/server/"
-                        // only for integration tests by script
-                        CLICKHOUSE_TESTS_SERVER_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        CLICKHOUSE_TESTS_CLIENT_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        DOCKER_COMPOSE_DIR="${WORKSPACE}/docker/test/integration/runner/compose/"
                     }
                     stages {
                         stage ('3.1 ASan: Build') {
@@ -188,10 +184,6 @@ pipeline {
                         CLICKHOUSE_HOME="${WORKSPACE}/"
                         CLICKHOUSE_BIN_DIR="${WORKSPACE}/build/programs/"
                         CLICKHOUSE_TESTS_BASE_CONFIG_DIR="${WORKSPACE}/programs/server/"
-                        // only for integration tests by script
-                        CLICKHOUSE_TESTS_SERVER_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        CLICKHOUSE_TESTS_CLIENT_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        DOCKER_COMPOSE_DIR="${WORKSPACE}/docker/test/integration/runner/compose/"
                     }
                     stages {
                         stage ('4.1 TSan: Build') {
@@ -234,10 +226,6 @@ pipeline {
                         CLICKHOUSE_HOME="${WORKSPACE}/"
                         CLICKHOUSE_BIN_DIR="${WORKSPACE}/build/programs/"
                         CLICKHOUSE_TESTS_BASE_CONFIG_DIR="${WORKSPACE}/programs/server/"
-                        // only for integration tests by script
-                        CLICKHOUSE_TESTS_SERVER_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        CLICKHOUSE_TESTS_CLIENT_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        DOCKER_COMPOSE_DIR="${WORKSPACE}/docker/test/integration/runner/compose/"
                     }
                     stages {
                         stage ('5.1 MSan: Build') {
@@ -280,10 +268,6 @@ pipeline {
                         CLICKHOUSE_HOME="${WORKSPACE}/"
                         CLICKHOUSE_BIN_DIR="${WORKSPACE}/build/programs/"
                         CLICKHOUSE_TESTS_BASE_CONFIG_DIR="${WORKSPACE}/programs/server/"
-                        // only for integration tests by script
-                        CLICKHOUSE_TESTS_SERVER_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        CLICKHOUSE_TESTS_CLIENT_BIN_PATH="${WORKSPACE}/build/programs/clickhouse"
-                        DOCKER_COMPOSE_DIR="${WORKSPACE}/docker/test/integration/runner/compose/"
                     }
                     stages {
                         stage ('6.1 UbSan: Build') {
@@ -322,7 +306,12 @@ pipeline {
                             customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_For_Coverage'
                         }
                     }
-                    steps {
+                    environment {
+                        CLICKHOUSE_HOME="${WORKSPACE}/"
+                        CLICKHOUSE_BIN_DIR="${WORKSPACE}/build/programs/"
+                        CLICKHOUSE_TESTS_BASE_CONFIG_DIR="${WORKSPACE}/programs/server/"
+                    }
+                    stages {
                         stage ('7.1 Coverage: Build') {
                             steps {
                                 fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
