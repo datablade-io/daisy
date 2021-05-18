@@ -6,6 +6,10 @@ import os
 from helpers.cluster import ClickHouseCluster
 import subprocess
 
+# Daisy: starts
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends
+
 cluster = ClickHouseCluster(__file__)
 node1 = cluster.add_instance('node1', with_kerberized_hdfs=True, user_configs=[], main_configs=['configs/log_conf.xml', 'configs/hdfs.xml'])
 

@@ -4,6 +4,10 @@ import pytest
 from helpers.cluster import ClickHouseCluster
 from helpers.hdfs_api import HDFSApi
 
+# Daisy: starts
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends
+
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 cluster = ClickHouseCluster(__file__)
 node1 = cluster.add_instance('node1', with_hdfs=True, main_configs=['configs/log_conf.xml'])
