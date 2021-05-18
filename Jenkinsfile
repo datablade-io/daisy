@@ -333,8 +333,8 @@ pipeline {
                             }
                         }
                         stage ('7.3 Coverage: Generate Coverage Report') {
-                            withEnv(["COVERAGE_DIR=reports/${BUILD_NUMBER}_coverage_reports"]) {
-                                steps {
+                            steps {
+                                withEnv(["COVERAGE_DIR=reports/${BUILD_NUMBER}_coverage_reports"]) {
                                     sh "mkdir -p ${COVERAGE_DIR} && find . -path './reports' -prune -o -name '*.profraw' | xargs -i cp --force --backup=numbered {} ${COVERAGE_DIR}/ | true"
                                     sh "llvm-profdata-12 merge -sparse ${COVERAGE_DIR}/* -o reports/coverage_reports/clickhouse.profdata"
                                     sh "llvm-cov-12 export ${CLICKHOUSE_TESTS_SERVER_BIN_PATH} -instr-profile=${COVERAGE_DIR}/clickhouse.profdata -j=16 -format=lcov -ignore-filename-regex '.*contrib.*' > ${COVERAGE_DIR}/output.lcov"
