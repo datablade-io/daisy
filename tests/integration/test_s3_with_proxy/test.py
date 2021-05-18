@@ -9,7 +9,7 @@ logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler())
 
 # Daisy: start.
-sytestmark = pytest.mark.skip(reason="daisy cicd")
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 # Daisy: ends.
 
 # Runs simple proxy resolver in python env container.

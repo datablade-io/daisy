@@ -8,7 +8,7 @@ import requests
 from helpers.cluster import ClickHouseCluster
 
 # Daisy: start.
-sytestmark = pytest.mark.skip(reason="daisy cicd")
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 # Daisy: ends.
 
 cluster = ClickHouseCluster(__file__)

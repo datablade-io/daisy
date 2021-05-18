@@ -9,7 +9,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from multiprocessing.dummy import Pool
 
 # Daisy: start.
-sytestmark = pytest.mark.skip(reason="daisy cicd")
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 # Daisy: ends.
 
 cluster = ClickHouseCluster(__file__)

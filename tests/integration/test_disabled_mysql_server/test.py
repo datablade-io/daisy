@@ -10,7 +10,7 @@ from helpers.cluster import ClickHouseCluster, get_docker_compose_path
 from helpers.network import PartitionManager
 
 # Daisy: start.
-sytestmark = pytest.mark.skip(reason="daisy cicd")
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 # Daisy: ends.
 
 cluster = ClickHouseCluster(__file__)

@@ -6,7 +6,7 @@ from helpers.dictionary import Field, Row, Dictionary, DictionaryStructure, Layo
 from helpers.external_sources import SourceRedis
 
 # Daisy: start.
-sytestmark = pytest.mark.skip(reason="daisy cicd")
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 # Daisy: ends.
 
 cluster = None

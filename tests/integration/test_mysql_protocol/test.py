@@ -12,7 +12,7 @@ from docker.models.containers import Container
 from helpers.cluster import ClickHouseCluster, get_docker_compose_path, run_and_check
 
 # Daisy: start.
-sytestmark = pytest.mark.skip(reason="daisy cicd")
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 # Daisy: ends.
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))

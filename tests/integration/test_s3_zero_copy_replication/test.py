@@ -5,7 +5,7 @@ import pytest
 from helpers.cluster import ClickHouseCluster
 
 # Daisy: start.
-sytestmark = pytest.mark.skip(reason="daisy cicd")
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 # Daisy: ends.
 
 logging.getLogger().setLevel(logging.INFO)
