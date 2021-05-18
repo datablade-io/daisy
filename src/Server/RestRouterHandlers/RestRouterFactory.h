@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DatabaseRestRouterHandler.h"
 #include "IngestRawStoreHandler.h"
 #include "IngestRestRouterHandler.h"
 #include "IngestStatusHandler.h"
@@ -7,9 +8,11 @@
 #include "RestRouterHandler.h"
 #include "RestStatusHandler.h"
 #include "SQLAnalyzerRestRouterHandler.h"
+#include "SearchHandler.h"
 #include "TabularTableRestRouterHandler.h"
 #include "TaskRestRouterHandler.h"
 #include "DatabaseRestRouterHandler.h"
+#include "ColumnRestRouterHandler.h"
 
 #include <re2/re2.h>
 
@@ -87,6 +90,20 @@ public:
             });
 
         factory.registerRouterHandler(
+            "/dae/v1/ddl/(?P<database>\\w+)/(?P<table>\\w+)/columns(\\?[\\w\\-=&#]+){0,1}",
+            "GET/POST",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<ColumnRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/ddl/(?P<database>\\w+)/(?P<table>\\w+)/columns/(?P<column>\\w+)(\\?[\\w\\-=&#]+){0,1}",
+            "PATCH/DELETE",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<ColumnRestRouterHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
             "/dae/v1/ddl/databases(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -119,6 +136,13 @@ public:
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<DB::RestStatusHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/v1/search",
+            "POST",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<DB::SearchHandler>(query_context);
             });
     }
 
