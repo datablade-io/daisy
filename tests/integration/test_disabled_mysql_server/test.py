@@ -9,6 +9,8 @@ from helpers.client import QueryRuntimeException
 from helpers.cluster import ClickHouseCluster, get_docker_compose_path
 from helpers.network import PartitionManager
 
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+
 cluster = ClickHouseCluster(__file__)
 clickhouse_node = cluster.add_instance('node1', main_configs=['configs/remote_servers.xml'], with_mysql=True)
 

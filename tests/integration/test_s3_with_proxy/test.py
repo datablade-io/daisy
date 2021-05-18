@@ -8,6 +8,7 @@ from helpers.cluster import ClickHouseCluster
 logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler())
 
+pytestmark = pytest.mark.skip(reason="daisy cicd")
 
 # Runs simple proxy resolver in python env container.
 def run_resolver(cluster):

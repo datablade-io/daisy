@@ -10,6 +10,8 @@ import docker
 
 from . import materialize_with_ddl
 
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+
 DOCKER_COMPOSE_PATH = get_docker_compose_path()
 
 cluster = ClickHouseCluster(__file__)

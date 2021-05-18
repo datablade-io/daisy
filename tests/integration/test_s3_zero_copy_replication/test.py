@@ -4,6 +4,8 @@ import time
 import pytest
 from helpers.cluster import ClickHouseCluster
 
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+
 logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler())
 

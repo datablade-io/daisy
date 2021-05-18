@@ -5,6 +5,8 @@ from helpers.cluster import ClickHouseCluster
 from helpers.dictionary import Field, Row, Dictionary, DictionaryStructure, Layout
 from helpers.external_sources import SourceRedis
 
+pytestmark = pytest.mark.skip(reason="daisy cicd")
+
 cluster = None
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 dict_configs_path = os.path.join(SCRIPT_DIR, 'configs/dictionaries')
