@@ -115,8 +115,10 @@ void appendDDLBlock(
 
     for (const auto & parameter_name : parameter_names)
     {
-        auto iter = context->getQueryParameters().find(parameter_name);
-        if (iter != context->getQueryParameters().end())
+        const auto & query_params = context->getQueryParameters();
+        auto iter = query_params.find(parameter_name);
+
+        if (iter != query_params.end())
         {
             record.headers[parameter_name] = iter->second;
         }

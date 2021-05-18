@@ -1178,12 +1178,12 @@ void executeQuery(
 }
 
 /// Daisy : starts
-ASTPtr executeQueryPrase(const String & create_table_query, ContextPtr query_context)
+ASTPtr parseQuery(const String & query, ContextPtr query_context)
 {
     const size_t & max_query_size = query_context->getSettingsRef().max_query_size;
     const auto & max_parser_depth = query_context->getSettingsRef().max_parser_depth;
-    const char * begin = create_table_query.data();
-    const char * end = create_table_query.data() + create_table_query.size();
+    const char * begin = query.data();
+    const char * end = query.data() + query.size();
 
     ASTPtr ast;
 

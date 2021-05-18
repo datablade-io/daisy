@@ -55,7 +55,7 @@ BlockIO executeQuery(
 );
 
 /// Daisy : starts
-ASTPtr executeQueryPrase(const String & query, ContextPtr query_context);
+ASTPtr parseQuery(const String & query, ContextPtr query_context);
 /// Daisy : ends
 
 }

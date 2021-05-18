@@ -1,5 +1,5 @@
 #include "ColumnRestRouterHandler.h"
-#include "CommonUtils.h"
+#include "ColumnDefinition.h"
 #include "SchemaValidator.h"
 
 #include <Core/Block.h>

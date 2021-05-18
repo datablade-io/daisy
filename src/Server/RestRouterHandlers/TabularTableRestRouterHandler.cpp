@@ -1,5 +1,5 @@
 #include "TabularTableRestRouterHandler.h"
-#include "CommonUtils.h"
+#include "ColumnDefinition.h"
 #include "SchemaValidator.h"
 
 #include <Interpreters/executeQuery.h>
@@ -58,7 +58,7 @@ void TabularTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, c
             continue;
         }
 
-        const auto & query_ptr = executeQueryPrase(table->create_table_query, query_context);
+        const auto & query_ptr = parseQuery(table->create_table_query, query_context);
         const auto & create = query_ptr->as<const ASTCreateQuery &>();
 
         Poco::JSON::Object table_mapping_json;

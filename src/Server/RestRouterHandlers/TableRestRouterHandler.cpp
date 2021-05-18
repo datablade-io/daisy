@@ -1,5 +1,5 @@
 #include "TableRestRouterHandler.h"
-#include "CommonUtils.h"
+#include "ColumnDefinition.h"
 #include "SchemaValidator.h"
 
 #include <DataTypes/DataTypeFactory.h>

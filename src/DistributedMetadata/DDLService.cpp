@@ -374,7 +374,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
         assert(!hosts.empty());
 
         std::vector<Poco::URI> target_hosts{
-            toURIs(hosts, fmt::format(DDL_TABLE_POST_API_PATH_FMT, database, getTableCategory(record->headers)), http_port)};
+            toURIs(hosts, getTableApiPath(record->headers, database, table, Poco::Net::HTTPRequest::HTTP_POST), http_port)};
 
         /// Create table on each target host according to placement
         for (Int32 i = 0; i < replication_factor; ++i)
@@ -653,20 +653,16 @@ void DDLService::processRecords(const IDistributedWriteAheadLog::RecordPtrs & re
 std::vector<Poco::URI> DDLService::getTargetURIs(
     const std::unordered_map<String, String> & headers, const String & database, const String & table, const String & method) const
 {
-    const auto & column_ddl_request = headers.contains("column");
-
-    std::vector<Poco::URI> target_hosts;
-    if (column_ddl_request)
-    {
-        target_hosts = toURIs(placement.placed(database, table), getColumnApiPath(headers, database, table, method), http_port);
+    if (headers.contains("column"))
+    {   
+        /// Column DDL request
+        return toURIs(placement.placed(database, table), getColumnApiPath(headers, database, table, method), http_port);
     }
     else
     {
         /// Table DDL request
-        target_hosts = toURIs(placement.placed(database, table), getTableApiPath(headers, database, table, method), http_port);
+        return toURIs(placement.placed(database, table), getTableApiPath(headers, database, table, method), http_port);
     }
-
-    return target_hosts;
 }
 
 }

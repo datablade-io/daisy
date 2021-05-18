@@ -1,12 +1,27 @@
-#include "CommonUtils.h"
+#include "ColumnDefinition.h"
 
 #include <Interpreters/Context.h>
-#include <Interpreters/executeQuery.h>
+#include <Interpreters/executeSelectQuery.h>
 
 #include <boost/algorithm/string/join.hpp>
 
 namespace DB
 {
+
+namespace
+{
+    String buildResponse(const String & query_id)
+    {
+        Poco::JSON::Object resp;
+        resp.set("query_id", query_id);
+        std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        resp.stringify(resp_str_stream, 0);
+
+        return resp_str_stream.str();
+    }
+}
+
+
 String getCreateColumnDefination(const Poco::JSON::Object::Ptr & column)
 {
     std::vector<String> column_definition;
@@ -81,21 +96,9 @@ String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, String
     return boost::algorithm::join(update_segments, ",");
 }
 
-String buildResponse(const String & query_id)
-{
-    Poco::JSON::Object resp;
-    resp.set("query_id", query_id);
-    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    resp.stringify(resp_str_stream, 0);
-
-    return resp_str_stream.str();
-}
-
 String processQuery(const String & query, ContextPtr query_context)
 {
-    BlockIO io{executeQuery(query, query_context, false /* internal */)};
-    io.onFinish();
-
+    executeSelectQuery(query, query_context, [](Block &&) {}, false);
     return buildResponse(query_context->getCurrentQueryId());
 }
 
