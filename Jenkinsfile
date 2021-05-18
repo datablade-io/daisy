@@ -16,11 +16,11 @@
 //  - Case-5: Tests On MSan     大约耗时
 //  - Case-6: Tests On UbSan    大约耗时
 
-def Sanitizer_Tests(String sanitizer, String id) {
-    def TEST_TAG = "${BUILD_NUMBER}_${sanitizer}"
+def Base_Tests(String base, String id) {
+    def TEST_TAG = "${BUILD_NUMBER}_${base}"
     if (id == 'integration') {
         return {
-            stage ("${sanitizer}-Test-Integration: integration tests in docker") {
+            stage ("${base}-Test-Integration: integration tests in docker") {
                 sh "mkdir -p tests-${id} && rm -rf tests-${id}/* && cp -r ../tests/integration tests-${id}/"
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run -i --rm --name ${TEST_TAG}_daisy_integration_tests --privileged -v $CLICKHOUSE_BIN_DIR:/programs -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR:/clickhouse-config -v ${WORKSPACE}/tests-${id}/integration:/ClickHouse/tests/integration -v $CLICKHOUSE_HOME/src/Server/grpc_protos:/ClickHouse/src/Server/grpc_protos -v ${WORKSPACE}/reports:/tests_output -v ${TEST_TAG}_clickhouse_integration_tests_volume:/var/lib/docker -e PYTEST_OPTS=\"--html=/tests_output/${TEST_TAG}_IntegrationTest.html --self-contained-html \" -e TEST_TAG=${TEST_TAG} daisy/clickhouse-integration-tests-runner"
@@ -28,7 +28,7 @@ def Sanitizer_Tests(String sanitizer, String id) {
         }
     } else if (id == 'statelest') {
         return {
-            stage ("${sanitizer}-Test-Statelest: statelest tests in docker") {
+            stage ("${base}-Test-Statelest: statelest tests in docker") {
                 sh "mkdir -p tests-${id} && rm -rf tests-${id}/* && cp -r ../tests/queries tests-${id}/"
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run --net=none -i --rm --name ${TEST_TAG}_daisy_statelest_tests -v $CLICKHOUSE_BIN_DIR:/programs -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/config.xml:/etc/clickhouse-server/config.xml -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/users.xml:/etc/clickhouse-server/users.xml -v $CLICKHOUSE_HOME/tests/clickhouse-test:/usr/bin/clickhouse-test -v ${WORKSPACE}/tests-${id}/queries:/queries -v ${WORKSPACE}/reports:/tests_output -e TEST_TAG=${TEST_TAG} daisy/clickhouse-statelest-tests-runner"
@@ -36,7 +36,7 @@ def Sanitizer_Tests(String sanitizer, String id) {
         }
     } else if (id == 'stateful') {
         return {
-            stage ("${sanitizer}-Test-Stateful: stateful tests in docker") {
+            stage ("${base}-Test-Stateful: stateful tests in docker") {
                 sh "mkdir -p tests-${id} && rm -rf tests-${id}/* && cp -r ../tests/queries tests-${id}/"
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run --net=none -i --rm --name ${TEST_TAG}_daisy_stateful_tests -v $CLICKHOUSE_BIN_DIR:/programs -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/config.xml:/etc/clickhouse-server/config.xml -v $CLICKHOUSE_TESTS_BASE_CONFIG_DIR/users.xml:/etc/clickhouse-server/users.xml -v $CLICKHOUSE_HOME/tests/clickhouse-test:/usr/bin/clickhouse-test -v ${WORKSPACE}/tests-${id}/queries:/queries -v ${WORKSPACE}/reports:/tests_output -e TEST_TAG=${TEST_TAG} daisy/clickhouse-stateful-tests-runner"
@@ -44,7 +44,7 @@ def Sanitizer_Tests(String sanitizer, String id) {
         }
     } else if (id == 'unit') {
         return {
-            stage ("${sanitizer}-Test-Unit: unit tests in docker") {
+            stage ("${base}-Test-Unit: unit tests in docker") {
                 sh "mkdir -p reports && rm -rf reports/*"
                 sh "docker system prune -f || true && docker run --net=none -i --rm --name ${TEST_TAG}_daisy_unit_tests -v ${WORKSPACE}/build/src/unit_tests_dbms:/unit_tests_dbms -v ${WORKSPACE}/reports:/test_output -e TEST_TAG=${TEST_TAG} daisy/clickhouse-unit-tests-runner "
             }
@@ -117,8 +117,8 @@ pipeline {
 
                         sh "mkdir -p reports && rm -rf reports/*"
                         dir ("build_static_analyzer") {
-                            sh "NINJA_FLAGS=-k0 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12 -DENABLE_CLANG_TIDY=1"
-                            sh "NINJA_FLAGS=-k0 ninja -j8"
+                            // sh "NINJA_FLAGS=-k0 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12 -DENABLE_TESTS=OFF -DENABLE_CLANG_TIDY=1"
+                            // sh "NINJA_FLAGS=-k0 ninja -j8"
                             // sh "scan-build-12 -v -V -o ../reports/result/scan-build-results ninja -j8 | tee ../reports/${BUILD_NUMBER}_scan-build-report.txt"
                             // sh "codechecker analyze compile_commands.json -o ../reports/result"
                             // sh "codechecker parse ../reports/result -e html -o ../reports/${BUILD_NUMBER}_codechecker-reports.html"
@@ -153,7 +153,7 @@ pipeline {
                                 fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
 
                                 dir ("build") {
-                                    sh "cmake ../ -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12 -DSANITIZE=address -DWITH_COVERAGE=ON && ninja -j8"
+                                    sh "cmake ../ -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12 -DSANITIZE=address && ninja -j8"
                                 }
                             }
                         }
@@ -162,7 +162,7 @@ pipeline {
                                 script {
                                     def tests = [:]
                                     for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On ASan", Sanitizer_Tests('ASan', id))
+                                        tests.put("Test-" + id + " On ASan", Base_Tests('ASan', id))
                                     }
                                     parallel tests
                                 }
@@ -172,8 +172,6 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                        }
-                        unsuccessful {
                             sh "docker rm -f ${BUILD_NUMBER}_ASan_daisy_integration_tests ${BUILD_NUMBER}_ASan_daisy_statelest_tests ${BUILD_NUMBER}_ASan_daisy_stateful_tests ${BUILD_NUMBER}_ASan_daisy_stateful_tests"
                         }
                     }
@@ -210,7 +208,7 @@ pipeline {
                                 script {
                                     def tests = [:]
                                     for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On TSan", Sanitizer_Tests('TSan', id))
+                                        tests.put("Test-" + id + " On TSan", Base_Tests('TSan', id))
                                     }
                                     parallel tests
                                 }
@@ -220,8 +218,6 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                        }
-                        unsuccessful {
                             sh "docker rm -f ${BUILD_NUMBER}_TSan_daisy_integration_tests ${BUILD_NUMBER}_TSan_daisy_statelest_tests ${BUILD_NUMBER}_TSan_daisy_stateful_tests ${BUILD_NUMBER}_TSan_daisy_stateful_tests"
                         }
                     }
@@ -258,7 +254,7 @@ pipeline {
                                 script {
                                     def tests = [:]
                                     for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On MSan", Sanitizer_Tests('MSan', id))
+                                        tests.put("Test-" + id + " On MSan", Base_Tests('MSan', id))
                                     }
                                     parallel tests
                                 }
@@ -268,8 +264,6 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                        }
-                        unsuccessful {
                             sh "docker rm -f ${BUILD_NUMBER}_MSan_daisy_integration_tests ${BUILD_NUMBER}_MSan_daisy_statelest_tests ${BUILD_NUMBER}_MSan_daisy_stateful_tests ${BUILD_NUMBER}_MSan_daisy_stateful_tests"
                         }
                     }
@@ -306,7 +300,7 @@ pipeline {
                                 script {
                                     def tests = [:]
                                     for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On UbSan", Sanitizer_Tests('UbSan', id))
+                                        tests.put("Test-" + id + " On UbSan", Base_Tests('UbSan', id))
                                     }
                                     parallel tests
                                 }
@@ -316,9 +310,55 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                        }
-                        unsuccessful {
                             sh "docker rm -f ${BUILD_NUMBER}_UbSan_daisy_integration_tests ${BUILD_NUMBER}_UbSan_daisy_statelest_tests ${BUILD_NUMBER}_UbSan_daisy_stateful_tests ${BUILD_NUMBER}_UbSan_daisy_stateful_tests"
+                        }
+                    }
+                }
+
+                stage ('Case-7: Tests For Coverage') {
+                    agent {
+                        node {
+                            label 'ph'
+                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_For_Coverage'
+                        }
+                    }
+                    steps {
+                        stage ('7.1 Coverage: Build') {
+                            steps {
+                                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+
+                                dir ("build") {
+                                    sh "cmake ../ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12 -DWITH_COVERAGE=ON && ninja -j8"
+                                }
+                            }
+                        }
+                        stage ('7.2 Coverage: Parallel Tests') {
+                            steps {
+                                script {
+                                    def tests = [:]
+                                    for (id in params.TESTS.tokenize(',')) {
+                                        tests.put("Test-" + id + " For Coverage", Base_Tests('Coverage', id))
+                                    }
+                                    parallel tests
+                                }
+                            }
+                        }
+                        stage ('7.3 Coverage: Generate Coverage Report') {
+                            withEnv(["COVERAGE_DIR=reports/${BUILD_NUMBER}_coverage_reports"]) {
+                                steps {
+                                    sh "mkdir -p ${COVERAGE_DIR} && find . -path './reports' -prune -o -name '*.profraw' | xargs -i cp --force --backup=numbered {} ${COVERAGE_DIR}/ | true"
+                                    sh "llvm-profdata-12 merge -sparse ${COVERAGE_DIR}/* -o reports/coverage_reports/clickhouse.profdata"
+                                    sh "llvm-cov-12 export ${CLICKHOUSE_TESTS_SERVER_BIN_PATH} -instr-profile=${COVERAGE_DIR}/clickhouse.profdata -j=16 -format=lcov -ignore-filename-regex '.*contrib.*' > ${COVERAGE_DIR}/output.lcov"
+                                    sh "genhtml ${COVERAGE_DIR}/output.lcov --ignore-errors source --output-directory \"${COVERAGE_DIR}/html/\""
+                                    sh "cp ${COVERAGE_DIR}/html/index.html reports/${BUILD_NUMBER}_coverage_index.html && tar -czvf reports/${BUILD_NUMBER}_coverage_reports.tar.gz ${COVERAGE_DIR}/html/*"
+                                }
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
+                            sh "docker rm -f ${BUILD_NUMBER}_Coverage_daisy_integration_tests ${BUILD_NUMBER}_Coverage_daisy_statelest_tests ${BUILD_NUMBER}_Coverage_daisy_stateful_tests ${BUILD_NUMBER}_Coverage_daisy_stateful_tests"
                         }
                     }
                 }
