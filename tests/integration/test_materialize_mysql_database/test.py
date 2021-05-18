@@ -10,7 +10,9 @@ import docker
 
 from . import materialize_with_ddl
 
-pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: start.
+sytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends.
 
 DOCKER_COMPOSE_PATH = get_docker_compose_path()
 

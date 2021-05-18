@@ -7,7 +7,9 @@ import pytest
 import requests
 from helpers.cluster import ClickHouseCluster
 
-pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: start.
+sytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends.
 
 cluster = ClickHouseCluster(__file__)
 node = cluster.add_instance('node', main_configs=['configs/prom_conf.xml'])

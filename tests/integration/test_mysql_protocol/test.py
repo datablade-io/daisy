@@ -11,7 +11,9 @@ import pytest
 from docker.models.containers import Container
 from helpers.cluster import ClickHouseCluster, get_docker_compose_path, run_and_check
 
-pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: start.
+sytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends.
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 DOCKER_COMPOSE_PATH = get_docker_compose_path()

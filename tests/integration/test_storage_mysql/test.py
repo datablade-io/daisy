@@ -5,7 +5,9 @@ import pymysql.cursors
 import pytest
 from helpers.cluster import ClickHouseCluster
 
-pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: start.
+sytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends.
 
 cluster = ClickHouseCluster(__file__)
 

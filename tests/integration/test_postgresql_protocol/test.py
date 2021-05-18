@@ -13,7 +13,9 @@ import psycopg2.extras
 import pytest
 from helpers.cluster import ClickHouseCluster, get_docker_compose_path, run_and_check
 
-pytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: start.
+sytestmark = pytest.mark.skip(reason="daisy cicd")
+# Daisy: ends.
 
 psycopg2.extras.register_uuid()
 
