@@ -635,7 +635,7 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
 void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode snapshot)
 {
     if (snapshot.empty())
-    {   
+    {
         return deleteCatalogForNode(node);
     }
 
