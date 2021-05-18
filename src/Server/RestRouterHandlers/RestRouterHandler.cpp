@@ -4,7 +4,7 @@ namespace DB
 {
 namespace
 {
-    static Poco::JSON::Object::Ptr parseRequest(HTTPServerRequest & request)
+    Poco::JSON::Object::Ptr parseRequest(HTTPServerRequest & request)
     {
         String data = "{}";
 
@@ -20,8 +20,8 @@ namespace
     }
 }
 
-/// Execute request and return response in `String`. If it failed
-/// a correct `http_status` code will be set by trying best.
+/// Execute request and return response. If it failed, a correct
+/// `http_status` code will be set by trying best.
 /// This function may throw, and caller will need catch the exception
 /// and sends back HTTP `500` to clients
 void RestRouterHandler::execute(HTTPServerRequest & request, HTTPServerResponse & response)
