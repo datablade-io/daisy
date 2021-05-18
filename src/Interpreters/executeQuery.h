@@ -3,6 +3,7 @@
 #include <Core/QueryProcessingStage.h>
 #include <DataStreams/BlockIO.h>
 #include <Processors/QueryPipeline.h>
+#include <Parsers/IAST.h>
 
 namespace DB
 {
@@ -57,4 +58,7 @@ BlockIO executeQuery(
 /// if built pipeline does not require any input and does not produce any output.
 void executeTrivialBlockIO(BlockIO & streams, ContextPtr context);
 
+/// Daisy : starts
+ASTPtr parseQuery(const String & query, ContextPtr query_context);
+/// Daisy : ends
 }
