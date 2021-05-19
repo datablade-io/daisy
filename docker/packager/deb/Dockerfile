@@ -1,4 +1,15 @@
 # docker build -t yandex/clickhouse-deb-builder .
+FROM rust as builder
+
+WORKDIR /usr/src/sccache
+
+RUN apt-get update \
+ && apt-get install -y libssl-dev --no-install-recommends
+
+ENV CARGO_TARGET_DIR=/usr/src/sccache
+
+RUN cargo install sccache --git https://github.com/mozilla/sccache.git
+
 FROM ubuntu:20.04
 
 RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
@@ -82,6 +93,12 @@ RUN rm /etc/apt/sources.list.d/proposed-repositories.list && apt-get update
 
 # This symlink required by gcc to find lld compiler
 RUN ln -s /usr/bin/lld-${LLVM_VERSION} /usr/bin/ld.lld
+
+RUN apt-get update \
+ && apt-get install -y libssl1.1 --no-install-recommends \
+ && apt-get install bubblewrap
+
+ COPY --from=builder /usr/local/cargo/bin/sccache /usr/local/bin/sccache
 
 COPY build.sh /
 
