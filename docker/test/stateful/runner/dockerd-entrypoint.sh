@@ -3,7 +3,7 @@
 set -e -x
 
 export PATH=$PATH:/programs
-export LLVM_PROFILE_FILE='/tests_output/coverage_reports/clickhouse_%h_%p_%m.profraw'
+export LLVM_PROFILE_FILE='/tests_output/coverage_reports/stateful_tests_clickhouse_%h_%p_%m.profraw'
 
 # Start server
 mkdir -p /var/log/clickhouse-server

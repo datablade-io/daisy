@@ -49,6 +49,10 @@ def Base_Tests(String base, String id) {
                 sh "docker system prune -f || true && docker run --net=none -i --rm --name ${TEST_TAG}_daisy_unit_tests -v ${WORKSPACE}/build/src/unit_tests_dbms:/unit_tests_dbms -v ${WORKSPACE}/reports:/test_output -e TEST_TAG=${TEST_TAG} daisy/clickhouse-unit-tests-runner "
             }
         }
+    } else {
+        return {
+            echo "unknown test \"${id}\""
+        }
     }
 }
 
@@ -89,7 +93,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Style_Check'
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Style_Check"
                         }
                     }
                     steps {
@@ -109,7 +113,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Static_Analyzer'
+                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Static_Analyzer'
                         }
                     }
                     steps {
@@ -135,7 +139,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_ASan'
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_ASan"
                         }
                     }
                     environment {
@@ -168,7 +172,7 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                            sh "docker rm -f ${BUILD_NUMBER}_ASan_daisy_integration_tests ${BUILD_NUMBER}_ASan_daisy_statelest_tests ${BUILD_NUMBER}_ASan_daisy_stateful_tests ${BUILD_NUMBER}_ASan_daisy_stateful_tests"
+                            sh "docker rm -f ${BUILD_NUMBER}_ASan_daisy_integration_tests ${BUILD_NUMBER}_ASan_daisy_statelest_tests ${BUILD_NUMBER}_ASan_daisy_stateful_tests ${BUILD_NUMBER}_ASan_daisy_stateful_tests || true"
                         }
                     }
                 }
@@ -177,7 +181,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_TSan'
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_TSan"
                         }
                     }
                     environment {
@@ -210,7 +214,7 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                            sh "docker rm -f ${BUILD_NUMBER}_TSan_daisy_integration_tests ${BUILD_NUMBER}_TSan_daisy_statelest_tests ${BUILD_NUMBER}_TSan_daisy_stateful_tests ${BUILD_NUMBER}_TSan_daisy_stateful_tests"
+                            sh "docker rm -f ${BUILD_NUMBER}_TSan_daisy_integration_tests ${BUILD_NUMBER}_TSan_daisy_statelest_tests ${BUILD_NUMBER}_TSan_daisy_stateful_tests ${BUILD_NUMBER}_TSan_daisy_stateful_tests || true"
                         }
                     }
                 }
@@ -219,7 +223,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_MSan'
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_MSan"
                         }
                     }
                     environment {
@@ -252,7 +256,7 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                            sh "docker rm -f ${BUILD_NUMBER}_MSan_daisy_integration_tests ${BUILD_NUMBER}_MSan_daisy_statelest_tests ${BUILD_NUMBER}_MSan_daisy_stateful_tests ${BUILD_NUMBER}_MSan_daisy_stateful_tests"
+                            sh "docker rm -f ${BUILD_NUMBER}_MSan_daisy_integration_tests ${BUILD_NUMBER}_MSan_daisy_statelest_tests ${BUILD_NUMBER}_MSan_daisy_stateful_tests ${BUILD_NUMBER}_MSan_daisy_stateful_tests || true"
                         }
                     }
                 }
@@ -261,7 +265,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_UbSan'
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_UbSan"
                         }
                     }
                     environment {
@@ -294,7 +298,7 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                            sh "docker rm -f ${BUILD_NUMBER}_UbSan_daisy_integration_tests ${BUILD_NUMBER}_UbSan_daisy_statelest_tests ${BUILD_NUMBER}_UbSan_daisy_stateful_tests ${BUILD_NUMBER}_UbSan_daisy_stateful_tests"
+                            sh "docker rm -f ${BUILD_NUMBER}_UbSan_daisy_integration_tests ${BUILD_NUMBER}_UbSan_daisy_statelest_tests ${BUILD_NUMBER}_UbSan_daisy_stateful_tests ${BUILD_NUMBER}_UbSan_daisy_stateful_tests || true"
                         }
                     }
                 }
@@ -303,7 +307,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace '/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_For_Coverage'
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_For_Coverage"
                         }
                     }
                     environment {
@@ -336,7 +340,7 @@ pipeline {
                             steps {
                                 withEnv(["COVERAGE_DIR=reports/${BUILD_NUMBER}_coverage_reports"]) {
                                     sh "mkdir -p ${COVERAGE_DIR} && find . -path './reports' -prune -o -name '*.profraw' | xargs -i cp --force --backup=numbered {} ${COVERAGE_DIR}/ | true"
-                                    sh "llvm-profdata-12 merge -sparse ${COVERAGE_DIR}/* -o reports/coverage_reports/clickhouse.profdata"
+                                    sh "llvm-profdata-12 merge -sparse ${COVERAGE_DIR}/*.profraw -o reports/coverage_reports/clickhouse.profdata"
                                     sh "llvm-cov-12 export ${CLICKHOUSE_TESTS_SERVER_BIN_PATH} -instr-profile=${COVERAGE_DIR}/clickhouse.profdata -j=16 -format=lcov -ignore-filename-regex '.*contrib.*' > ${COVERAGE_DIR}/output.lcov"
                                     sh "genhtml ${COVERAGE_DIR}/output.lcov --ignore-errors source --output-directory \"${COVERAGE_DIR}/html/\""
                                     sh "cp ${COVERAGE_DIR}/html/index.html reports/${BUILD_NUMBER}_coverage_index.html && tar -czvf reports/${BUILD_NUMBER}_coverage_reports.tar.gz ${COVERAGE_DIR}/html/*"
@@ -347,7 +351,7 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
-                            sh "docker rm -f ${BUILD_NUMBER}_Coverage_daisy_integration_tests ${BUILD_NUMBER}_Coverage_daisy_statelest_tests ${BUILD_NUMBER}_Coverage_daisy_stateful_tests ${BUILD_NUMBER}_Coverage_daisy_stateful_tests"
+                            sh "docker rm -f ${BUILD_NUMBER}_Coverage_daisy_integration_tests ${BUILD_NUMBER}_Coverage_daisy_statelest_tests ${BUILD_NUMBER}_Coverage_daisy_stateful_tests ${BUILD_NUMBER}_Coverage_daisy_stateful_tests || true"
                         }
                     }
                 }
