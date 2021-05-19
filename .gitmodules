@@ -153,13 +153,6 @@
 [submodule "contrib/openldap"]
 	path = contrib/openldap
 	url = https://github.com/ClickHouse-Extras/openldap.git
-[submodule "contrib/AMQP-CPP"]
-	path = contrib/AMQP-CPP
-	url = https://github.com/ClickHouse-Extras/AMQP-CPP.git
-[submodule "contrib/cassandra"]
-	path = contrib/cassandra
-	url = https://github.com/ClickHouse-Extras/cpp-driver.git
-	branch = clickhouse
 [submodule "contrib/libuv"]
 	path = contrib/libuv
 	url = https://github.com/ClickHouse-Extras/libuv.git
@@ -209,12 +202,6 @@
 [submodule "contrib/fast_float"]
 	path = contrib/fast_float
 	url = https://github.com/fastfloat/fast_float
-[submodule "contrib/libpqxx"]
-	path = contrib/libpqxx
-	url = https://github.com/jtv/libpqxx
-[submodule "contrib/libpq"]
-	path = contrib/libpq
-	url = https://github.com/ClickHouse-Extras/libpq
 [submodule "contrib/boringssl"]
 	path = contrib/boringssl
 	url = https://github.com/ClickHouse-Extras/boringssl.git

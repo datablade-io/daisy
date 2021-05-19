@@ -22,11 +22,6 @@
 #    include "config_core.h"
 #endif
 
-#if USE_MYSQL
-#   include <Databases/MySQL/DatabaseMaterializeMySQL.h>
-#endif
-
-
 namespace DB
 {
 
@@ -168,7 +163,7 @@ bool InterpreterDropQuery::deleteDatabaseDistributed(const ASTDropQuery & query)
         {
             throw Exception(fmt::format("Databases {} does not exist.", query.database), ErrorCodes::UNKNOWN_DATABASE);
         }
- 
+
         auto * log = &Poco::Logger::get("InterpreterDropQuery");
 
         auto query_str = queryToString(query);
@@ -452,10 +447,6 @@ BlockIO InterpreterDropQuery::executeToDatabaseImpl(const ASTDropQuery & query, 
             if (query.kind == ASTDropQuery::Kind::Detach && query.permanently)
                 throw Exception("DETACH PERMANENTLY is not implemented for databases", ErrorCodes::NOT_IMPLEMENTED);
 
-#if USE_MYSQL
-            if (database->getEngineName() == "MaterializeMySQL")
-                stopDatabaseSynchronization(database);
-#endif
             if (auto * replicated = typeid_cast<DatabaseReplicated *>(database.get()))
                 replicated->stopReplication();
 

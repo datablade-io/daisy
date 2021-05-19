@@ -10,10 +10,6 @@
 #    include "config_core.h"
 #endif
 
-#if USE_MYSQL
-#   include <mysqlxx/PoolFactory.h>
-#endif
-
 namespace DB
 {
 
@@ -136,9 +132,6 @@ DictionaryStructure ExternalDictionariesLoader::getDictionaryStructure(const Obj
 
 void ExternalDictionariesLoader::resetAll()
 {
-#if USE_MYSQL
-    mysqlxx::PoolFactory::instance().reset();
-#endif
 }
 
 }

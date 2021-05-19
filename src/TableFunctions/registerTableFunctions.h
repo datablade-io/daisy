@@ -34,14 +34,6 @@ void registerTableFunctionJDBC(TableFunctionFactory & factory);
 
 void registerTableFunctionView(TableFunctionFactory & factory);
 
-#if USE_MYSQL
-void registerTableFunctionMySQL(TableFunctionFactory & factory);
-#endif
-
-#if USE_LIBPQXX
-void registerTableFunctionPostgreSQL(TableFunctionFactory & factory);
-#endif
-
 void registerTableFunctionDictionary(TableFunctionFactory & factory);
 
 void registerTableFunctions();

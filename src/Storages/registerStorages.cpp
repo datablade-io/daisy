@@ -40,30 +40,12 @@ void registerStorageHDFS(StorageFactory & factory);
 void registerStorageODBC(StorageFactory & factory);
 void registerStorageJDBC(StorageFactory & factory);
 
-#if USE_MYSQL
-void registerStorageMySQL(StorageFactory & factory);
-#endif
-
-void registerStorageMongoDB(StorageFactory & factory);
-
 #if USE_RDKAFKA
 void registerStorageKafka(StorageFactory & factory);
 #endif
 
-#if USE_AMQPCPP
-void registerStorageRabbitMQ(StorageFactory & factory);
-#endif
-
 #if USE_ROCKSDB
 void registerStorageEmbeddedRocksDB(StorageFactory & factory);
-#endif
-
-#if USE_LIBPQXX
-void registerStoragePostgreSQL(StorageFactory & factory);
-#endif
-
-#if USE_MYSQL || USE_LIBPQXX
-void registerStorageExternalDistributed(StorageFactory & factory);
 #endif
 
 void registerStorages()
@@ -101,30 +83,12 @@ void registerStorages()
     registerStorageODBC(factory);
     registerStorageJDBC(factory);
 
-    #if USE_MYSQL
-    registerStorageMySQL(factory);
-    #endif
-
-    registerStorageMongoDB(factory);
-
     #if USE_RDKAFKA
     registerStorageKafka(factory);
     #endif
 
-    #if USE_AMQPCPP
-    registerStorageRabbitMQ(factory);
-    #endif
-
     #if USE_ROCKSDB
     registerStorageEmbeddedRocksDB(factory);
-    #endif
-
-    #if USE_LIBPQXX
-    registerStoragePostgreSQL(factory);
-    #endif
-
-    #if USE_MYSQL || USE_LIBPQXX
-    registerStorageExternalDistributed(factory);
     #endif
 }
 
