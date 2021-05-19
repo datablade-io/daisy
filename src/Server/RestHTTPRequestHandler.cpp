@@ -368,6 +368,11 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
         if (!authenticateUser(request_context, request, params, response))
             return; // '401 Unauthorized' response with 'Negotiate' has been sent at this point.
 
+        auto database = getDatabaseByUser(client_info.current_user);
+
+        if (!database.empty())
+            request_context->setCurrentDatabase(database);
+
         auto router_handler = RestRouterFactory::instance().get(request.getURI(), request.getMethod(), request_context);
         if (router_handler == nullptr)
         {
@@ -400,6 +405,14 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
 
 RestHTTPRequestHandler::RestHTTPRequestHandler(IServer & server_, const String & name) : server(server_), log(&Poco::Logger::get(name))
 {
+}
+
+/// FIXME : Get the corresponding database according to the user name
+String RestHTTPRequestHandler::getDatabaseByUser(const String & /*user*/) const
+{
+    String database = "default";
+
+    return database;
 }
 
 void RestHTTPRequestHandler::trySendExceptionToClient(
