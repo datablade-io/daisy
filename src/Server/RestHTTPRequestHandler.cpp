@@ -368,7 +368,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
         if (!authenticateUser(request_context, request, params, response))
             return; // '401 Unauthorized' response with 'Negotiate' has been sent at this point.
 
-        auto database = getDatabaseByUser(client_info.current_user);
+        const auto & database = getDatabaseByUser(client_info.current_user);
 
         if (!database.empty())
             request_context->setCurrentDatabase(database);
