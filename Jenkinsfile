@@ -93,14 +93,16 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Style_Check"
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Style_Check"
                         }
                     }
                     steps {
                         fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
 
-                        sh "mkdir -p reports && rm -rf reports/*"
-                        sh "./utils/check-style/check-style-all | tee reports/${BUILD_NUMBER}_check-style-report.txt"
+                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                            sh "mkdir -p reports && rm -rf reports/*"
+                            sh "./utils/check-style/check-style-all | tee reports/${BUILD_NUMBER}_check-style-report.txt"
+                        }
                     }
                     post {
                         always {
@@ -119,13 +121,15 @@ pipeline {
                     steps {
                         fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
 
-                        sh "mkdir -p reports && rm -rf reports/*"
-                        dir ("build_static_analyzer") {
-                            // sh "NINJA_FLAGS=-k0 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12 -DENABLE_TESTS=OFF -DENABLE_CLANG_TIDY=1"
-                            // sh "NINJA_FLAGS=-k0 ninja -j8"
-                            // sh "scan-build-12 -v -V -o ../reports/result/scan-build-results ninja -j8 | tee ../reports/${BUILD_NUMBER}_scan-build-report.txt"
-                            // sh "codechecker analyze compile_commands.json -o ../reports/result"
-                            // sh "codechecker parse ../reports/result -e html -o ../reports/${BUILD_NUMBER}_codechecker-reports.html"
+                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                            sh "mkdir -p reports && rm -rf reports/*"
+                            dir ("build_static_analyzer") {
+                                sh "NINJA_FLAGS=-k0 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/clang-12 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-12 -DENABLE_TESTS=OFF -DENABLE_CLANG_TIDY=1"
+                                sh "NINJA_FLAGS=-k0 ninja -j8"
+                                sh "scan-build-12 -v -V -o ../reports/result/scan-build-results ninja -j8 | tee ../reports/${BUILD_NUMBER}_scan-build-report.txt || true"
+                                sh "codechecker analyze compile_commands.json -o ../reports/result"
+                                sh "codechecker parse ../reports/result -e html -o ../reports/${BUILD_NUMBER}_codechecker-reports.html"
+                            }
                         }
                     }
                     post {
@@ -139,7 +143,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_ASan"
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_ASan"
                         }
                     }
                     environment {
@@ -159,12 +163,14 @@ pipeline {
                         }
                         stage ('3.2 ASan: Parallel Tests') {
                             steps {
-                                script {
-                                    def tests = [:]
-                                    for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On ASan", Base_Tests('ASan', id))
+                                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                                    script {
+                                        def tests = [:]
+                                        for (id in params.TESTS.tokenize(',')) {
+                                            tests.put("Test-" + id + " On ASan", Base_Tests('ASan', id))
+                                        }
+                                        parallel tests
                                     }
-                                    parallel tests
                                 }
                             }
                         }
@@ -181,7 +187,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_TSan"
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_TSan"
                         }
                     }
                     environment {
@@ -201,12 +207,14 @@ pipeline {
                         }
                         stage ('4.2 TSan: Parallel Tests') {
                             steps {
-                                script {
-                                    def tests = [:]
-                                    for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On TSan", Base_Tests('TSan', id))
+                                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                                    script {
+                                        def tests = [:]
+                                        for (id in params.TESTS.tokenize(',')) {
+                                            tests.put("Test-" + id + " On TSan", Base_Tests('TSan', id))
+                                        }
+                                        parallel tests
                                     }
-                                    parallel tests
                                 }
                             }
                         }
@@ -223,7 +231,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_MSan"
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_MSan"
                         }
                     }
                     environment {
@@ -243,12 +251,14 @@ pipeline {
                         }
                         stage ('5.2 MSan: Parallel Tests') {
                             steps {
-                                script {
-                                    def tests = [:]
-                                    for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On MSan", Base_Tests('MSan', id))
+                                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                                    script {
+                                        def tests = [:]
+                                        for (id in params.TESTS.tokenize(',')) {
+                                            tests.put("Test-" + id + " On MSan", Base_Tests('MSan', id))
+                                        }
+                                        parallel tests
                                     }
-                                    parallel tests
                                 }
                             }
                         }
@@ -265,7 +275,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_On_UbSan"
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_On_UbSan"
                         }
                     }
                     environment {
@@ -285,12 +295,14 @@ pipeline {
                         }
                         stage ('6.2 UbSan: Parallel Tests') {
                             steps {
-                                script {
-                                    def tests = [:]
-                                    for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " On UbSan", Base_Tests('UbSan', id))
+                                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                                    script {
+                                        def tests = [:]
+                                        for (id in params.TESTS.tokenize(',')) {
+                                            tests.put("Test-" + id + " On UbSan", Base_Tests('UbSan', id))
+                                        }
+                                        parallel tests
                                     }
-                                    parallel tests
                                 }
                             }
                         }
@@ -307,7 +319,7 @@ pipeline {
                     agent {
                         node {
                             label 'ph'
-                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd_${BUILD_NUMBER}/CICD_Tests_For_Coverage"
+                            customWorkspace "/data/wangjinlong1/jenkins-agent/workspace/Daisy-CICD_lisen_test_cicd/CICD_Tests_For_Coverage"
                         }
                     }
                     environment {
@@ -327,21 +339,23 @@ pipeline {
                         }
                         stage ('7.2 Coverage: Parallel Tests') {
                             steps {
-                                script {
-                                    def tests = [:]
-                                    for (id in params.TESTS.tokenize(',')) {
-                                        tests.put("Test-" + id + " For Coverage", Base_Tests('Coverage', id))
+                                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                                    script {
+                                        def tests = [:]
+                                        for (id in params.TESTS.tokenize(',')) {
+                                            tests.put("Test-" + id + " For Coverage", Base_Tests('Coverage', id))
+                                        }
+                                        parallel tests
                                     }
-                                    parallel tests
                                 }
                             }
                         }
                         stage ('7.3 Coverage: Generate Coverage Report') {
                             steps {
-                                withEnv(["COVERAGE_DIR=reports/${BUILD_NUMBER}_coverage_reports"]) {
-                                    sh "mkdir -p ${COVERAGE_DIR} && find . -path './reports' -prune -o -name '*.profraw' | xargs -i cp --force --backup=numbered {} ${COVERAGE_DIR}/ | true"
-                                    sh "llvm-profdata-12 merge -sparse ${COVERAGE_DIR}/*.profraw -o reports/coverage_reports/clickhouse.profdata"
-                                    sh "llvm-cov-12 export ${CLICKHOUSE_TESTS_SERVER_BIN_PATH} -instr-profile=${COVERAGE_DIR}/clickhouse.profdata -j=16 -format=lcov -ignore-filename-regex '.*contrib.*' > ${COVERAGE_DIR}/output.lcov"
+                                withEnv(["COVERAGE_DIR=reports/coverage_reports"]) {
+                                    sh "mkdir -p ${COVERAGE_DIR} && find . -path './reports' -prune -o -name '*.profraw' | xargs -i cp --force --backup=numbered {} ${COVERAGE_DIR}/ || true"
+                                    sh "llvm-profdata-12 merge -sparse ${COVERAGE_DIR}/* --failure-mode=all -o reports/coverage_reports/clickhouse.profdata"
+                                    sh "llvm-cov-12 export ${CLICKHOUSE_BIN_DIR}/clickhouse -instr-profile=${COVERAGE_DIR}/clickhouse.profdata -j=16 -format=lcov -ignore-filename-regex '.*contrib.*' > ${COVERAGE_DIR}/output.lcov"
                                     sh "genhtml ${COVERAGE_DIR}/output.lcov --ignore-errors source --output-directory \"${COVERAGE_DIR}/html/\""
                                     sh "cp ${COVERAGE_DIR}/html/index.html reports/${BUILD_NUMBER}_coverage_index.html && tar -czvf reports/${BUILD_NUMBER}_coverage_reports.tar.gz ${COVERAGE_DIR}/html/*"
                                 }
