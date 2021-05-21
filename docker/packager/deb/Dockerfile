@@ -4,7 +4,7 @@ FROM ubuntu:20.04
 RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
 RUN apt-get clean
 
-ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=11
+ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=12
 
 RUN apt-get update \
     && apt-get install ca-certificates lsb-release wget gnupg apt-transport-https \
@@ -40,8 +40,10 @@ RUN apt-get update \
         alien \
         clang-10 \
         clang-11 \
+        clang-12 \
         clang-tidy-10 \
         clang-tidy-11 \
+        clang-tidy-12 \
         cmake \
         debhelper \
         devscripts \
@@ -52,10 +54,13 @@ RUN apt-get update \
         gperf \
         lld-10 \
         lld-11 \
+        lld-12 \
         llvm-10 \
         llvm-10-dev \
         llvm-11 \
         llvm-11-dev \
+        llvm-12 \
+        llvm-12-dev \
         moreutils \
         ninja-build \
         perl \
