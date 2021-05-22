@@ -719,16 +719,17 @@ void CatalogService::processRecords(const IDistributedWriteAheadLog::RecordPtrs 
     }
 }
 
-Int32 CatalogService::getTableDefinicationNums(const String & database, const String & table) const
+std::pair<Int32, Int32> CatalogService::shardAndReplicationFactor(const String & database, const String & table) const
 {
     const auto & tables = findTableByName(database, table);
 
     if (tables.empty())
-        return 0;
+        return {0, 0};
 
-    return searchIntValueByRegex(PARSE_REPLICATION_REGEX, tables[0]->engine_full)
-        * searchIntValueByRegex(PARSE_SHARDS_REGEX, tables[0]->engine_full);
+    return {
+        searchIntValueByRegex(PARSE_REPLICATION_REGEX, tables[0]->engine_full),
+        searchIntValueByRegex(PARSE_SHARDS_REGEX, tables[0]->engine_full)};
 }
 
-
 }
+

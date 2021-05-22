@@ -473,8 +473,10 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
         return;
     }
 
+    auto [replication_factor, shards] = catalog.shardAndReplicationFactor(database, table);
+    auto definication_size = replication_factor * shards;
     int hosts_size = target_hosts.size();
-    auto const & definication_size = catalog.getTableDefinicationNums(database, table);
+
     if (hosts_size != definication_size)
     {
         LOG_ERROR(
