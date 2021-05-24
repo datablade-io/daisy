@@ -79,9 +79,6 @@
 
 #include <common/ClockUtils.h>
 
-/// Daisy : start
-#include <Access/User.h>
-/// Daisy : end
 
 namespace DB
 {

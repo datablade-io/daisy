@@ -16,7 +16,6 @@
 #include <Common/typeid_cast.h>
 
 /// Daisy : start
-#include <Access/User.h>
 #include <Databases/DatabaseReplicated.h>
 #include <DistributedMetadata/CatalogService.h>
 #include <common/ClockUtils.h>

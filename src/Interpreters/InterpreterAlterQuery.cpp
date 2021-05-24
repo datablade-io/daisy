@@ -28,10 +28,6 @@
 
 #include <algorithm>
 
-/// Daisy : start
-#include <Access/User.h>
-/// Daisy : end
-
 
 namespace DB
 {
