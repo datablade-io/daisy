@@ -410,7 +410,7 @@ String RestHTTPRequestHandler::getDatabaseByUser(const String & user) const
 {
     String database = "default";
 
-    if (!database.empty())
+    if (database.empty())
     {
         throw Exception(
             "Unknown database: Cannot find database information corresponding to user '" + user + "' ", ErrorCodes::UNKNOWN_DATABASE);
