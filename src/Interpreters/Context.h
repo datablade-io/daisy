@@ -388,6 +388,10 @@ public:
     String getUserName() const;
     std::optional<UUID> getUserID() const;
 
+    /// Daisy : starts
+    String getPasswordByUserName(const String & user_name) const;
+    /// Daisy : ends
+
     void setCurrentRoles(const std::vector<UUID> & current_roles_);
     void setCurrentRolesDefault();
     boost::container::flat_set<UUID> getCurrentRoles() const;

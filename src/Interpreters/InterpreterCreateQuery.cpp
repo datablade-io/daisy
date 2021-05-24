@@ -77,6 +77,7 @@
 
 #include <common/ClockUtils.h>
 
+
 namespace DB
 {
 
@@ -867,7 +868,7 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
         if (create.storage->engine->name == "DistributedMergeTree")
         {
             throw Exception(
-                    "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
+                "Distributed environment is not setup. Unable to create table with DistributedMergeTree engine", ErrorCodes::CONFIG_ERROR);
         }
         return false;
     }
@@ -923,15 +924,13 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
 
     Int32 shards = storage->getShards();
     Int32 replication_factor = storage->getReplicationFactor();
-    std::vector<std::pair<String, Int32>> int32_cols = {
-        {"shards", shards},
-        {"replication_factor", replication_factor}};
+    std::vector<std::pair<String, Int32>> int32_cols = {{"shards", shards}, {"replication_factor", replication_factor}};
 
     /// Milliseconds since epoch
     std::vector<std::pair<String, UInt64>> uint64_cols = {{"timestamp", MonotonicMilliseconds::now()}};
 
     /// Schema: (payload, database, table, timestamp, query_id, user, shards, replication_factor)
-    Block  block = buildBlock(string_cols, int32_cols, uint64_cols);
+    Block block = buildBlock(string_cols, int32_cols, uint64_cols);
 
     appendDDLBlock(std::move(block), ctx, {"table_type"}, IDistributedWriteAheadLog::OpCode::CREATE_TABLE, log);
 
@@ -942,7 +941,7 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
 }
 
 bool InterpreterCreateQuery::createDatabaseDistributed(ASTCreateQuery & create)
-{   
+{
     auto ctx = getContext();
     if (!ctx->isDistributed())
     {
@@ -970,12 +969,11 @@ bool InterpreterCreateQuery::createDatabaseDistributed(ASTCreateQuery & create)
         auto query_str = queryToString(create);
         LOG_INFO(log, "Create database query={} query_id={}", query_str, ctx->getCurrentQueryId());
 
-        std::vector<std::pair<String, String>> string_cols = {
-            {"payload", ctx->getQueryParameters().at("_payload")},
-            {"database", create.database},
-            {"query_id", ctx->getCurrentQueryId()},
-            {"user", ctx->getUserName()}
-        };
+        std::vector<std::pair<String, String>> string_cols
+            = {{"payload", ctx->getQueryParameters().at("_payload")},
+               {"database", create.database},
+               {"query_id", ctx->getCurrentQueryId()},
+               {"user", ctx->getUserName()}};
 
         std::vector<std::pair<String, Int32>> int32_cols;
 
@@ -987,8 +985,7 @@ bool InterpreterCreateQuery::createDatabaseDistributed(ASTCreateQuery & create)
 
         appendDDLBlock(std::move(block), ctx, {"table_type"}, IDistributedWriteAheadLog::OpCode::CREATE_DATABASE, log);
 
-        LOG_INFO(
-            log, "Request of create database query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
+        LOG_INFO(log, "Request of create database query={} query_id={} has been accepted", query_str, ctx->getCurrentQueryId());
 
         /// FIXME, project tasks status
         return true;
