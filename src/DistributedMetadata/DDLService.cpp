@@ -248,12 +248,7 @@ bool DDLService::validateSchema(const Block & block, const std::vector<String> &
 }
 
 Int32 DDLService::sendRequest(
-    const String & payload,
-    const Poco::URI & uri,
-    const String & method,
-    const String & query_id,
-    const String & user,
-    const String & password) const
+    const String & payload, const Poco::URI & uri, const String & method, const String & query_id, const String & user) const
 {
     /// One second for connect/send/receive
     ConnectionTimeouts timeouts({1, 0}, {1, 0}, {5, 0});
@@ -268,6 +263,8 @@ Int32 DDLService::sendRequest(
         request.setContentType("application/json");
         request.add("X-ClickHouse-Query-Id", query_id);
         request.add("X-ClickHouse-User", user);
+
+        const String & password = global_context->getPasswordByUserName(user);
         if (!password.empty())
         {
             request.add("X-ClickHouse-Key", password);
@@ -325,17 +322,12 @@ Int32 DDLService::sendRequest(
 }
 
 Int32 DDLService::doDDL(
-    const String & payload,
-    const Poco::URI & uri,
-    const String & method,
-    const String & query_id,
-    const String & user,
-    const String & password) const
+    const String & payload, const Poco::URI & uri, const String & method, const String & query_id, const String & user) const
 {
     Int32 err = ErrorCodes::OK;
     for (auto i = 0; i < MAX_RETRIES; ++i)
     {
-        err = sendRequest(payload, uri, method, query_id, user, password);
+        err = sendRequest(payload, uri, method, query_id, user);
         if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
         {
             return err;
@@ -366,7 +358,6 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
     String database = block.getByName("database").column->getDataAt(0).toString();
     String query_id = block.getByName("query_id").column->getDataAt(0).toString();
     String user = block.getByName("user").column->getDataAt(0).toString();
-    String password = block.getByName("password").column->getDataAt(0).toString();
     String payload = block.getByName("payload").column->getDataAt(0).toString();
     String table = block.getByName("table").column->getDataAt(0).toString();
     Int32 shards = block.getByName("shards").column->getInt(0);
@@ -399,7 +390,7 @@ void DDLService::createTable(IDistributedWriteAheadLog::RecordPtr record)
             {
                 target_hosts[i * shards + j].setQueryParameters(
                     Poco::URI::QueryParameters{{"distributed_ddl", "false"}, {"shard", std::to_string(j)}});
-                auto err = doDDL(payload, target_hosts[i * shards + j], Poco::Net::HTTPRequest::HTTP_POST, query_id, user, password);
+                auto err = doDDL(payload, target_hosts[i * shards + j], Poco::Net::HTTPRequest::HTTP_POST, query_id, user);
                 if (err == ErrorCodes::UNRETRIABLE_ERROR)
                 {
                     failDDL(query_id, user, payload, "Unable to fulfill the request due to unrecoverable failure");
@@ -478,7 +469,6 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
     String table = block.getByName("table").column->getDataAt(0).toString();
     String query_id = block.getByName("query_id").column->getDataAt(0).toString();
     String user = block.getByName("user").column->getDataAt(0).toString();
-    String password = block.getByName("password").column->getDataAt(0).toString();
     String payload = block.getByName("payload").column->getDataAt(0).toString();
 
     auto target_hosts = getTargetURIs(record, database, table, method);
@@ -513,7 +503,7 @@ void DDLService::mutateTable(IDistributedWriteAheadLog::RecordPtr record, const 
     for (auto & uri : target_hosts)
     {
         uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        doDDL(payload, uri, method, query_id, user, password);
+        doDDL(payload, uri, method, query_id, user);
     }
 
     succeedDDL(query_id, user, payload);
@@ -533,7 +523,6 @@ void DDLService::mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, con
     String database = block.getByName("database").column->getDataAt(0).toString();
     String query_id = block.getByName("query_id").column->getDataAt(0).toString();
     String user = block.getByName("user").column->getDataAt(0).toString();
-    String password = block.getByName("password").column->getDataAt(0).toString();
 
     const auto & nodes = placement.nodes();
     if (nodes.empty())
@@ -577,7 +566,7 @@ void DDLService::mutateDatabase(IDistributedWriteAheadLog::RecordPtr record, con
     for (auto & uri : target_hosts)
     {
         uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        doDDL(payload, uri, method, query_id, user, password);
+        doDDL(payload, uri, method, query_id, user);
     }
 
     succeedDDL(query_id, user, payload);

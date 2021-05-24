@@ -246,8 +246,7 @@ bool InterpreterAlterQuery::alterTableDistributed(const ASTAlterQuery & query)
                {"database", query.database},
                {"table", query.table},
                {"query_id", ctx->getCurrentQueryId()},
-               {"user", ctx->getUserName()},
-               {"password", ctx->getUser()->authentication.getPassword()}};
+               {"user", ctx->getUserName()}};
 
         std::vector<std::pair<String, Int32>> int32_cols;
 

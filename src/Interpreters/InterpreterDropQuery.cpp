@@ -127,8 +127,7 @@ bool InterpreterDropQuery::deleteTableDistributed(const ASTDropQuery & query)
                {"database", query.database},
                {"table", query.table},
                {"query_id", ctx->getCurrentQueryId()},
-               {"user", ctx->getUserName()},
-               {"password", ctx->getUser()->authentication.getPassword()}};
+               {"user", ctx->getUserName()}};
 
         std::vector<std::pair<String, Int32>> int32_cols;
 
@@ -182,8 +181,7 @@ bool InterpreterDropQuery::deleteDatabaseDistributed(const ASTDropQuery & query)
             = {{"payload", ctx->getQueryParameters().at("_payload")},
                {"database", query.database},
                {"query_id", ctx->getCurrentQueryId()},
-               {"user", ctx->getUserName()},
-               {"password", ctx->getUser()->authentication.getPassword()}};
+               {"user", ctx->getUserName()}};
 
         std::vector<std::pair<String, Int32>> int32_cols;
 

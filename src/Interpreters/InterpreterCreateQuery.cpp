@@ -904,8 +904,7 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
            {"database", current_database},
            {"table", create.table},
            {"query_id", ctx->getCurrentQueryId()},
-           {"user", ctx->getUserName()},
-           {"password", ctx->getUser()->authentication.getPassword()}};
+           {"user", ctx->getUserName()}};
 
     Int32 shards = storage->getShards();
     Int32 replication_factor = storage->getReplicationFactor();
@@ -958,8 +957,7 @@ bool InterpreterCreateQuery::createDatabaseDistributed(ASTCreateQuery & create)
             = {{"payload", ctx->getQueryParameters().at("_payload")},
                {"database", create.database},
                {"query_id", ctx->getCurrentQueryId()},
-               {"user", ctx->getUserName()},
-               {"password", ctx->getUser()->authentication.getPassword()}};
+               {"user", ctx->getUserName()}};
 
         std::vector<std::pair<String, Int32>> int32_cols;
 
