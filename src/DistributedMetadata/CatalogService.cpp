@@ -1,17 +1,12 @@
 #include "CatalogService.h"
 
-#include <Columns/ColumnsNumber.h>
 #include <Core/Block.h>
-#include <DataStreams/AsynchronousBlockInputStream.h>
-#include <DataStreams/BlockIO.h>
-#include <IO/WriteBufferFromString.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/executeSelectQuery.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/parseQuery.h>
-#include <Processors/Executors/PullingAsyncPipelineExecutor.h>
 #include <Storages/IStorage.h>
 #include <Common/Exception.h>
 #include <common/getFQDNOrHostName.h>
@@ -561,12 +556,6 @@ CatalogService::TableContainerPerNode CatalogService::buildCatalog(const NodePtr
         if (table->engine == "DistributedMergeTree")
         {
             table->shard = searchIntValueByRegex(PARSE_SHARD_REGEX, table->engine_full);
-        }
-
-        if (table->database == "system")
-        {
-            /// Ignore tables in `system` database
-            continue;
         }
 
         DatabaseTableShard key = std::make_pair(table->database, std::make_pair(table->name, table->shard));
