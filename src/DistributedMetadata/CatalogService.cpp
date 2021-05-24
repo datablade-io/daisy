@@ -45,8 +45,8 @@ const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
 const String THIS_HOST = getFQDNOrHostName();
 
 const String PARSE_SHARD_REGEX = "shard\\s*=\\s*(\\d+)";
-const String PARSE_SHARDS_REGEX = "DistributedMergeTree\\(\\s*\\d+,\\s*(\\d+),\\s*\\d+\\)";
-const String PARSE_REPLICATION_REGEX = "DistributedMergeTree\\(\\s*(\\d+),\\s*\\d+,\\s*\\d+\\)";
+const String PARSE_SHARDS_REGEX = "DistributedMergeTree\\(\\s*\\d+,\\s*(\\d+)\\s*,";
+const String PARSE_REPLICATION_REGEX = "DistributedMergeTree\\(\\s*(\\d+),\\s*\\d+\\s*,";
 
 Int32 searchIntValueByRegex(const String & regex_s, const String & str)
 {
