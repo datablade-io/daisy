@@ -215,11 +215,11 @@ void SearchHandler::setQuerySettings() const
     String default_format;
     for (const auto & [key, value] : *query_parameters)
     {
+        if (param_could_be_skipped(key))
+            continue;
+
         if (key == "default_format")
             default_format = value;
-        else if (param_could_be_skipped(key))
-        {
-        }
         else
         {
             /// Other than query parameters are treated as settings.
