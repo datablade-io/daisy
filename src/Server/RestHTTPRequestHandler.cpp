@@ -369,9 +369,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
             return; // '401 Unauthorized' response with 'Negotiate' has been sent at this point.
 
         const auto & database = getDatabaseByUser(client_info.current_user);
-
-        if (!database.empty())
-            request_context->setCurrentDatabase(database);
+        request_context->setCurrentDatabase(database);
 
         auto router_handler = RestRouterFactory::instance().get(request.getURI(), request.getMethod(), request_context);
         if (router_handler == nullptr)
@@ -408,9 +406,15 @@ RestHTTPRequestHandler::RestHTTPRequestHandler(IServer & server_, const String &
 }
 
 /// FIXME : Get the corresponding database according to the user name
-String RestHTTPRequestHandler::getDatabaseByUser(const String & /*user*/) const
+String RestHTTPRequestHandler::getDatabaseByUser(const String & user) const
 {
     String database = "default";
+
+    if (!database.empty())
+    {
+        throw Exception(
+            "Unknown database: Cannot find database information corresponding to user '" + user + "' ", ErrorCodes::UNKNOWN_DATABASE);
+    }
 
     return database;
 }
