@@ -210,39 +210,178 @@ pipeline {
     agent any
     options {
         skipDefaultCheckout()
+        timestamps()
+
     }
 
     parameters {
         string(name: 'TESTS', defaultValue: 'integration,statelest,stateful,unit', description: 'Tests 测试项标识符')
         string(name: 'TESTS_IMAGE_TAG', defaultValue: env.BUILD_NUMBER, description: '测试镜像TAG e.g. latest BUILD_NUMBER 100')
+    
+        booleanParam(name: 'CLEAN_WS', defaultValue: false, description: 'Will clear the workspace, and clone the entire daisy repository.')
+
+        booleanParam(name: 'REBUILD_DOCKER_IMAGE', defaultValue: false, description: "Will rebuild all docker image used by daisy.")
+
+        booleanParam(name: 'ALL_TEST', defaultValue: false, description: 'Run all test')
+        
+        booleanParam(name: 'SANITIZER', defaultValue: false, description: 'Run sanitizer')
+
+        booleanParam(name: 'COVERAGE', defaultValue: false, description: 'Generate code coverage report')
+
+        booleanParam(name: 'RELEASE', defaultValue: false, description: 'Generate release package')
+
+        text(name: 'TAG', defaultValue: '', description: "Enter the tag of this build, default value is {BRANCH_NAME}-{GIT_COMMIT}")
     }
+
     stages {
         stage('Fetch Source Code') {
             agent { label 'bj' }
             steps {
                 // echo "skip"
+                script {
+                    if(params.CLEAN_WS) {
+                        cleanWs()
+                    }
+                }
                 checkout scm
                 archiveSource()
             }
         }
-        stage ('Build Image') {
-            agent {
-                label 'ph'
-            }
+
+        stage('Build Docker Image') {
+            agent { label 'bj'}
             steps {
-                // echo "skip"
-                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
                 script {
-                    docker.withRegistry('https://cicddockerhub.com:5000') {
-                        docker.build("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}", "/data/jenkins/workspace/deb").push()
-                        docker.build("daisy/clickhouse-integration-tests-runner:${params.TESTS_IMAGE_TAG}", "${WORKSPACE}/docker/test/integration/runner/").push()
-                        docker.build("daisy/clickhouse-statelest-tests-runner:${params.TESTS_IMAGE_TAG}", "${WORKSPACE}/docker/test/stateless_unbundled/runner/").push()
-                        docker.build("daisy/clickhouse-stateful-tests-runner:${params.TESTS_IMAGE_TAG}", "--build-arg TAG=${params.TESTS_IMAGE_TAG} ${WORKSPACE}/docker/test/stateful/runner/").push()
-                        docker.build("daisy/clickhouse-unit-tests-runner:${params.TESTS_IMAGE_TAG}", "${WORKSPACE}/docker/test/unit/runner/").push()
+                    if(params.REBUILD_DOCKER_IMAGE) {
+                        // fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                        // sh "python3 utils/ci/build_images.py"
+                        // TODO: docker push
+                    } else {
+                        echo "Skip build docker image"
                     }
                 }
             }
         }
+                   
+        stage('Build Clang Tidy Binary') {
+            agent { 
+                node {
+                    label 'builder'
+                    customWorkspace "${env.WORKSPACE}/CICD_tests_on_clang"
+                }
+            }
+            steps {
+                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                copyCredentialFile("sccache_config", "sccache_dir")
+                
+                dir("docker/packager") {
+                    sh "./packager --package-type binary --cache=sccache --compiler=clang-12 --docker-image-repo=registry.foundary.zone:8360  --docker-image-version=sccache-clang-12 --output-dir ${env.WORKSPACE}/output --sccache_dir=${env.WORKSPACE}/sccache_dir --clang-tidy"
+                }
+            }
+        }
+
+        stage('Build Coverage Binary') {
+            agent { 
+                node {
+                    label 'builder'
+                    customWorkspace "${env.WORKSPACE}/CICD_tests_on_coverage"
+                }
+            }
+            steps {
+                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                copyCredentialFile("sccache_config", "sccache_dir")
+                
+                dir("docker/packager") {
+                    sh "./packager --package-type binary --cache=sccache --compiler=clang-12 --docker-image-repo=registry.foundary.zone:8360  --docker-image-version=sccache-clang-12 --output-dir ${env.WORKSPACE}/output --sccache_dir=${env.WORKSPACE}/sccache_dir --with-coverage"
+                }
+                
+                sh "tar -zcvf clickhouse-COVERAGE-${env.BUILD_TAG}.tar.gz ${env.WORKSPACE}/output/*"
+                archiveArtifacts artifacts: "clickhouse-COVERAGE-${env.BUILD_TAG}.tar.gz", followSymlinks: false
+            } 
+        }
+
+        stage('Build ASAN Binary') {
+            agent { 
+                node {
+                    label 'builder'
+                    customWorkspace "${env.WORKSPACE}/CICD_tests_on_asan"
+                }
+            }
+            steps {
+                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                copyCredentialFile("sccache_config", "sccache_dir")
+                
+                dir("docker/packager") {
+                    sh "./packager --package-type binary --cache=sccache --compiler=clang-12 --docker-image-repo=registry.foundary.zone:8360  --docker-image-version=sccache-clang-12 --output-dir ${env.WORKSPACE}/output --sccache_dir=${env.WORKSPACE}/sccache_dir --sanitizer=address"
+                }
+
+                sh "tar -zcvf clickhouse-ASAN-${env.BUILD_TAG}.tar.gz ${env.WORKSPACE}/output/*"
+                archiveArtifacts artifacts: "clickhouse-ASAN-${env.BUILD_TAG}.tar.gz", followSymlinks: false
+            }
+        }
+
+        stage('Build MSAN Binary') {
+            agent { 
+                node {
+                    label 'builder'
+                    customWorkspace "${env.WORKSPACE}/CICD_tests_on_msan"
+                }
+            }
+            steps {
+                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                copyCredentialFile("sccache_config", "sccache_dir")
+                
+                dir("docker/packager") {
+                    sh "./packager --package-type binary --cache=sccache --compiler=clang-12 --docker-image-repo=registry.foundary.zone:8360  --docker-image-version=sccache-clang-12 --output-dir ${env.WORKSPACE}/output --sccache_dir=${env.WORKSPACE}/sccache_dir --sanitizer=memory"
+                }
+
+                sh "tar -zcvf clickhouse-MSAN-${env.BUILD_TAG}.tar.gz ${env.WORKSPACE}/output/*"
+                archiveArtifacts artifacts: "clickhouse-MSAN-${env.BUILD_TAG}.tar.gz", followSymlinks: false
+            }
+        }
+
+        stage('Build TSAN Binary') {
+            agent { 
+                node {
+                    label 'builder'
+                    customWorkspace "${env.WORKSPACE}/CICD_tests_on_tsan"
+                }
+            }
+
+            steps {
+                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                copyCredentialFile("sccache_config", "sccache_dir")
+                
+                dir("docker/packager") {
+                    sh "./packager --package-type binary --cache=sccache --compiler=clang-12 --docker-image-repo=registry.foundary.zone:8360  --docker-image-version=sccache-clang-12 --output-dir ${env.WORKSPACE}/output --sccache_dir=${env.WORKSPACE}/sccache_dir --sanitizer=thread"
+                }
+
+                sh "tar -zcvf clickhouse-TSAN-${env.BUILD_TAG}.tar.gz ${env.WORKSPACE}/output/*"
+                archiveArtifacts artifacts: "clickhouse-TSAN-${env.BUILD_TAG}.tar.gz", followSymlinks: false
+            }
+        }
+
+        stage('Build USAN Binary') {
+            agent { 
+                node {
+                    label 'builder'
+                    customWorkspace "${env.WORKSPACE}/CICD_tests_on_usan"
+                }
+            }
+            
+            steps {
+                fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
+                copyCredentialFile("sccache_config", "sccache_dir")
+                
+                dir("docker/packager") {
+                    sh "./packager --package-type binary --cache=sccache --compiler=clang-12 --docker-image-repo=registry.foundary.zone:8360  --docker-image-version=sccache-clang-12 --output-dir ${env.WORKSPACE}/output --sccache_dir=${env.WORKSPACE}/sccache_dir --sanitizer=undefined"
+                }
+
+                sh "tar -zcvf clickhouse-USAN-${env.BUILD_TAG}.tar.gz ${env.WORKSPACE}/output/*"
+                archiveArtifacts artifacts: "clickhouse-USAN-${env.BUILD_TAG}.tar.gz", followSymlinks: false
+            }
+        }
+        
         stage ('Parallel Cases') {
             parallel {
                 stage ('Case-3: Tests On ASan') {
@@ -275,3 +414,4 @@ pipeline {
         }
     }
 }
+        
