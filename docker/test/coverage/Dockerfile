@@ -1,6 +1,9 @@
 # docker build -t yandex/clickhouse-test-coverage .
 FROM yandex/clickhouse-stateless-test
 
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
 RUN apt-get update -y \
     && env DEBIAN_FRONTEND=noninteractive \
         apt-get install --yes --no-install-recommends \
