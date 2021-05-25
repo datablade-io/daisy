@@ -33,6 +33,7 @@ bool ParserSelectQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
     ParserKeyword s_select("SELECT");
     ParserKeyword s_all("ALL");
+    ParserKeyword s_stream("STREAM");
     ParserKeyword s_distinct("DISTINCT");
     ParserKeyword s_distinct_on("DISTINCT ON");
     ParserKeyword s_from("FROM");
@@ -106,6 +107,9 @@ bool ParserSelectQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
         if (s_all.ignore(pos, expected))
             has_all = true;
+
+        if (s_stream.ignore(pos, expected))
+            select_query->stream = true;
 
         if (s_distinct_on.ignore(pos, expected))
         {
