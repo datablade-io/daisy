@@ -870,7 +870,7 @@ Int32 DistributedWriteAheadLogKafka::consume(IDistributedWriteAheadLog::ConsumeC
             Poco::Logger * log_)
             : callback(callback_), data(data_), ctx(ctx_), log(log_)
         {
-            records.reserve(1000);
+            records.reserve(100);
         }
     };
 
@@ -1007,6 +1007,7 @@ IDistributedWriteAheadLog::ConsumeResult DistributedWriteAheadLogKafka::consume(
             {
                 if (rkmessage->offset < walctx.offset)
                 {
+                    /// Ignore the message which has lower offset than what clients like to have
                     continue;
                 }
 

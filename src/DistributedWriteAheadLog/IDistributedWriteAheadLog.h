@@ -104,6 +104,7 @@ public:
         static RecordPtr read(const char * data, size_t size);
 
         Record(OpCode op_code_, Block && block_) : op_code(op_code_), block(std::move(block_)) { }
+        explicit Record(RecordSequenceNumber sn_) : sn(sn_) { }
     };
 
     constexpr static UInt8 WAL_VERSION = 1;

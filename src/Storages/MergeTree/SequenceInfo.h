@@ -98,6 +98,8 @@ bool operator<(const SequenceRange & lhs, const SequenceRange & rhs);
 
 using SequenceRanges = std::vector<SequenceRange>;
 
+String sequenceRangesToString(const SequenceRanges & sequence_ranges);
+
 struct SequenceInfo
 {
     SequenceRanges sequence_ranges;
@@ -140,6 +142,7 @@ using SequenceInfoPtr = std::shared_ptr<SequenceInfo>;
 SequenceInfoPtr
 mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 committed_sn, UInt64 max_idempotent_keys, Poco::Logger * log);
 
-/// Find missing sequence ranges according to committed sn and return missing sequence ranges and new committed sn
-std::pair<SequenceRanges, Int64> missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed_sn, Poco::Logger * log);
+/// Find missing sequence ranges according to committed sn and
+/// return missing sequence ranges, next expecting sn and max committed sn + 1
+std::tuple<SequenceRanges, Int64, Int64> missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed_sn, Poco::Logger * log);
 }

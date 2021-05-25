@@ -433,7 +433,7 @@ bool operator<(const SequenceRange & lhs, const SequenceRange & rhs)
     }
 }
 
-inline void SequenceRange::write(WriteBuffer & out) const
+void SequenceRange::write(WriteBuffer & out) const
 {
     DB::writeText(start_sn, out);
     DB::writeText(",", out);
@@ -527,6 +527,17 @@ std::shared_ptr<SequenceInfo> SequenceInfo::read(ReadBuffer & in)
     return std::make_shared<SequenceInfo>(std::move(sequence_ranges), idempotent_keys);
 }
 
+String sequenceRangesToString(const SequenceRanges & sequence_ranges)
+{
+    WriteBufferFromOwnString out;
+    for (const auto & sequence_range : sequence_ranges)
+    {
+        sequence_range.write(out);
+        DB::writeText(";", out);
+    }
+    return out.str();
+}
+
 /// Data in parameter `sequences` will be reordered when merging
 SequenceInfoPtr
 mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 committed_sn, UInt64 max_idempotent_keys, Poco::Logger * log)
@@ -564,12 +575,11 @@ mergeSequenceInfo(std::vector<SequenceInfoPtr> & sequences, Int64 committed_sn, 
 }
 
 /// The `sequence_ranges` are assumed to have sequence numbers which are great than `committed`
-std::pair<SequenceRanges, Int64>
-missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed, Poco::Logger * log)
+std::tuple<SequenceRanges, Int64, Int64> missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed, Poco::Logger * log)
 {
     if (sequence_ranges.empty())
     {
-        return {{}, committed + 1};
+        return {{}, committed + 1, committed + 1};
     }
 
     std::sort(sequence_ranges.begin(), sequence_ranges.end());
@@ -603,6 +613,6 @@ missingSequenceRanges(SequenceRanges & sequence_ranges, Int64 committed, Poco::L
     /// The last range
     collectMissingSequenceRanges(sequence_ranges, prev_index, sequence_ranges.size(), parts, log, next_expecting_sn, missing_ranges);
 
-    return {std::move(missing_ranges), next_expecting_sn};
+    return {std::move(missing_ranges), next_expecting_sn, sequence_ranges.back().end_sn + 1};
 }
 }
