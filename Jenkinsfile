@@ -16,7 +16,7 @@
 //  - Case-5: Tests On MSan     大约耗时
 //  - Case-6: Tests On UbSan    大约耗时
 
-Containers = []
+ExistedContainers = []
 
 def Base_Tests(String base, String id)
 {
@@ -45,9 +45,7 @@ def Base_Tests(String base, String id)
                 [
                     'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
                     'name' : "${TEST_TAG}_daisy_integration_tests_runner-config-loader",
-                    'volume' : '/clickhouse-config',
-                    'inside_cmd' :
-                        [ 'cp -r /etc/clickhouse-server/* /clickhouse-config/' ]
+                    'volume' : '/etc/clickhouse-server'
                 ],
                 'tests' :
                 [
@@ -166,7 +164,7 @@ def Base_Tests(String base, String id)
                     def loader = loaders.pop()
                     assert loader.image && loader.name && loader.volume
                     def c = loader.image.run(" -it --entrypoint='' --name ${loader.name} -v ${loader.volume}", 'cat')
-                    Containers.push(c)
+                    ExistedContainers.push(c)
                     loader.inside_cmd?.each { item -> sh "docker exec ${c.id} sh -c \"${item}\"" }
                     sh "docker stop ${c.id}"
                     runner.args += " --volumes-from ${loader.name} "
@@ -196,7 +194,7 @@ pipeline {
     }
     parameters {
         string(name: 'TESTS', defaultValue: 'integration,statelest,stateful,unit', description: 'Tests 测试项标识符')
-        string(name: 'TESTS_IMAGE_TAG', defaultValue: env.BUILD_NUMBER, description: '测试镜像TAG e.g. lastest BUILD_NUMBER 100')
+        string(name: 'TESTS_IMAGE_TAG', defaultValue: env.BUILD_NUMBER, description: '测试')
     }
     stages {
         stage('Fetch Source Code') {
@@ -248,7 +246,7 @@ pipeline {
                         always {
                             archiveArtifacts allowEmptyArchive: true, artifacts: "reports/*.*", followSymlinks: false
                             script {
-                                Containers.each { it.stop() }
+                                ExistedContainers.each { it.stop() }  /// 该操作等价于'docker stop && docker rm'
                             }
                         }
                     }
