@@ -1,7 +1,24 @@
 #  docker build -t yandex/clickhouse-binary-builder .
+FROM rust as builder
+
+WORKDIR /usr/src/sccache
+
+RUN apt-get update \
+ && apt-get install -y libssl-dev --no-install-recommends
+
+ENV CARGO_TARGET_DIR=/usr/src/sccache
+
+RUN cargo install sccache --git https://github.com/mozilla/sccache.git
+
 FROM ubuntu:20.04
 
-ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=11
+ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=12
+
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
 
 RUN apt-get update \
     && apt-get install \
@@ -38,7 +55,10 @@ RUN apt-get update \
         build-essential \
         ccache \
         clang-11 \
+        clang-12 \
+        clang-tidy-10 \
         clang-tidy-11 \
+        clang-tidy-12 \
         cmake \
         curl \
         g++-10 \
@@ -49,8 +69,13 @@ RUN apt-get update \
         libicu-dev \
         libreadline-dev \
         lld-11 \
+        lld-12 \
+        llvm-10 \
+        llvm-10-dev \
         llvm-11 \
         llvm-11-dev \
+        llvm-12 \
+        llvm-12-dev \
         moreutils \
         ninja-build \
         pigz \
@@ -101,6 +126,11 @@ RUN apt-get update \
 
 RUN rm /etc/apt/sources.list.d/proposed-repositories.list && apt-get update
 
+RUN apt-get update \
+ && apt-get install -y libssl1.1 --no-install-recommends \
+ && apt-get install bubblewrap
+
+ COPY --from=builder /usr/local/cargo/bin/sccache /usr/local/bin/sccache
 
 COPY build.sh /
 CMD ["bash", "-c", "/build.sh 2>&1 | ts"]

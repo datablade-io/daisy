@@ -1,7 +1,21 @@
 # docker build -t yandex/clickhouse-deb-builder .
+FROM rust as builder
+
+WORKDIR /usr/src/sccache
+
+RUN apt-get update \
+ && apt-get install -y libssl-dev --no-install-recommends
+
+ENV CARGO_TARGET_DIR=/usr/src/sccache
+
+RUN cargo install sccache --git https://github.com/mozilla/sccache.git
+
 FROM ubuntu:20.04
 
-ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=11
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
+ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=12
 
 RUN apt-get update \
     && apt-get install ca-certificates lsb-release wget gnupg apt-transport-https \
@@ -36,7 +50,10 @@ RUN apt-get update \
     && apt-get install \
         alien \
         clang-11 \
+        clang-12 \
+        clang-tidy-10 \
         clang-tidy-11 \
+        clang-tidy-12 \
         cmake \
         debhelper \
         devscripts \
@@ -44,8 +61,13 @@ RUN apt-get update \
         git \
         gperf \
         lld-11 \
+        lld-12 \
+        llvm-10 \
+        llvm-10-dev \
         llvm-11 \
         llvm-11-dev \
+        llvm-12 \
+        llvm-12-dev \
         moreutils \
         ninja-build \
         perl \
@@ -67,6 +89,12 @@ RUN rm /etc/apt/sources.list.d/proposed-repositories.list && apt-get update
 
 # This symlink required by gcc to find lld compiler
 RUN ln -s /usr/bin/lld-${LLVM_VERSION} /usr/bin/ld.lld
+
+RUN apt-get update \
+ && apt-get install -y libssl1.1 --no-install-recommends \
+ && apt-get install bubblewrap
+
+ COPY --from=builder /usr/local/cargo/bin/sccache /usr/local/bin/sccache
 
 COPY build.sh /
 
