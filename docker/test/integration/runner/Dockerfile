@@ -1,6 +1,9 @@
 # docker build -t yandex/clickhouse-integration-tests-runner .
 FROM ubuntu:18.04
 
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
 RUN apt-get update \
     && env DEBIAN_FRONTEND=noninteractive apt-get install --yes \
     ca-certificates \
@@ -56,6 +59,10 @@ RUN apt-get update \
     && apt-get clean
 
 RUN dockerd --version; docker --version
+
+RUN python3 -m pip install -U pip
+RUN python3 -m pip config set global.index-url http://mirrors.aliyun.com/pypi/simple
+RUN python3 -m pip config set install.trusted-host mirrors.aliyun.com
 
 RUN python3 -m pip install \
     PyMySQL \

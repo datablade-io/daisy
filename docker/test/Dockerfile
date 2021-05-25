@@ -3,6 +3,9 @@ FROM ubuntu:18.04
 ARG repository="deb https://repo.clickhouse.tech/deb/stable/ main/"
 ARG version=21.7.1.*
 
+RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+RUN apt-get clean
+
 RUN apt-get update && \
     apt-get install -y apt-transport-https dirmngr && \
     mkdir -p /etc/apt/sources.list.d && \

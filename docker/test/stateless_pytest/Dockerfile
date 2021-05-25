@@ -10,6 +10,10 @@ RUN apt-get update -y && \
         netcat-openbsd \
         zstd
 
+RUN python3 -m pip install -U pip
+RUN python3 -m pip config set global.index-url http://mirrors.aliyun.com/pypi/simple
+RUN python3 -m pip config set install.trusted-host mirrors.aliyun.com
+
 RUN python3 -m pip install \
     wheel \
     pytest \
