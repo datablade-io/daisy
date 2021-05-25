@@ -104,8 +104,8 @@ ASTPtr SettingsClause::convertToOld() const
 
 // SELECT Statement
 
-SelectStmt::SelectStmt(bool distinct_, ModifierType type, bool totals, PtrTo<ColumnExprList> expr_list)
-    : INode(MAX_INDEX), modifier_type(type), distinct(distinct_), with_totals(totals)
+SelectStmt::SelectStmt(bool stream_, bool distinct_, ModifierType type, bool totals, PtrTo<ColumnExprList> expr_list)
+    : INode(MAX_INDEX), modifier_type(type), stream(stream_), distinct(distinct_), with_totals(totals)
 {
     set(COLUMNS, expr_list);
 }
@@ -170,6 +170,7 @@ ASTPtr SelectStmt::convertToOld() const
     auto old_select = std::make_shared<ASTSelectQuery>();
 
     old_select->setExpression(ASTSelectQuery::Expression::SELECT, get(COLUMNS)->convertToOld());
+    old_select->stream = stream;
     old_select->distinct = distinct;
     old_select->group_by_with_totals = with_totals;
 
@@ -324,7 +325,7 @@ antlrcpp::Any ParseTreeVisitor::visitSelectStmt(ClickHouseParser::SelectStmtCont
     if (ctx->CUBE() || (ctx->groupByClause() && ctx->groupByClause()->CUBE())) type = SelectStmt::ModifierType::CUBE;
     else if (ctx->ROLLUP() || (ctx->groupByClause() && ctx->groupByClause()->ROLLUP())) type = SelectStmt::ModifierType::ROLLUP;
 
-    auto select_stmt = std::make_shared<SelectStmt>(!!ctx->DISTINCT(), type, !!ctx->TOTALS(), visit(ctx->columnExprList()));
+    auto select_stmt = std::make_shared<SelectStmt>(!!ctx->STREAM(), !!ctx->DISTINCT(), type, !!ctx->TOTALS(), visit(ctx->columnExprList()));
 
     if (ctx->topClause() && ctx->limitClause())
         throw Exception("Can not use TOP and LIMIT together", ErrorCodes::TOP_AND_LIMIT_TOGETHER);
