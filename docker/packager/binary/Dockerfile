@@ -1,4 +1,15 @@
 #  docker build -t yandex/clickhouse-binary-builder .
+FROM rust as builder
+
+WORKDIR /usr/src/sccache
+
+RUN apt-get update \
+ && apt-get install -y libssl-dev --no-install-recommends
+
+ENV CARGO_TARGET_DIR=/usr/src/sccache
+
+RUN cargo install sccache --git https://github.com/mozilla/sccache.git
+
 FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive LLVM_VERSION=12
@@ -114,6 +125,11 @@ RUN apt-get update \
 
 RUN rm /etc/apt/sources.list.d/proposed-repositories.list && apt-get update
 
+RUN apt-get update \
+ && apt-get install -y libssl1.1 --no-install-recommends \
+ && apt-get install bubblewrap
+
+ COPY --from=builder /usr/local/cargo/bin/sccache /usr/local/bin/sccache
 
 COPY build.sh /
 CMD ["bash", "-c", "/build.sh 2>&1 | ts"]
