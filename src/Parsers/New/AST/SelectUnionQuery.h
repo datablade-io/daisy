@@ -107,7 +107,7 @@ class SelectStmt : public INode
             ROLLUP,
         };
 
-        SelectStmt(bool distinct_, ModifierType type, bool totals, PtrTo<ColumnExprList> expr_list);
+        SelectStmt(bool stream_, bool distinct_, ModifierType type, bool totals, PtrTo<ColumnExprList> expr_list);
 
         void setWithClause(PtrTo<WithClause> clause);
         void setFromClause(PtrTo<FromClause> clause);
@@ -143,7 +143,7 @@ class SelectStmt : public INode
         };
 
         const ModifierType modifier_type;
-        const bool distinct, with_totals;
+        const bool stream, distinct, with_totals;
 };
 
 class SelectUnionQuery : public Query
