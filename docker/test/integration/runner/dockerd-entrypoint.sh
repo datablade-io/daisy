@@ -26,6 +26,8 @@ done
 set -e
 
 echo "Start tests"
+/usr/share/clickhouse-test/config/install.sh
+
 export CLICKHOUSE_TESTS_SERVER_BIN_PATH=/programs/clickhouse
 export CLICKHOUSE_TESTS_CLIENT_BIN_PATH=/programs/clickhouse
 export CLICKHOUSE_TESTS_BASE_CONFIG_DIR=/etc/clickhouse-server/
@@ -40,5 +42,5 @@ export DOCKER_MYSQL_PHP_CLIENT_TAG=${DOCKER_MYSQL_PHP_CLIENT_TAG:=latest}
 export DOCKER_POSTGRESQL_JAVA_CLIENT_TAG=${DOCKER_POSTGRESQL_JAVA_CLIENT_TAG:=latest}
 export DOCKER_KERBEROS_KDC_TAG=${DOCKER_KERBEROS_KDC_TAG:=latest}
 
-cd /ClickHouse/tests/integration
+cd /usr/share/clickhouse-test/integration
 exec "$@"

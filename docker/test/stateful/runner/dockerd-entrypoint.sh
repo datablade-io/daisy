@@ -5,6 +5,8 @@ set -e -x
 export PATH=$PATH:/programs
 export LLVM_PROFILE_FILE='/tests_output/coverage_reports/stateful_tests_clickhouse_%h_%p_%m.profraw'
 
+/usr/share/clickhouse-test/config/install.sh
+
 # Start server
 counter=0
 until clickhouse client --query "SELECT 1"
@@ -64,5 +66,5 @@ clickhouse client --query "SHOW TABLES FROM test"
 clickhouse client --query "SELECT count() FROM test.hits"
 clickhouse client --query "SELECT count() FROM test.visits"
 
-clickhouse-test -q /queries -j$(($(nproc)/2)) --testname --shard --zookeeper --no-stateless --hung-check --print-time $@  2>&1 | ts '%Y-%m-%d %H:%M:%S' | tee /tests_output/${TEST_TAG}_stateful_test_result.txt
+clickhouse-test -q /usr/share/clickhouse-test/queries -j$(($(nproc)/2)) --testname --shard --zookeeper --no-stateless --hung-check --print-time $@  2>&1 | ts '%Y-%m-%d %H:%M:%S' | tee /tests_output/${TEST_TAG}_stateful_test_result.txt
 

@@ -45,15 +45,13 @@ def Base_Tests(String base, String id)
                 [
                     'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
                     'name' : "${TEST_TAG}_daisy_integration_tests_runner-config-loader",
-                    'volume' : '/etc/clickhouse-server'
+                    'volume' : '/usr/share/clickhouse-test/config'
                 ],
                 'tests' :
                 [
                     'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
                     'name' : "${TEST_TAG}_daisy_integration_tests_runner-tests-loader",
-                    'volume' : "/ClickHouse/tests/integration",
-                    'inside_cmd' :
-                        [ 'cp -r /usr/share/clickhouse-test/integration/* /ClickHouse/tests/integration/' ]
+                    'volume' : "/usr/share/clickhouse-test/integration"
                 ]
             ],
             'reports' : "/tests_output"
@@ -78,15 +76,13 @@ def Base_Tests(String base, String id)
                 [
                     'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
                     'name' : "${TEST_TAG}_daisy_statelest_tests_runner-config-loader",
-                    'volume' : '/etc/clickhouse-server'
+                    'volume' : '/usr/share/clickhouse-test/config'
                 ],
                 'tests' :
                 [
                     'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
                     'name' : "${TEST_TAG}_daisy_statelest_tests_runner-tests-loader",
-                    'volume' : "/queries",
-                    'inside_cmd' :
-                        [ 'cp -r /usr/share/clickhouse-test/queries/* /queries/' ]
+                    'volume' : "/usr/share/clickhouse-test/queries"
                 ]
             ],
             'reports' : "/tests_output"
@@ -111,15 +107,13 @@ def Base_Tests(String base, String id)
                 [
                     'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
                     'name' : "${TEST_TAG}_daisy_stateful_tests_runner-config-loader",
-                    'volume' : '/etc/clickhouse-server'
+                    'volume' : '/usr/share/clickhouse-test/config'
                 ],
                 'tests' :
                 [
                     'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
                     'name' : "${TEST_TAG}_daisy_stateful_tests_runner-tests-loader",
-                    'volume' : "/queries",
-                    'inside_cmd' :
-                        [ 'cp -r /usr/share/clickhouse-test/queries/* /queries/' ]
+                    'volume' : "/usr/share/clickhouse-test/queries"
                 ]
             ],
             'reports' : "/tests_output"
@@ -139,12 +133,6 @@ def Base_Tests(String base, String id)
                     'volume' : "/programs",
                     'inside_cmd' :
                         [ 'cp -r /usr/bin/unit_tests_dbms /programs/' ]
-                ],
-                'config' :
-                [
-                    'image' : docker.image("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}"),
-                    'name' : "${TEST_TAG}_daisy_unit_tests_runner-config-loader",
-                    'volume' : '/etc/clickhouse-server'
                 ]
             ],
             'reports' : "/tests_output"
@@ -172,9 +160,10 @@ def Base_Tests(String base, String id)
                 } else {   /// 执行测试
                     assert runner.image && runner.name
                     if (runner.reports) {
+                        sh "mkdir -p ${WORKSPACE}/reports"
                         runner.args += " -v ${WORKSPACE}/reports:${runner.reports} "
                     }
-                    runner.image.inside(runner.args + " -t --entrypoint='' --name ${runner.name} ") {
+                    runner.image.inside(runner.args + " --entrypoint='' --name ${runner.name} ") {
                         sh "dockerd-entrypoint.sh"
                     }
                 }
@@ -194,7 +183,7 @@ pipeline {
     }
     parameters {
         string(name: 'TESTS', defaultValue: 'integration,statelest,stateful,unit', description: 'Tests 测试项标识符')
-        string(name: 'TESTS_IMAGE_TAG', defaultValue: env.BUILD_NUMBER, description: '测试')
+        string(name: 'TESTS_IMAGE_TAG', defaultValue: env.BUILD_NUMBER, description: '测试镜像TAG e.g. lastest BUILD_NUMBER 100')
     }
     stages {
         stage('Fetch Source Code') {
@@ -213,7 +202,6 @@ pipeline {
                 // echo "skip"
                 fetchSource(env.JOB_NAME, env.BUILD_NUMBER)
                 script {
-                    TAG = params.TESTS_IMAGE_TAG
                     docker.withRegistry('https://cicddockerhub.com:5000') {
                         docker.build("daisy/clickhouse-tests-env:${params.TESTS_IMAGE_TAG}", "/data/jenkins/workspace/deb").push()
                         docker.build("daisy/clickhouse-integration-tests-runner:${params.TESTS_IMAGE_TAG}", "${WORKSPACE}/docker/test/integration/runner/").push()
