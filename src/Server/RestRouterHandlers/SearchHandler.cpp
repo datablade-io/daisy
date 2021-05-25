@@ -75,9 +75,6 @@ String SearchHandler::getQuery(const Poco::JSON::Object::Ptr & payload) const
     const auto & mode = payload->has("mode") ? payload->get("mode").toString() : "verbose";
 
     /// FIXME: to support 'realtime' mode in future
-    if (mode == "standard" || mode.empty() || mode == "verbose")
-        query_context->setDefaultFormat("JSONCompactEachRowWithNamesAndTypes");
-
     if (mode == "verbose")
     {
         query_context->setSetting("asterisk_include_materialized_columns", true);
@@ -212,13 +209,13 @@ void SearchHandler::setQuerySettings() const
 
     /// FIXME to support cascaded write buffer and session
     SettingsChanges settings_changes;
-    String default_format;
+    String default_format = "JSONCompact";
     for (const auto & [key, value] : *query_parameters)
     {
         if (param_could_be_skipped(key))
             continue;
 
-        if (key == "default_format")
+        if (key == "default_format" && !value.empty())
             default_format = value;
         else
         {
@@ -234,9 +231,7 @@ void SearchHandler::setQuerySettings() const
         }
     }
 
-    if (!default_format.empty())
-        query_context->setDefaultFormat(default_format);
-
+    query_context->setDefaultFormat(default_format);
     query_context->checkSettingsConstraints(settings_changes);
     query_context->applySettingsChanges(settings_changes);
 }
