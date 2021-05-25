@@ -6,7 +6,6 @@ export PATH=$PATH:/programs
 export LLVM_PROFILE_FILE='/tests_output/coverage_reports/stateful_tests_clickhouse_%h_%p_%m.profraw'
 
 # Start server
-mkdir -p /var/log/clickhouse-server
 counter=0
 until clickhouse client --query "SELECT 1"
 do

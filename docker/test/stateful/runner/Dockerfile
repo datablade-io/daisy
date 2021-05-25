@@ -17,4 +17,6 @@ COPY --from=datasets /tmp /tmp
 ENV DATASETS="hits visits"
 COPY s3downloader /usr/bin/s3downloader
 COPY dockerd-entrypoint.sh /usr/bin/dockerd-entrypoint.sh
+RUN mkdir -p /var/log/clickhouse-server
+VOLUME /var/log/clickhouse-server
 entrypoint ["dockerd-entrypoint.sh"]

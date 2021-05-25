@@ -28,7 +28,7 @@ set -e
 echo "Start tests"
 export CLICKHOUSE_TESTS_SERVER_BIN_PATH=/programs/clickhouse
 export CLICKHOUSE_TESTS_CLIENT_BIN_PATH=/programs/clickhouse
-export CLICKHOUSE_TESTS_BASE_CONFIG_DIR=/clickhouse-config/
+export CLICKHOUSE_TESTS_BASE_CONFIG_DIR=/etc/clickhouse-server/
 export CLICKHOUSE_ODBC_BRIDGE_BINARY_PATH=/programs/clickhouse-odbc-bridge
 export CLICKHOUSE_LIBRARY_BRIDGE_BINARY_PATH=/programs/clickhouse-library-bridge
 export DOCKER_COMPOSE_DIR=/compose/
