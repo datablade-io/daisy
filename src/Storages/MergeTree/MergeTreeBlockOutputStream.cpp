@@ -101,11 +101,19 @@ inline bool MergeTreeBlockOutputStream::ignorePartBlock(Int32 parts, Int32 part_
         if (seq_range.part_index == part_index)
         {
             /// The part block is in missing sequence ranges, persist it
+            LOG_INFO(
+                storage.log,
+                "Recovery phase. Persisting missing parts={} part_index={} for start_sn={}, end_sn={}",
+                parts,
+                part_index,
+                last_seq_range.start_sn,
+                last_seq_range.end_sn);
+
             return false;
         }
     }
 
-    LOG_WARNING(
+    LOG_INFO(
         storage.log,
         "Recovery phase. Skipping persisting parts={} part_index={} for start_sn={}, end_sn={} because it was previously persisted",
         parts,

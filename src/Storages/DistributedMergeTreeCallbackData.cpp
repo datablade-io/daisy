@@ -37,7 +37,7 @@ void DistributedMergeTreeCallbackData::commit(IDistributedWriteAheadLog::RecordP
 
         /// Wait until we consume a record which has sequence number larger
         /// than max committed sn
-        if (recovery_records.back()->sn <= storage->maxCommittedSN())
+        if (recovery_records.back()->sn < storage->maxCommittedSN())
         {
             return;
         }

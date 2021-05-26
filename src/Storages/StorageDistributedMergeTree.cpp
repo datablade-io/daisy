@@ -444,12 +444,6 @@ void StorageDistributedMergeTree::alter(const AlterCommands & commands, ContextP
     setInMemoryMetadata(storage->getInMemoryMetadata());
 }
 
-NamesAndTypesList StorageDistributedMergeTree::getVirtuals() const
-{
-    assert(storage);
-    return storage->getVirtuals();
-}
-
 bool StorageDistributedMergeTree::optimize(
     const ASTPtr & query,
     const StorageMetadataPtr & metadata_snapshot,
@@ -969,7 +963,7 @@ void StorageDistributedMergeTree::commitSN(std::any & dwal_consume_ctx)
     commitSNRemote(commit_sn, dwal_consume_ctx);
 }
 
-inline void StorageDistributedMergeTree::progressSequencesWithLock(const SequencePair & seq)
+inline void StorageDistributedMergeTree::progressSequencesWithoutLock(const SequencePair & seq)
 {
     assert(!outstanding_sns.empty());
 
@@ -1011,7 +1005,7 @@ inline void StorageDistributedMergeTree::progressSequencesWithLock(const Sequenc
 inline void StorageDistributedMergeTree::progressSequences(const SequencePair & seq)
 {
     std::lock_guard lock(sns_mutex);
-    progressSequencesWithLock(seq);
+    progressSequencesWithoutLock(seq);
 }
 
 void StorageDistributedMergeTree::doCommit(
@@ -1032,7 +1026,7 @@ void StorageDistributedMergeTree::doCommit(
         /// the offset checkpointing
         if (!block)
         {
-            progressSequencesWithLock(seq_pair);
+            progressSequencesWithoutLock(seq_pair);
             return;
         }
 

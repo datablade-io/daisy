@@ -66,8 +66,6 @@ public:
 
     BlockOutputStreamPtr write(const ASTPtr & query, const StorageMetadataPtr & /*metadata_snapshot*/, ContextPtr context) override;
 
-    NamesAndTypesList getVirtuals() const override;
-
     /** Perform the next step in combining the parts.
       */
     bool optimize(
@@ -222,7 +220,7 @@ private:
     void commitSNLocal(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn);
     void commitSNRemote(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn, std::any & dwal_consume_ctx);
     void progressSequences(const SequencePair & seq);
-    void progressSequencesWithLock(const SequencePair & seq);
+    void progressSequencesWithoutLock(const SequencePair & seq);
     Int64 maxCommittedSN() const;
 
 private:
