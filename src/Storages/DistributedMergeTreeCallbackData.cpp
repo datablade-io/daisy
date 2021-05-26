@@ -47,7 +47,12 @@ void DistributedMergeTreeCallbackData::commit(IDistributedWriteAheadLog::RecordP
         for (auto & records_seqs_pair : range_buckets)
         {
             assert(!records_seqs_pair.first.empty());
+
+            LOG_INFO(storage->log, "Recovery phase. Committing missing_ranges={}", sequenceRangesToString(records_seqs_pair.second));
             doCommit(std::move(records_seqs_pair.first), std::move(records_seqs_pair.second));
+
+            assert(records_seqs_pair.first.empty());
+            assert(records_seqs_pair.second.empty());
         }
 
         /// We have done with recovery, clean up data structure to speedup fast path condition check
