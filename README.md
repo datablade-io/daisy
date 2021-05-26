@@ -204,21 +204,12 @@ $ curl http://localhost:8123/dae/v1/ddl/tables -X POST -d '{
 ## Ingest Data
 
 ```
-$ curl http://localhost:8123/dae/v1/ingest//tables/testtable -X POST -H "content-type: application/json" -d '{
+$ curl http://localhost:8123/dae/v1/ingest/tables/testtable -X POST -H "content-type: application/json" -d '{
     {"columns": ["i"], "data": [[1],[2],[3],[4],[5],[6],[7],[8],[9],[10]]}
 }'
 ```
 
 ## Query Data
 
-### Query via client
-
-
-```
-$ clickhouse-client
-```
-
-And query like `SELECT * FROM testtable`
-
-### Query via REST API
-TODO
+### Query Data via REST API
+$ curl http://localhost:8123/dae/v1/search -X POST -H "content-type: application/json" -d '{"query": "SELECT * FROM testtable"}'
