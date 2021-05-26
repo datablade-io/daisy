@@ -145,6 +145,7 @@ class ClickHouseCluster:
             HELPERS_DIR, 'zookeeper_config.xml')
 
         project_name = pwd.getpwuid(os.getuid()).pw_name + p.basename(self.base_dir) + self.name
+        project_name = '{}_{}'.format(os.getenv('TEST_TAG'), project_name)
         # docker-compose removes everything non-alphanumeric from project names so we do it too.
         self.project_name = re.sub(r'[^a-z0-9]', '', project_name.lower())
         self.instances_dir = p.join(self.base_dir, '_instances' + ('' if not self.name else '_' + self.name))
