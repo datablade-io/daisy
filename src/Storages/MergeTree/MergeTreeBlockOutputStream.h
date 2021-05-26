@@ -34,6 +34,10 @@ public:
 
     /// Daisy : starts
     void setSequenceInfo(const SequenceInfoPtr & seq_info_) { seq_info = seq_info_; }
+    void setMissingSequenceRanges(SequenceRanges missing_seq_ranges_) { missing_seq_ranges.swap(missing_seq_ranges_); }
+
+private:
+    bool ignorePartBlock(Int32 parts, Int32 part_index) const;
     /// Daisy : ends
 
 private:
@@ -44,6 +48,7 @@ private:
 
     /// Daisy : starts
     SequenceInfoPtr seq_info;
+    SequenceRanges missing_seq_ranges;
     /// Daisy : ends
 };
 
