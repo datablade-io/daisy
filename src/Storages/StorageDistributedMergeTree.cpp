@@ -1197,7 +1197,7 @@ void StorageDistributedMergeTree::commit(IDistributedWriteAheadLog::RecordPtrs r
         dwal_consume_ctx);
     assert(!block);
     assert(!keys);
-    assert(!missing_sequence_ranges.empty());
+    assert(missing_sequence_ranges.empty());
 }
 
 IDistributedWriteAheadLog::RecordSequenceNumber StorageDistributedMergeTree::sequenceNumberLoaded() const
