@@ -712,7 +712,7 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
                 context->setInsertionTable(std::move(table_id));
                 /// Daisy : starts
                 /// Setup poll ID for ingestion status querying
-                if (context->getIngestMode() == "async")
+                if (context->getIngestMode() == "async" || context->getIngestMode().empty())
                 {
                     context->getQueryContext()->setupQueryStatusPollId();
                 }
