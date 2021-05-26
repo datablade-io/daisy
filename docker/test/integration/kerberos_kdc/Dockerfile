@@ -1,6 +1,6 @@
 # docker build -t yandex/clickhouse-kerberos-kdc .
 
-FROM centos:6.6
+FROM centos:7
 # old OS to make is faster and smaller
 
 RUN yum install -y krb5-server krb5-libs krb5-auth-dialog krb5-workstation
