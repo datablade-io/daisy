@@ -1143,7 +1143,7 @@ bool StorageDistributedMergeTree::dedupBlock(const IDistributedWriteAheadLog::Re
     return false;
 }
 
-void StorageDistributedMergeTree::commit(IDistributedWriteAheadLog::RecordPtrs records, const SequenceRange & missing_sequence_range, std::any & dwal_consume_ctx)
+void StorageDistributedMergeTree::commit(IDistributedWriteAheadLog::RecordPtrs records, SequenceRanges missing_sequence_ranges, std::any & dwal_consume_ctx)
 {
     if (records.empty())
     {
@@ -1193,10 +1193,11 @@ void StorageDistributedMergeTree::commit(IDistributedWriteAheadLog::RecordPtrs r
         std::move(block),
         std::make_pair(records.front()->sn, records.back()->sn),
         std::move(keys),
-        missing_sequence_range,
+        std::move(missing_sequence_ranges),
         dwal_consume_ctx);
     assert(!block);
     assert(!keys);
+    assert(!missing_sequence_ranges.empty());
 }
 
 IDistributedWriteAheadLog::RecordSequenceNumber StorageDistributedMergeTree::sequenceNumberLoaded() const

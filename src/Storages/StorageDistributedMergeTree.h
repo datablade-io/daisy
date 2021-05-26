@@ -216,7 +216,7 @@ private:
         Block block,
         SequencePair seq_pair,
         std::shared_ptr<IdempotentKeys> keys,
-        SequenceRange missing_sequence_ranges,
+        SequenceRanges missing_sequence_ranges,
         std::any & dwal_consume_ctx);
     void commitSN(std::any & dwal_consume_ctx);
     void commitSNLocal(IDistributedWriteAheadLog::RecordSequenceNumber commit_sn);

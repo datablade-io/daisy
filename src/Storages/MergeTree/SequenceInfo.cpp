@@ -196,8 +196,8 @@ SequenceRanges mergeSequenceRanges(SequenceRanges & sequence_ranges, Int64 commi
 
         /// We don't check sequence gap here. There are 3 possible cases
         /// 1. The missing sequence is not committed yet (rarely)
-        /// 2. It is casued by resending an / several idempotent blocks which will be deduped and ignored.
-        /// 3. The Block whish has the missing sequence is distributed to a different partition
+        /// 2. It is caused by resending an / several idempotent blocks which will be deduped and ignored.
+        /// 3. The Block which has the missing sequence is distributed to a different partition
         /// Only for sequence ranges which are beyond the `committed_sn`, we need merge them and
         /// keep them around
         if (next_seq_range.end_sn > committed_sn)
@@ -359,7 +359,7 @@ inline void collectMissingSequenceRanges(
     }
     const auto & cur_range = sequence_ranges[index];
 
-    /// Meet a new start_sn, calcuate if the parts in prev_range
+    /// Meet a new start_sn, calculate if the parts in prev_range
     /// are all committed. There are several cases
     /// 1. There are sequence gaps before prev_range
     /// 2. There are part missing in current prev_range
@@ -371,7 +371,7 @@ inline void collectMissingSequenceRanges(
 
         if (prev_range.start_sn == next_expecting_sn)
         {
-            /// If we can progress sn, it means ther are no sequence missing
+            /// If we can progress sn, it means there are no sequence missing
             /// before prev_range. Progress next expecting sn
             next_expecting_sn = prev_range.end_sn + 1;
 

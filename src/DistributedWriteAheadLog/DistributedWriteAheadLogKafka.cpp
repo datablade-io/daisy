@@ -54,7 +54,7 @@ Int32 mapErrorCode(rd_kafka_resp_err_t err)
             return ErrorCodes::BAD_ARGUMENTS;
 
         case RD_KAFKA_RESP_ERR__FATAL:
-            throw Exception("Fatal error occured, shall tear down the whole program", ErrorCodes::DWAL_FATAL_ERROR);
+            throw Exception("Fatal error occurred, shall tear down the whole program", ErrorCodes::DWAL_FATAL_ERROR);
 
         default:
             return ErrorCodes::UNKNOWN_EXCEPTION;
@@ -293,7 +293,7 @@ void logErr(struct rd_kafka_s * rk, int err, const char * reason, void * opaque)
     else
     {
         LOG_WARNING(
-            stats->log, "Error occured, error={}, reason={}", rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)), reason);
+            stats->log, "Error occurred, error={}, reason={}", rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)), reason);
     }
 }
 
@@ -301,7 +301,7 @@ void logThrottle(struct rd_kafka_s * /*rk*/, const char * broker_name, int32_t b
 {
     auto * stats = static_cast<DistributedWriteAheadLogKafka::Stats *>(opaque);
     LOG_WARNING(
-        stats->log, "Throttling occured on broker={}, broker_id={}, throttle_time_ms={}", broker_name, broker_id, throttle_time_ms);
+        stats->log, "Throttling occurred on broker={}, broker_id={}, throttle_time_ms={}", broker_name, broker_id, throttle_time_ms);
 }
 
 void logOffsetCommits(struct rd_kafka_s * /*rk*/, rd_kafka_resp_err_t err, struct rd_kafka_topic_partition_list_s * offsets, void * opaque)

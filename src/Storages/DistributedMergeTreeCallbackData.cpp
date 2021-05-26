@@ -71,20 +71,18 @@ inline void DistributedMergeTreeCallbackData::doCommit(IDistributedWriteAheadLog
     --outstanding_commits;
 }
 
-RecordsMissngSequenceRangesPair DistributedMergeTreeCallbackData::categorizeRecordsAccordingToSequenceRanges(
+std::vector<RecordsSequenceRangesPair> DistributedMergeTreeCallbackData::categorizeRecordsAccordingToSequenceRanges(
     const IDistributedWriteAheadLog::RecordPtrs & records,
     const SequenceRanges & sequence_ranges,
     IDistributedWriteAheadLog::RecordSequenceNumber max_committed_sn)
 {
-    std::vector<RecordsMissngSequenceRangesPair> range_buckets;
-    range_buckets.reserve(sequence_ranges.size() + 1);
-    IDistributedWriteAheadLog::RecordPtrs new_records;
+    std::vector<RecordsSequenceRangesPair> range_buckets(sequence_ranges.size() + 1);
 
     for (auto & record : records)
     {
         if (record->sn > max_committed_sn)
         {
-            new_records.push_back(std::move(record));
+            range_buckets.back().first.push_back(std::move(record));
             continue;
         }
 
@@ -94,29 +92,26 @@ RecordsMissngSequenceRangesPair DistributedMergeTreeCallbackData::categorizeReco
             continue;
         }
 
-        /// Find the correponding missing sequence range for current record
+        /// Find the corresponding missing sequence range for current record
         for (size_t i = 0; i < sequence_ranges.size(); ++i)
         {
             const auto & sequence_range = sequence_ranges[i];
             if (record->sn >= sequence_range.start_sn && record->sn <= sequence_range.end_sn)
             {
                 /// Found the missing range for current record
-                if (range_buckets.empty() || range_buckets.back().second.back().start_sn != sequence_range.start_sn)
-                {
-                    /// Start a new range bucket
-                    range_buckets.push_back({});
-                }
-
-                auto & records_seqs_pair = range_buckets.back();
-                records_seqs_pair.first.push_back(std::move(record));
-                records_seqs_pair.second.push_back(sequence_range);
+                auto & range_bucket = range_buckets[i];
+                range_bucket.first.push_back(std::move(record));
 
                 /// Collect all missing sequence range parts
-                for (size_t j = i + 1; j < sequence_ranges.size(); ++j)
+                for (size_t j = i; j < sequence_ranges.size(); ++j)
                 {
                     if (sequence_ranges[j].start_sn == sequence_range.start_sn)
                     {
-                        records_seqs_pair.second.push_back(sequence_ranges[j]);
+                        auto it = std::find(range_bucket.second.begin(), range_bucket.second.end(), sequence_ranges[j]);
+                        if (it == range_bucket.second.end())
+                        {
+                            range_bucket.second.push_back(sequence_ranges[j]);
+                        }
                     }
                 }
                 break;
@@ -127,10 +122,18 @@ RecordsMissngSequenceRangesPair DistributedMergeTreeCallbackData::categorizeReco
         /// it means it was committed already (we have sequence range hole)
     }
 
-    if (!new_records.empty())
+    std::vector<RecordsSequenceRangesPair> result;
+    result.reserve(range_buckets.size());
+
+    for (auto & range_bucket : range_buckets)
     {
-        range_buckets.emplace_back(std::move(new_records), {});
+        if (!range_bucket.first.empty())
+        {
+            result.push_back(std::move(range_bucket));
+            assert(range_bucket.first.empty());
+            assert(range_bucket.second.empty());
+        }
     }
-    return range_buckets;
+    return result;
 }
 }

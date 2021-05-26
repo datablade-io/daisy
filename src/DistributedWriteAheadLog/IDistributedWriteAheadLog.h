@@ -165,7 +165,7 @@ public:
     /// `create` creates a WAL log named `name`. Returns 0 if success; otherwise non-zero
     virtual Int32 create(const String & name, std::any & ctx) = 0;
 
-    /// `remove` deltes a WAL log named `name`. Returns 0 if success; otherwise non-zero
+    /// `remove` deletes a WAL log named `name`. Returns 0 if success; otherwise non-zero
     virtual Int32 remove(const String & name, std::any & ctx) = 0;
 
     /// `describe` return 0 if success; otherwise return non-zero

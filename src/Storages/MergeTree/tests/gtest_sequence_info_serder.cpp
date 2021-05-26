@@ -354,7 +354,7 @@ TEST(SequenceInfo, MissingSequenceRanges)
             DB::SequenceRange{4, 4, 0, 1},
         };
 
-        auto [missing, next_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
+        auto [missing, next_expecting_sn, max_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
         EXPECT_EQ(missing.size(), 1);
         EXPECT_EQ(missing[0], DB::SequenceRange(Int64(2), Int64(2)));
         EXPECT_EQ(next_expecting_sn, 2);
@@ -370,7 +370,7 @@ TEST(SequenceInfo, MissingSequenceRanges)
             DB::SequenceRange{8, 8, 0, 1},
         };
 
-        auto [missing, next_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
+        auto [missing, next_expecting_sn, max_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
         EXPECT_EQ(missing.size(), 2);
         EXPECT_EQ(missing[0], DB::SequenceRange(Int64(3), Int64(3)));
         EXPECT_EQ(missing[1], DB::SequenceRange(Int64(6), Int64(7)));
@@ -385,7 +385,7 @@ TEST(SequenceInfo, MissingSequenceRanges)
             DB::SequenceRange{4, 4, 0, 1},
         };
 
-        auto [missing, next_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
+        auto [missing, next_expecting_sn, max_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
         EXPECT_EQ(missing.size(), 2);
         EXPECT_EQ(missing[0], DB::SequenceRange(2, 2, 1, 2));
         EXPECT_EQ(missing[1], DB::SequenceRange(Int64(3), Int64(3)));
@@ -402,7 +402,7 @@ TEST(SequenceInfo, MissingSequenceRanges)
             DB::SequenceRange{8, 8, 3, 5},
         };
 
-        auto [missing, next_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
+        auto [missing, next_expecting_sn, max_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
         EXPECT_EQ(missing.size(), 7);
         EXPECT_EQ(missing[0], DB::SequenceRange(Int64(2), Int64(2)));
         EXPECT_EQ(missing[1], DB::SequenceRange(4, 5, 1, 3));
@@ -425,7 +425,7 @@ TEST(SequenceInfo, MissingSequenceRanges)
             DB::SequenceRange{8, 8, 3, 5},
         };
 
-        auto [missing, next_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
+        auto [missing, next_expecting_sn, max_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
         EXPECT_EQ(missing.size(), 8);
         EXPECT_EQ(missing[0], DB::SequenceRange(2, 2, 1, 3));
         EXPECT_EQ(missing[1], DB::SequenceRange(2, 2, 2, 3));
@@ -449,7 +449,7 @@ TEST(SequenceInfo, MissingSequenceRanges)
             DB::SequenceRange{4, 5, 0, 3},
         };
 
-        auto [missing, next_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
+        auto [missing, next_expecting_sn, max_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, 1, nullptr);
         EXPECT_EQ(missing.size(), 8);
         EXPECT_EQ(missing[0], DB::SequenceRange(2, 2, 1, 3));
         EXPECT_EQ(missing[1], DB::SequenceRange(2, 2, 2, 3));

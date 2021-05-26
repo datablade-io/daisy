@@ -10,7 +10,7 @@ namespace DB
 
 class StorageDistributedMergeTree;
 
-using RecordsMissngSequenceRangesPair = std::pair<IDistributedWriteAheadLog::RecordPtrs, SequenceRanges>;
+using RecordsSequenceRangesPair = std::pair<IDistributedWriteAheadLog::RecordPtrs, SequenceRanges>;
 
 struct DistributedMergeTreeCallbackData
 {
@@ -26,7 +26,7 @@ struct DistributedMergeTreeCallbackData
     void wait() const;
 
     /// For testing
-    static RecordsMissngSequenceRangesPair categorizeRecordsAccordingToSequenceRanges(
+    static std::vector<RecordsSequenceRangesPair> categorizeRecordsAccordingToSequenceRanges(
         const IDistributedWriteAheadLog::RecordPtrs & records,
         const SequenceRanges & sequence_ranges,
         IDistributedWriteAheadLog::RecordSequenceNumber max_committed_sn);
