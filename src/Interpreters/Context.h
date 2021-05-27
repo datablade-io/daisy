@@ -10,6 +10,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Interpreters/TimeParam.h>
+#include <Interpreters/ExpressionJIT.h>
 #include <Parsers/IAST_fwd.h>
 #include <Storages/IStorage_fwd.h>
 #include <Common/MultiVersion.h>

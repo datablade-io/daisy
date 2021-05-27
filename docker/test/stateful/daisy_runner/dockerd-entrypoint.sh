@@ -63,5 +63,5 @@ clickhouse client --query "SHOW TABLES FROM test"
 clickhouse client --query "SELECT count() FROM test.hits"
 clickhouse client --query "SELECT count() FROM test.visits"
 
-clickhouse-test -q /usr/share/clickhouse-test/queries -j$(($(nproc)/2)) --testname --shard --zookeeper --no-stateless --hung-check --print-time $@  2>&1 | ts '%Y-%m-%d %H:%M:%S' | tee /tests_output/${TEST_TAG}_stateful_test_result.txt
+clickhouse-test -q /clickhouse-tests-env/queries -j$(($(nproc)/2)) --testname --shard --zookeeper --no-stateless --hung-check --print-time $@  2>&1 | ts '%Y-%m-%d %H:%M:%S' | tee /tests_output/${TEST_TAG}_stateful_test_result.txt
 

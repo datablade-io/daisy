@@ -175,8 +175,8 @@ def parse_env_variables(build_type, compiler, sanitizer, package_type, image_typ
     if official:
         cmake_flags.append('-DYANDEX_OFFICIAL_BUILD=1')
 
-    if len(ninja_flags > 0):
-        result.append('NINJA_FLAGS={flags}'.format(flags=' '.join(ninja_flags)))
+    if len(ninja_flags) > 0:
+        result.append("NINJA_FLAGS='{flags}'".format(flags=' '.join(ninja_flags)))
         
     result.append('CMAKE_FLAGS="' + ' '.join(cmake_flags) + '"')
 
