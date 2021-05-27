@@ -10,6 +10,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Interpreters/TimeParam.h>
+#include <Interpreters/ExpressionJIT.h>
 #include <Parsers/IAST_fwd.h>
 #include <Storages/IStorage_fwd.h>
 #include <Common/MultiVersion.h>
@@ -820,12 +821,6 @@ public:
     void setTimeParamStart(const String & start) { time_param.setStart(start); }
     void setTimeParamEnd(const String & end) { time_param.setEnd(end); }
     /// Daisy : ends.
-
-#if USE_EMBEDDED_COMPILER
-    std::shared_ptr<CompiledExpressionCache> getCompiledExpressionCache() const;
-    void setCompiledExpressionCache(size_t cache_size);
-    void dropCompiledExpressionCache() const;
-#endif
 
     /// Add started bridge command. It will be killed after context destruction
     void addBridgeCommand(std::unique_ptr<ShellCommand> cmd) const;
