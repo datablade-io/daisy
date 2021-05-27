@@ -32,13 +32,9 @@ def pull_image(image_name):
 def build_image(image_name, filepath):
     subprocess.check_call("docker build --network=host -t {} -f {} .".format(image_name, filepath), shell=True)
 
-<<<<<<< HEAD
 # Daisy : starts. Add sccache directory.
 def run_docker_image_with_env(image_name, output, env_variables, ch_root, ccache_dir, sccache_dir, docker_image_version):
 # Daisy : ends.
-=======
-def run_docker_image_with_env(image_name, output, env_variables, ch_root, ccache_dir, sccache_dir, docker_image_version):
->>>>>>> f228ccec16... Feature/switch mirrors (#68)
     env_part = " -e ".join(env_variables)
     if env_part:
         env_part = " -e " + env_part
@@ -48,10 +44,7 @@ def run_docker_image_with_env(image_name, output, env_variables, ch_root, ccache
     else:
         interactive = ""
 
-<<<<<<< HEAD
     # Daisy : starts. Mount sccache directory.
-=======
->>>>>>> f228ccec16... Feature/switch mirrors (#68)
     cmd = "docker run --network=host --rm --volume={output_path}:/output --volume={ch_root}:/build --volume={ccache_dir}:/ccache --volume={sccache_dir}:/root/.config/sccache {env} {interactive} {img_name}".format(
         output_path=output,
         ch_root=ch_root,
