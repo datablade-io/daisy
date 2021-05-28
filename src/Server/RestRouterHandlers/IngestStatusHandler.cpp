@@ -5,12 +5,9 @@
 #include <DistributedMetadata/sendRequest.h>
 #include <Storages/StorageDistributedMergeTree.h>
 
-/// #include <Poco/Net/HTTPRequest.h>
-/// #include <Poco/Net/HTTPResponse.h>
 #include <Poco/Path.h>
 
 #include <numeric>
-/// #include <vector>
 
 namespace DB
 {
@@ -142,7 +139,7 @@ std::pair<String, Int32> IngestStatusHandler::executePost(const Poco::JSON::Obje
                     log,
                     "{}, for poll_ids: {}",
                     error,
-                    std::accumulate(table_polls.second.begin(), table_polls.second.end(), std::string(",")),
+                    std::accumulate(table_polls.second.begin(), table_polls.second.end(), std::string{","}),
                     error_code);
                 continue;
             }
