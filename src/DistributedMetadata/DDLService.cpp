@@ -50,7 +50,7 @@ namespace
         "82", /// Database already  exists.
     };
 
-    bool isUnRetriableError(const String & err_msg)
+    bool isUnretriableError(const String & err_msg)
     {
         for (const auto & err_code : UNRETRIABLE_ERROR_CODES)
         {
@@ -75,7 +75,7 @@ namespace
             return ErrorCodes::UNRETRIABLE_ERROR;
         }
 
-        return isUnRetriableError(error_message) ? ErrorCodes::UNRETRIABLE_ERROR : ErrorCodes::UNKNOWN_EXCEPTION;
+        return isUnretriableError(error_message) ? ErrorCodes::UNRETRIABLE_ERROR : ErrorCodes::UNKNOWN_EXCEPTION;
     }
 
     String getTableCategory(const std::unordered_map<String, String> & headers)
