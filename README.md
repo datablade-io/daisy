@@ -212,4 +212,6 @@ $ curl http://localhost:8123/dae/v1/ingest/tables/testtable -X POST -H "content-
 ## Query Data
 
 ### Query Data via REST API
+```
 $ curl http://localhost:8123/dae/v1/search -X POST -H "content-type: application/json" -d '{"query": "SELECT * FROM testtable"}'
+```
