@@ -174,6 +174,7 @@ def Base_Tests(String base, String id)
     {  /// 返回对应测试stage
         stage ("${test_runner.stage_name}")
         {
+
             def runner = test_runner
             def loaders = test_runner.loaders?.values()
             def f =
