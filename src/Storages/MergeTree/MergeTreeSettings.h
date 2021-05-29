@@ -138,6 +138,7 @@ struct Settings;
     M(Bool, allow_floating_point_partition_key, false, "Allow floating point as partition key", 0) \
     /** Settings for DistributedMergeTree */ \
     M(Int64, shard, -1, "Current shard number", 0) \
+    M(String, subtype, "tabular", "Engine subtype", 0) \
     M(String, streaming_storage, "kafka", "Backend streaming storage for write ahead log implementation", 0) \
     M(String, streaming_storage_cluster_id, "", "Backend streaming storage cluster id", 0) \
     M(String, streaming_storage_auto_offset_reset, "earliest", "Default offset to consume messages from if there is no initial one", 0) \
