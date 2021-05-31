@@ -105,7 +105,7 @@ void WALPool::init(const String & key)
     const auto & config = global_context->getConfigRef();
 
     KafkaWALSettings kafka_settings;
-    Int32 WAL_pool_size = 0;
+    Int32 wal_pool_size = 0;
     bool system_default = false;
 
     std::vector<std::tuple<String, String, void *>> settings = {
@@ -135,7 +135,7 @@ void WALPool::init(const String & key)
         {".fetch_message_max_bytes", "Int32", &kafka_settings.fetch_message_max_bytes},
         {".queued_min_messages", "Int32", &kafka_settings.queued_min_messages},
         {".queued_max_messages_kbytes", "Int32", &kafka_settings.queued_max_messages_kbytes},
-        {".internal_pool_size", "Int32", &WAL_pool_size},
+        {".internal_pool_size", "Int32", &wal_pool_size},
     };
 
     for (const auto & t : settings)
@@ -184,7 +184,7 @@ void WALPool::init(const String & key)
     /// Create WALs
     LOG_INFO(log, "Creating Kafka WAL with settings: {}", kafka_settings.string());
 
-    for (Int32 i = 0; i < WAL_pool_size; ++i)
+    for (Int32 i = 0; i < wal_pool_size; ++i)
     {
         auto kwal
             = std::make_shared<KafkaWAL>(std::make_unique<KafkaWALSettings>(kafka_settings));
