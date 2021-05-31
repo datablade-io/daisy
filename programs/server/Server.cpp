@@ -54,7 +54,7 @@
 #include <Interpreters/UserDefinedSQLObjectsLoader.h>
 #include <Interpreters/JIT/CompiledExpressionCache.h>
 #include <Access/AccessControlManager.h>
-#include <DistributedWriteAheadLog/DistributedWriteAheadLogPool.h>
+#include <DistributedWriteAheadLog/WALPool.h>
 #include <Storages/StorageReplicatedMergeTree.h>
 #include <Storages/System/attachSystemTables.h>
 #include <Storages/System/attachInformationSchemaTables.h>
@@ -258,7 +258,7 @@ int waitServersToFinish(std::vector<DB::ProtocolServerAdapter> & servers, size_t
 ///     -> Task
 void initDistributedMetadataServices(DB::ContextPtr & global_context)
 {
-    auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
+    auto & pool = DB::DWAL::WALPool::instance(global_context);
     pool.startup();
 
     auto & catalog_service = DB::CatalogService::instance(global_context);
@@ -293,7 +293,7 @@ void deinitDistributedMetadataServices(DB::ContextPtr & global_context)
     auto & task_status_service = DB::TaskStatusService::instance(global_context);
     task_status_service.shutdown();
 
-    auto & pool = DB::DistributedWriteAheadLogPool::instance(global_context);
+    auto & pool = DB::DWAL::WALPool::instance(global_context);
     pool.shutdown();
 }
 /// Daisy : ends
