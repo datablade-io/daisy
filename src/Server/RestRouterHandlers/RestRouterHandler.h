@@ -117,6 +117,11 @@ protected:
         return jsonErrorResponse("Internal server error", error_code);
     }
 
+    String processQuery(
+        const String & query,
+        const std::function<void(Block &&)> & callback = [](Block &&) {},
+        const Poco::JSON::Object & resp = Poco::JSON::Object()) const;
+
 private:
     /// Override this function if derived handler need write data in a streaming way to http output
     virtual bool streamingOutput() const { return false; }

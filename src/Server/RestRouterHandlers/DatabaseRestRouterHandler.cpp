@@ -30,7 +30,8 @@ std::pair<String, Int32> DatabaseRestRouterHandler::executeGet(const Poco::JSON:
 {
     String query = "SHOW DATABASES;";
 
-    return processQuery(query);
+    Poco::JSON::Object resp;
+    return {processQuery(query, ([this, &resp](Block && block) { this->buildDatabaseArray(block, resp); }), resp), HTTPResponse::HTTP_OK};
 }
 
 std::pair<String, Int32> DatabaseRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload) const
@@ -43,7 +44,7 @@ std::pair<String, Int32> DatabaseRestRouterHandler::executePost(const Poco::JSON
     const String & database_name = payload->get("name").toString();
     String query = "CREATE DATABASE " + database_name;
 
-    return processQuery(query);
+    return {processQuery(query), HTTPResponse::HTTP_OK};
 }
 
 std::pair<String, Int32> DatabaseRestRouterHandler::executeDelete(const Poco::JSON::Object::Ptr & /* payload */) const
@@ -56,44 +57,23 @@ std::pair<String, Int32> DatabaseRestRouterHandler::executeDelete(const Poco::JS
     const String & database_name = getPathParameter("database");
     String query = "DROP DATABASE " + database_name;
 
-    return processQuery(query);
+    return {processQuery(query), HTTPResponse::HTTP_OK};
 }
 
-std::pair<String, Int32> DatabaseRestRouterHandler::processQuery(const String & query) const
+void DatabaseRestRouterHandler::buildDatabaseArray(const Block & block, Poco::JSON::Object & resp) const
 {
-    BlockIO io{executeQuery(query, query_context, false /* internal */)};
-
-    Poco::JSON::Object resp;
-    if (io.pipeline.initialized())
-    {
-        processQueryWithProcessors(resp, io.pipeline);
-    }
-    io.onFinish();
-
-    resp.set("request_id", query_context->getCurrentQueryId());
-    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    resp.stringify(resp_str_stream, 0);
-
-    return {resp_str_stream.str(), HTTPResponse::HTTP_OK};
-}
-
-void DatabaseRestRouterHandler::processQueryWithProcessors(Poco::JSON::Object & resp, QueryPipeline & pipeline) const
-{
-    PullingAsyncPipelineExecutor executor(pipeline);
     Poco::JSON::Array databases_mapping_json;
-    Block block;
-
-    while (executor.pull(block, 100))
+    if (block)
     {
-        if (block)
+        for (size_t index = 0; index < block.rows(); index++)
         {
-            for (size_t index = 0; index < block.rows(); index++)
-            {
-                const auto & databases_info = block.getColumns().at(0)->getDataAt(index).data;
-                databases_mapping_json.add(databases_info);
-            }
+            const auto & databases_info = block.getColumns().at(0)->getDataAt(index).data;
+            databases_mapping_json.add(databases_info);
         }
     }
+
     resp.set("databases", databases_mapping_json);
 }
+
 }
+

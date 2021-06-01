@@ -20,9 +20,7 @@ private:
     std::pair<String, Int32> executeDelete(const Poco::JSON::Object::Ptr & payload) const override;
 
 private:
-    std::pair<String, Int32> processQuery(const String & query) const;
-    String buildResponse() const;
-    void processQueryWithProcessors(Poco::JSON::Object & resp, QueryPipeline & pipeline) const;
+    void buildDatabaseArray(const Block & block, Poco::JSON::Object & resp) const;
 };
 
 }
