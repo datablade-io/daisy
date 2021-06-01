@@ -26,7 +26,7 @@
 #include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Interpreters/Session.h>
 #include <Storages/StorageReplicatedMergeTree.h>
-#include <Storages/StorageDistributedMergeTree.h>
+#include <Storages/DistributedMergeTree/StorageDistributedMergeTree.h>
 #include <Storages/MergeTree/MergeTreeDataPartUUID.h>
 #include <Storages/StorageS3Cluster.h>
 #include <Core/ExternalTable.h>
