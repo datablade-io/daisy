@@ -290,23 +290,18 @@ String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & pa
         create_segments.push_back(", shard=" + shard);
     }
 
-    String create_table_settings = "";
+    std::vector<String> create_table_settings;
     for (const auto & setting : CREATE_TABLE_SETTINGS)
     {
         if (hasQueryParameter(setting))
         {
             const String & setting_str = setting + "=" + getQueryParameter(setting);
+
             create_segments.push_back(", " + setting_str);
-
-            if (!create_table_settings.empty())
-            {
-                create_table_settings += "&";
-            }
-
-            create_table_settings += setting_str;
+            create_table_settings.push_back(setting_str);
         }
     }
-    query_context->setQueryParameter("create_table_settings", create_table_settings);
+    query_context->setQueryParameter("create_table_settings", boost::algorithm::join(create_table_settings, "&"));
 
     return boost::algorithm::join(create_segments, " ");
 }
