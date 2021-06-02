@@ -58,6 +58,11 @@ void RestRouterHandler::execute(HTTPServerRequest & request, HTTPServerResponse 
         }
         else
         {
+            if (isDistributedDDL())
+            {
+                setupRawQuery(request);
+            }
+
             result = execute(payload);
         }
     }
@@ -97,14 +102,6 @@ void RestRouterHandler::setupDistributedQueryParameters(
         query_context->setQueryParameter(kv.first, kv.second);
     }
 
-    /// setup query parameter in context : a=b&c=d&e=f
-    std::vector<String> url_params;
-    for (auto it = query_parameters->begin(); it != query_parameters->end(); it++)
-    {
-        url_params.push_back(it->first + "=" + it->second);
-    }
-
-    query_context->setQueryParameter("url_paramaters", boost::algorithm::join(url_params, "&"));
     query_context->setDistributedDDLOperation(true);
 }
 
