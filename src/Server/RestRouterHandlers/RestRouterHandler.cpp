@@ -96,11 +96,20 @@ void RestRouterHandler::setupDistributedQueryParameters(
     {
         query_context->setQueryParameter(kv.first, kv.second);
     }
+
+    /// setup query parameter in context : a=b&c=d&e=f
+    std::vector<String> url_params;
+    for (auto it = query_parameters->begin(); it != query_parameters->end(); it++)
+    {
+        url_params.push_back(it->first + "=" + it->second);
+    }
+
+    query_context->setQueryParameter("url_paramaters", boost::algorithm::join(url_params, "&"));
     query_context->setDistributedDDLOperation(true);
 }
 
 String
-RestRouterHandler::processQuery(const String & query, const std::function<void(Block &&)> & callback, const Poco::JSON::Object & resp) const
+RestRouterHandler::processQuery(const String & query, const Poco::JSON::Object & resp, const std::function<void(Block &&)> & callback) const
 {
     executeSelectQuery(query, query_context, callback, false);
     return buildResponse(query_context->getCurrentQueryId(), const_cast<Poco::JSON::Object &>(resp));
