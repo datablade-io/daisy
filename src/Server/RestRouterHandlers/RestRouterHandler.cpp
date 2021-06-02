@@ -101,7 +101,6 @@ void RestRouterHandler::setupDistributedQueryParameters(
     {
         query_context->setQueryParameter(kv.first, kv.second);
     }
-
     query_context->setDistributedDDLOperation(true);
 }
 
