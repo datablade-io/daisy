@@ -118,9 +118,10 @@ protected:
     }
 
     String processQuery(
-        const String & query,
-        const Poco::JSON::Object & resp = Poco::JSON::Object(),
-        const std::function<void(Block &&)> & callback = [](Block &&) {}) const;
+        const String & query, const std::function<void(Block &&)> & callback = [](Block &&) {}) const;
+
+    String processQuery(
+        const String & query, Poco::JSON::Object & resp, const std::function<void(Block &&)> & callback = [](Block &&) {}) const;
 
 private:
     /// Override this function if derived handler need write data in a streaming way to http output

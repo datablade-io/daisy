@@ -108,11 +108,17 @@ void RestRouterHandler::setupDistributedQueryParameters(
     query_context->setDistributedDDLOperation(true);
 }
 
+String RestRouterHandler::processQuery(const String & query, const std::function<void(Block &&)> & callback) const
+{
+    Poco::JSON::Object resp;
+    return processQuery(query, resp, callback);
+}
+
 String
-RestRouterHandler::processQuery(const String & query, const Poco::JSON::Object & resp, const std::function<void(Block &&)> & callback) const
+RestRouterHandler::processQuery(const String & query, Poco::JSON::Object & resp, const std::function<void(Block &&)> & callback) const
 {
     executeSelectQuery(query, query_context, callback, false);
-    return buildResponse(query_context->getCurrentQueryId(), const_cast<Poco::JSON::Object &>(resp));
+    return buildResponse(query_context->getCurrentQueryId(), resp);
 }
 
 }

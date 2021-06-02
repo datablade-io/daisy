@@ -294,6 +294,7 @@ String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & pa
     {
         if (hasQueryParameter(setting))
         {
+            /// FIXME : Do some parameters validation
             create_segments.push_back(", " + setting+ "=" + getQueryParameter(setting));
         }
     }

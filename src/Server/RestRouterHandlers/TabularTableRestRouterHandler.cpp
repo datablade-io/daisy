@@ -53,7 +53,7 @@ void TabularTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, c
 
     for (const auto & table : tables)
     {
-        if (table_names.find(table->name) != table_names.end())
+        if (table_names.contains(table->name))
             continue;
 
         /// FIXME : Later based on engin seting distinguish table

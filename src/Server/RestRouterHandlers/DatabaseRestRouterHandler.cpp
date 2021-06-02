@@ -20,13 +20,11 @@ namespace
     void buildDatabaseArray(const Block & block, Poco::JSON::Object & resp)
     {
         Poco::JSON::Array databases_mapping_json;
-        if (block)
+
+        for (size_t index = 0; index < block.rows(); index++)
         {
-            for (size_t index = 0; index < block.rows(); index++)
-            {
-                const auto & databases_info = block.getColumns().at(0)->getDataAt(index).data;
-                databases_mapping_json.add(databases_info);
-            }
+            const auto & databases_info = block.getColumns().at(0)->getDataAt(index).data;
+            databases_mapping_json.add(databases_info);
         }
 
         resp.set("databases", databases_mapping_json);
