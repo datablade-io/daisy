@@ -58,11 +58,6 @@ void RestRouterHandler::execute(HTTPServerRequest & request, HTTPServerResponse 
         }
         else
         {
-            if (isDistributedDDL())
-            {
-                setupRawQuery(request);
-            }
-
             result = execute(payload);
         }
     }
