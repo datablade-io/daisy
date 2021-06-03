@@ -321,7 +321,7 @@ void StorageDistributedMergeTree::read(
     size_t max_block_size,
     unsigned num_streams)
 {
-    if (isDistributed(context_))
+    if (requireDistributedQuery(context_))
     {
         /// This is a distributed query
         readRemote(query_plan, query_info, context_, processed_stage);
@@ -381,7 +381,7 @@ bool StorageDistributedMergeTree::isRemote() const
     return !storage;
 }
 
-bool StorageDistributedMergeTree::isDistributed(ContextPtr context_) const
+bool StorageDistributedMergeTree::requireDistributedQuery(ContextPtr context_) const
 {
     if (!storage)
     {
@@ -389,7 +389,7 @@ bool StorageDistributedMergeTree::isDistributed(ContextPtr context_) const
     }
 
     /// If it has backing storage and it is a single shard table
-    if (shards == 1 || context_->isDistributedDDLOperation())
+    if (shards == 1)
     {
         return false;
     }
@@ -526,7 +526,7 @@ std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
 QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStage(
     ContextPtr context_, QueryProcessingStage::Enum to_stage, const StorageMetadataPtr & metadata_snapshot, SelectQueryInfo & query_info) const
 {
-    if (isDistributed(context_))
+    if (requireDistributedQuery(context_))
     {
         return getQueryProcessingStageRemote(context_, to_stage, metadata_snapshot, query_info);
     }
