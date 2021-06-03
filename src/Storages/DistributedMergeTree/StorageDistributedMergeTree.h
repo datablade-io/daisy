@@ -180,6 +180,7 @@ protected:
         bool has_force_restore_data_flag_);
 
 private:
+    bool isDistributed(ContextPtr context_) const;
     void initWal();
 
 private:
