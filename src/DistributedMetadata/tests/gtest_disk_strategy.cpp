@@ -139,13 +139,15 @@ TEST(PlacementService, PlaceNodesByRoles)
     {
         String node = std::to_string(i);
         std::unordered_map<String, String> headers;
-        if(node.ends_with("0"))
+        if (node.ends_with("0"))
         {
             headers["_node_roles"] = "ingest";
-        }else if (node.ends_with("1"))
+        }
+        else if (node.ends_with("1"))
         {
             headers["_node_roles"] = "search";
-        }else if (node.ends_with("2"))
+        }
+        else if (node.ends_with("2"))
         {
             headers["_node_roles"] = "search,ingest";
         }
