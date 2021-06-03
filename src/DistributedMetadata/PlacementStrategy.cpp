@@ -1,7 +1,8 @@
 #include "PlacementStrategy.h"
 
-#include <random>
 #include <boost/algorithm/string.hpp>
+
+#include <random>
 
 namespace DB
 {
