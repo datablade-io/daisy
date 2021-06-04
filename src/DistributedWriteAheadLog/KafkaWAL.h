@@ -100,8 +100,7 @@ struct KafkaWALContext
     {
     }
 
-    KafkaWALContext(
-        const String & topic_, Int32 partitions_, Int32 replication_factor_, const String & cleanup_policy_ = "delete")
+    KafkaWALContext(const String & topic_, Int32 partitions_, Int32 replication_factor_, const String & cleanup_policy_)
         : topic(topic_), partitions(partitions_), replication_factor(replication_factor_), cleanup_policy(cleanup_policy_)
     {
     }

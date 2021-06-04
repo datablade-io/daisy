@@ -321,24 +321,13 @@ void StorageDistributedMergeTree::readStreaming(
     size_t max_block_size,
     unsigned /* num_streams */)
 {
-    const auto & topic_name = topic(getStorageID());
-
-    /// Create a temporary consumer with temporary consume group ID
-    /// This can be expensive, but let's see how it works
-    auto settings{static_cast<DWAL::KafkaWAL *>(dwal.get())->getSettings()};
-    settings->group_id = topic_name + "_" + context_->getCurrentQueryId();
-    settings->mode_producer_consumer = DWAL::KafkaWALSettings::EProducerConsumer::CONSUMER_ONLY;
-    settings->enable_auto_commit = false;
-    auto wal = std::make_shared<DWAL::KafkaWAL>(std::move(settings));
-    wal->startup();
-
     Pipes pipes;
     pipes.reserve(shards);
 
     for (Int32 i = 0; i < shards; ++i)
     {
-        pipes.emplace_back(std::make_shared<SourceFromInputStream>(std::make_shared<StreamingBlockInputStream>(
-            *this, metadata_snapshot, column_names, context_, max_block_size, log, wal, topic_name, i)));
+        pipes.emplace_back(std::make_shared<SourceFromInputStream>(
+            std::make_shared<StreamingBlockInputStream>(*this, metadata_snapshot, column_names, context_, max_block_size, i, log)));
     }
 
     auto read_step = std::make_unique<ReadFromStorageStep>(Pipe::unitePipes(std::move(pipes)), getName());
@@ -1380,6 +1369,11 @@ void StorageDistributedMergeTree::backgroundConsumer()
     {
         commitSNLocal(commit_sn);
     }
+}
+
+String StorageDistributedMergeTree::streamingStorageClusterId() const
+{
+    return storage_settings.get()->streaming_storage_cluster_id.value;
 }
 
 void StorageDistributedMergeTree::initWal()

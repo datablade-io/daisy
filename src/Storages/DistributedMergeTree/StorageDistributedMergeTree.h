@@ -170,6 +170,8 @@ public:
 
     DWAL::RecordSequenceNumber lastSequenceNumber() const;
 
+    String streamingStorageClusterId() const;
+
     friend struct DistributedMergeTreeCallbackData;
     friend class DistributedMergeTreeBlockOutputStream;
     friend class StreamingBlockInputStream;

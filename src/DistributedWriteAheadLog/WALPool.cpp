@@ -94,6 +94,11 @@ void WALPool::shutdown()
         meta_wal->shutdown();
     }
 
+    {
+        std::lock_guard lock{streaming_wals_lock};
+        streaming_wals.clear();
+    }
+
     LOG_INFO(log, "Stopped");
 }
 
@@ -221,6 +226,53 @@ WALPtr WALPool::get(const String & id) const
     }
 
     return iter->second[indexes[id]++ % iter->second.size()];
+}
+
+WALPtr WALPool::getOrCreateStreaming(const String & id, const String & cluster_id)
+{
+    std::lock_guard lock{streaming_wals_lock};
+
+    auto iter = streaming_wals.find(id);
+    if (iter != streaming_wals.end())
+    {
+        return iter->second;
+    }
+
+    const String * cid = &cluster_id;
+    if (cluster_id.empty())
+    {
+        cid = &default_cluster;
+    }
+
+    /// Create one
+    auto wal_iter = wals.find(*cid);
+    assert (wal_iter != wals.end());
+    if (wal_iter != wals.end())
+    {
+        auto ksettings{static_cast<KafkaWAL *>(wal_iter->second.back().get())->getSettings()};
+
+        /// We don't care offset checkpointing for WALs used for streaming processing,
+        /// and we only need consumer
+
+        /// Streaming WALs have a different group ID
+        ksettings->group_id = id + "-streaming";
+        ksettings->mode_producer_consumer = KafkaWALSettings::EProducerConsumer::CONSUMER_ONLY;
+        /// No auto commit
+        ksettings->enable_auto_commit = false;
+
+        auto kwal = std::make_shared<KafkaWAL>(std::move(ksettings));
+        kwal->startup();
+        streaming_wals[id] = kwal;
+        return kwal;
+    }
+    return nullptr;
+}
+
+void WALPool::deleteStreaming(const String & id)
+{
+    std::lock_guard lock{streaming_wals_lock};
+
+    streaming_wals.erase(id);
 }
 
 WALPtr WALPool::getMeta() const { return meta_wal; }
