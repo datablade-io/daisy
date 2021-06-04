@@ -17,7 +17,8 @@ namespace DB
 {
 namespace DWAL
 {
-/// KafkaWALContext is not thread safe, so each produce/consume thread
+/// KafkaWALContext is per topic and
+/// It is not thread safe, so each produce/consume thread
 /// shall maintain its own context instance
 struct KafkaWALContext
 {
@@ -153,6 +154,7 @@ struct KafkaWALSettings
     /// Int32 session_timeout_ms = 10000;
     /// Int32 max_poll_interval_ms = 30000;
     bool enable_auto_commit = true;
+    bool enable_partition_eof = false;
     bool check_crcs = false;
     Int32 auto_commit_interval_ms = 5000;
     Int32 fetch_message_max_bytes = 1048576;
@@ -160,6 +162,14 @@ struct KafkaWALSettings
     /// Global librdkafka client side settings for consumer per topic+partition
     Int32 queued_min_messages = 1000000;
     Int32 queued_max_messages_kbytes = 65536;
+
+    enum class EProducerConsumer : uint8_t
+    {
+        PRODUCER_ONLY = 0,
+        CONSUMER_ONLY,
+        BOTH_PRODUCER_AND_CONSUMER,
+    };
+    EProducerConsumer mode_producer_consumer = EProducerConsumer::BOTH_PRODUCER_AND_CONSUMER;
 
     String string() const
     {
@@ -179,10 +189,13 @@ struct KafkaWALSettings
         settings.push_back("message_delivery_async_poll_ms=" + std::to_string(message_delivery_async_poll_ms));
         settings.push_back("message_delivery_sync_poll_ms=" + std::to_string(message_delivery_sync_poll_ms));
         settings.push_back("enable_auto_commit=" + std::to_string(enable_auto_commit));
+        settings.push_back("enable_partition_eof=" + std::to_string(enable_partition_eof));
         settings.push_back("check_crcs=" + std::to_string(check_crcs));
         settings.push_back("auto_commit_interval_ms=" + std::to_string(auto_commit_interval_ms));
         settings.push_back("queued_min_messages=" + std::to_string(queued_min_messages));
         settings.push_back("queued_max_messages_kbytes=" + std::to_string(queued_max_messages_kbytes));
+        auto i = static_cast<std::underlying_type_t<EProducerConsumer>>(mode_producer_consumer);
+        settings.push_back("mode_producer_consumer=" + std::to_string(i));
 
         return boost::algorithm::join(settings, " ");
     }
@@ -229,6 +242,8 @@ public:
     /// APIs for clients to cache the topic handle
     std::shared_ptr<rd_kafka_topic_s> initProducerTopic(const KafkaWALContext & ctx);
     std::shared_ptr<rd_kafka_topic_s> initConsumerTopic(const KafkaWALContext & ctx);
+
+    std::unique_ptr<KafkaWALSettings> getSettings() const;
 
     /// Admin APIs
     /// `ctx` is KafkaWALContext
@@ -314,7 +329,7 @@ private:
     std::unordered_map<String, std::pair<WAL::ConsumeCallback, void *>> consumer_callbacks;
 #endif
 
-    ThreadPool poller;
+    std::optional<ThreadPool> poller;
 
     Poco::Logger * log;
 

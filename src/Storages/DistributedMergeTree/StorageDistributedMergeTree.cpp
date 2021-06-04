@@ -1,11 +1,12 @@
 #include "StorageDistributedMergeTree.h"
-#include "DistributedMergeTreeCallbackData.h"
 #include "DistributedMergeTreeBlockOutputStream.h"
+#include "DistributedMergeTreeCallbackData.h"
+#include "StreamingBlockInputStream.h"
 
 #include <DistributedMetadata/CatalogService.h>
 #include <DistributedWriteAheadLog/KafkaWAL.h>
-#include <DistributedWriteAheadLog/WALPool.h>
 #include <DistributedWriteAheadLog/Name.h>
+#include <DistributedWriteAheadLog/WALPool.h>
 #include <Functions/IFunction.h>
 #include <Interpreters/ClusterProxy/DistributedSelectStreamFactory.h>
 #include <Interpreters/ClusterProxy/executeQuery.h>
@@ -20,6 +21,7 @@
 #include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
 #include <Processors/QueryPlan/ReadFromPreparedSource.h>
 #include <Processors/Sources/NullSource.h>
+#include <Processors/Sources/SourceFromInputStream.h>
 #include <Storages/MergeTree/MergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
 #include <Common/randomSeed.h>
@@ -311,6 +313,38 @@ void StorageDistributedMergeTree::readRemote(
         query_info.cluster);
 }
 
+void StorageDistributedMergeTree::readStreaming(
+    QueryPlan & query_plan,
+    const Names & column_names,
+    const StorageMetadataPtr & metadata_snapshot,
+    ContextPtr context_,
+    size_t max_block_size,
+    unsigned /* num_streams */)
+{
+    const auto & topic_name = topic(getStorageID());
+
+    /// Create a temporary consumer with temporary consume group ID
+    /// This can be expensive, but let's see how it works
+    auto settings{static_cast<DWAL::KafkaWAL *>(dwal.get())->getSettings()};
+    settings->group_id = topic_name + "_" + context_->getCurrentQueryId();
+    settings->mode_producer_consumer = DWAL::KafkaWALSettings::EProducerConsumer::CONSUMER_ONLY;
+    settings->enable_auto_commit = false;
+    auto wal = std::make_shared<DWAL::KafkaWAL>(std::move(settings));
+    wal->startup();
+
+    Pipes pipes;
+    pipes.reserve(shards);
+
+    for (Int32 i = 0; i < shards; ++i)
+    {
+        pipes.emplace_back(std::make_shared<SourceFromInputStream>(std::make_shared<StreamingBlockInputStream>(
+            *this, metadata_snapshot, column_names, context_, max_block_size, log, wal, topic_name, i)));
+    }
+
+    auto read_step = std::make_unique<ReadFromStorageStep>(Pipe::unitePipes(std::move(pipes)), getName());
+    query_plan.addStep(std::move(read_step));
+}
+
 void StorageDistributedMergeTree::read(
     QueryPlan & query_plan,
     const Names & column_names,
@@ -321,7 +355,12 @@ void StorageDistributedMergeTree::read(
     size_t max_block_size,
     unsigned num_streams)
 {
-    if (requireDistributedQuery(context_))
+    /// FIXME : streaming table validation
+    if (!context_->streamingTables().empty())
+    {
+        readStreaming(query_plan, column_names, metadata_snapshot, context_, max_block_size, num_streams);
+    }
+    else if (requireDistributedQuery(context_))
     {
         /// This is a distributed query
         readRemote(query_plan, query_info, context_, processed_stage);

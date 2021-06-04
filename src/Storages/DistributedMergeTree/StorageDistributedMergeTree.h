@@ -42,6 +42,8 @@ public:
 
     bool supportsIndexForIn() const override;
 
+    /// Here we inverted the implementation : Pipe read() -> void read
+    /// which shall be the other way. Ref : IStorage default implementation
     Pipe read(
         const Names & column_names,
         const StorageMetadataPtr & /*metadata_snapshot*/,
@@ -140,6 +142,14 @@ private:
 
     void readRemote(QueryPlan & query_plan, SelectQueryInfo & query_info, ContextPtr context, QueryProcessingStage::Enum processed_stage);
 
+    void readStreaming(
+        QueryPlan & query_plan,
+        const Names & column_names,
+        const StorageMetadataPtr & metadata_snapshot,
+        ContextPtr context_,
+        size_t max_block_size,
+        unsigned /* num_streams */);
+
 public:
     IColumn::Selector createSelector(const ColumnWithTypeAndName & result) const;
     IColumn::Selector createSelector(const Block & block) const;
@@ -162,6 +172,7 @@ public:
 
     friend struct DistributedMergeTreeCallbackData;
     friend class DistributedMergeTreeBlockOutputStream;
+    friend class StreamingBlockInputStream;
     friend class MergeTreeData;
 
 protected:

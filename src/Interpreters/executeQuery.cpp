@@ -55,6 +55,9 @@
 #include <Interpreters/ReplaceQueryParameterVisitor.h>
 #include <Interpreters/SelectQueryOptions.h>
 #include <Interpreters/executeQuery.h>
+/// Daisy : starts
+#include <Interpreters/streamingQuery.h>
+/// Daisy : ends
 #include <Common/ProfileEvents.h>
 
 #include <Common/SensitiveDataMasker.h>
@@ -442,9 +445,17 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
         {
             if (auto new_settings = select_query->settings())
                 InterpreterSetQuery(new_settings, context).executeForCurrentContext();
+
+            /// Daisy : starts
+            context->setStreamingTables(streamingTables(ast));
+            /// Diasy : ends
         }
         else if (const auto * select_with_union_query = ast->as<ASTSelectWithUnionQuery>())
         {
+            /// Daisy : starts
+            context->setStreamingTables(streamingTables(ast));
+            /// Daisy : ends
+
             if (!select_with_union_query->list_of_selects->children.empty())
             {
                 // We might have an arbitrarily complex UNION tree, so just give

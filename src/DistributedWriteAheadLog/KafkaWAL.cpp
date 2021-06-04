@@ -32,6 +32,8 @@ using KTopicConfPtr = std::unique_ptr<rd_kafka_topic_conf_t, decltype(rd_kafka_t
 using KConfCallback = std::function<void(rd_kafka_conf_t *)>;
 using KConfParams = std::vector<std::pair<String, String>>;
 
+String bool_to_string(bool b) { return b ? "true" : "false"; }
+
 Int32 mapErrorCode(rd_kafka_resp_err_t err)
 {
     /// FIXME, more code mapping
@@ -411,14 +413,40 @@ void KafkaWAL::deliveryReport(struct rd_kafka_s *, const rd_kafka_message_s * rk
     }
 }
 
+std::unique_ptr<KafkaWALSettings> KafkaWAL::getSettings() const
+{
+    return std::make_unique<KafkaWALSettings>(*settings);
+}
+
 KafkaWAL::KafkaWAL(std::unique_ptr<KafkaWALSettings> settings_)
     : settings(std::move(settings_))
     , producer_handle(nullptr, rd_kafka_destroy)
     , consumer_handle(nullptr, rd_kafka_destroy)
-    , poller(2)
     , log(&Poco::Logger::get("KafkaWAL"))
     , stats{std::make_unique<Stats>(log)}
 {
+    if (settings->mode_producer_consumer == KafkaWALSettings::EProducerConsumer::BOTH_PRODUCER_AND_CONSUMER)
+    {
+        if (settings->enable_auto_commit)
+        {
+            poller.emplace(2);
+        }
+        else
+        {
+            poller.emplace(1);
+        }
+    }
+    else if (settings->mode_producer_consumer == KafkaWALSettings::EProducerConsumer::PRODUCER_ONLY)
+    {
+        poller.emplace(1);
+    }
+    else
+    {
+        if (settings->enable_auto_commit)
+        {
+            poller.emplace(1);
+        }
+    }
 }
 
 KafkaWAL::~KafkaWAL()
@@ -436,11 +464,30 @@ void KafkaWAL::startup()
 
     LOG_INFO(log, "Starting");
 
-    initProducer();
-    initConsumer();
+    if (settings->mode_producer_consumer == KafkaWALSettings::EProducerConsumer::PRODUCER_ONLY)
+    {
+        initProducer();
+        poller->scheduleOrThrowOnError([this] { backgroundPollProducer(); });
+    }
+    else if (settings->mode_producer_consumer == KafkaWALSettings::EProducerConsumer::CONSUMER_ONLY)
+    {
+        initConsumer();
+        if (settings->enable_auto_commit)
+        {
+            poller->scheduleOrThrowOnError([this] { backgroundPollConsumer(); });
+        }
+    }
+    else
+    {
+        initProducer();
+        initConsumer();
 
-    poller.scheduleOrThrowOnError([this] { backgroundPollProducer(); });
-    poller.scheduleOrThrowOnError([this] { backgroundPollConsumer(); });
+        poller->scheduleOrThrowOnError([this] { backgroundPollProducer(); });
+        if (settings->enable_auto_commit)
+        {
+            poller->scheduleOrThrowOnError([this] { backgroundPollConsumer(); });
+        }
+    }
 
     LOG_INFO(log, "Started");
 }
@@ -453,7 +500,10 @@ void KafkaWAL::shutdown()
     }
 
     LOG_INFO(log, "Stopping");
-    poller.wait();
+    if (poller)
+    {
+        poller->wait();
+    }
     LOG_INFO(log, "Stopped");
 }
 
@@ -595,7 +645,7 @@ void KafkaWAL::initProducer()
         std::make_pair("queue.buffering.max.ms", std::to_string(settings->queue_buffering_max_ms)),
         std::make_pair("message.send.max.retries", std::to_string(settings->message_send_max_retries)),
         std::make_pair("retry.backoff.ms", std::to_string(settings->retry_backoff_ms)),
-        std::make_pair("enable.idempotence", std::to_string(settings->enable_idempotence)),
+        std::make_pair("enable.idempotence", bool_to_string(settings->enable_idempotence)),
         std::make_pair("compression.codec", settings->compression_codec),
         std::make_pair("statistics.interval.ms", std::to_string(settings->statistic_internal_ms)),
     };
@@ -623,17 +673,16 @@ void KafkaWAL::initConsumer()
     /// 1) use simple Kafka consumer
     /// 2) manually manage offset commit
     /// 3) offsets are stored in brokers and on application side.
-    ///     3.1) In normal cases, application side offsets overrides offsets in borkers
-    ///     3.2) In corruption cases (application offsets corruption), use offsets in borkers
+    ///     3.1) In normal cases, application side offsets overrides offsets in brokers
+    ///     3.2) In corruption cases (application offsets corruption), use offsets in brokers
     std::vector<std::pair<String, String>> consumer_params = {
         std::make_pair("bootstrap.servers", settings->brokers.c_str()),
         std::make_pair("group.id", settings->group_id),
-        /// enable auto offset commit
-        std::make_pair("enable.auto.commit", "true"),
+        std::make_pair("enable.auto.commit", bool_to_string(settings->enable_auto_commit)),
         std::make_pair("auto.commit.interval.ms", std::to_string(settings->auto_commit_interval_ms)),
         std::make_pair("enable.auto.offset.store", "false"),
         std::make_pair("offset.store.method", "broker"),
-        std::make_pair("enable.partition.eof", "false"),
+        std::make_pair("enable.partition.eof", bool_to_string(settings->enable_partition_eof)),
         std::make_pair("queued.min.messages", std::to_string(settings->queued_min_messages)),
         std::make_pair("queued.max.messages.kbytes", std::to_string(settings->queued_max_messages_kbytes)),
         /// consumer group membership heartbeat timeout
@@ -662,6 +711,7 @@ void KafkaWAL::initConsumer()
 
 WAL::AppendResult KafkaWAL::append(const Record & record, std::any & ctx)
 {
+    assert(producer_handle);
     assert(ctx.has_value());
     assert(!record.empty());
 
@@ -694,6 +744,7 @@ WAL::AppendResult KafkaWAL::append(const Record & record, std::any & ctx)
 Int32 KafkaWAL::append(
     const Record & record, WAL::AppendCallback callback, void * data, std::any & ctx)
 {
+    assert(producer_handle);
     assert(ctx.has_value());
     assert(!record.empty());
 
@@ -842,6 +893,7 @@ inline Int32 KafkaWAL::initConsumerTopicHandleIfNecessary(KafkaWALContext & walc
 
 Int32 KafkaWAL::consume(WAL::ConsumeCallback callback, void * data, std::any & ctx)
 {
+    assert(consumer_handle);
     assert(ctx.has_value());
 
     auto & walctx = std::any_cast<KafkaWALContext &>(ctx);
@@ -982,6 +1034,7 @@ Int32 KafkaWAL::consume(WAL::ConsumeCallback callback, void * data, std::any & c
 
 WAL::ConsumeResult KafkaWAL::consume(UInt32 count, Int32 timeout_ms, std::any & ctx)
 {
+    assert(consumer_handle);
     assert(ctx.has_value());
 
     auto & walctx = std::any_cast<KafkaWALContext &>(ctx);
@@ -1051,6 +1104,7 @@ WAL::ConsumeResult KafkaWAL::consume(UInt32 count, Int32 timeout_ms, std::any & 
 
 Int32 KafkaWAL::stopConsume(std::any & ctx)
 {
+    assert(consumer_handle);
     assert(ctx.has_value());
 
     auto & walctx = std::any_cast<KafkaWALContext &>(ctx);

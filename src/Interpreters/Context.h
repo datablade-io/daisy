@@ -198,6 +198,7 @@ private:
     String query_status_poll_id;
     String idempotent_key;
     String ingest_mode;
+    std::vector<String> streaming_tables;
     bool distributed_ddl_operation = false;
     /// Daisy : ends
 
@@ -509,6 +510,7 @@ public:
     const String & getIngestMode() const { return ingest_mode; }
     bool isDistributed() const;
     bool isDistributedDDLOperation() const { return distributed_ddl_operation;}
+    const std::vector<String> & streamingTables() const { return streaming_tables;}
     ThreadPool & getPartCommitPool() const;
     /// Daisy : ends
 
@@ -527,6 +529,7 @@ public:
     void setIngestMode(const String & ingest_mode_) { ingest_mode = ingest_mode_; }
     /// Kinda hacky
     void setDistributedDDLOperation(bool distributed) { distributed_ddl_operation = distributed; }
+    void setStreamingTables(std::vector<String> streaming_tables_) { streaming_tables.swap(streaming_tables_); }
     /// Daisy : ends
 
     void killCurrentQuery();
