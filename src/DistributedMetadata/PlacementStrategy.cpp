@@ -19,13 +19,7 @@ std::vector<NodeMetricsPtr> DiskStrategy::qualifiedNodes(const NodeMetricsContai
     for (const auto & [node, metrics] : nodes_metrics)
     {
         /// If the role of the node is "ingest" or "search", skip it.
-        std::vector<String> roles;
-        boost::split(roles, metrics->node.roles, boost::is_any_of(","));
-        bool match = std::any_of(roles.begin(), roles.end(), [](auto & item) -> bool {
-            boost::trim(item);
-            return boost::iequals(item, "ingest") || boost::iequals(item, "search");
-        });
-        if (match)
+        if (metrics->node.roles.find("search") != String::npos || metrics->node.roles.find("ingest") != String::npos)
         {
             continue;
         }
