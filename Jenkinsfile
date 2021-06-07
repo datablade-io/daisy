@@ -562,7 +562,7 @@ pipeline {
                                     cleanWs()
                                     copyArtifacts filter: "clickhouse-COVERAGE-${params.TESTS_TAG}.tar.gz", fingerprintArtifacts: true, projectName: env.JOB_NAME, selector: specific(params.USE_BINARY_NUMBER), target: '.'
                                     sh "tar -zxvf clickhouse-COVERAGE-${params.TESTS_TAG}.tar.gz -C . >/dev/null 2>&1 && rm -rf clickhouse-COVERAGE-${params.TESTS_TAG}.tar.gz"
-
+                                    sh "mkdir -p ${COVERAGE_DIR}"
                                     docker.withRegistry('http://registry.foundary.zone:8360', 'cicd-dockerhub-id') {
                                         def tests = [:]
                                         for (id in params.TESTS.tokenize(',')) {
