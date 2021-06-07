@@ -2,13 +2,13 @@
 
 set -e -x
 
-export LLVM_PROFILE_FILE='/tests_output/coverage_reports/stateful_tests_clickhouse_%h_%p_%m.profraw'
+export LLVM_PROFILE_FILE='/tests_output/coverage_reports/stateful_tests_clickhouse_%5m.profraw'
 
 # Start server
 counter=0
 until clickhouse client --query "SELECT 1"
 do
-    if [ "$counter" -gt 120 ]
+    if [ "$counter" -gt 30 ]
     then
         echo "Cannot start clickhouse server"
         cat /var/log/clickhouse-server/stdout.log
@@ -17,7 +17,7 @@ do
         break
     fi
     clickhouse server --config=/etc/clickhouse-server/config.xml --log-file=/var/log/clickhouse-server/clickhouse-server.log --errorlog-file=/var/log/clickhouse-server/clickhouse-server.err.log --daemon
-    sleep 0.5
+    sleep 2
     counter=$((counter + 1))
 done
 
@@ -27,7 +27,7 @@ s3downloader --dataset-names $DATASETS
 chmod 777 -R /var/lib/clickhouse
 clickhouse client --query "SHOW DATABASES"
 clickhouse client --query "ATTACH DATABASE datasets ENGINE = Ordinary"
-clickhouse server --config=/etc/clickhouse-server1/config.xml --log-file=/var/log/clickhouse-server/clickhouse-server.log --errorlog-file=/var/log/clickhouse-server/clickhouse-server.err.log --daemon restart
+clickhouse server --config=/etc/clickhouse-server/config.xml --log-file=/var/log/clickhouse-server/clickhouse-server.log --errorlog-file=/var/log/clickhouse-server/clickhouse-server.err.log --daemon restart
 
 # Wait for server to start accepting connections
 for _ in {1..120}; do
@@ -63,5 +63,5 @@ clickhouse client --query "SHOW TABLES FROM test"
 clickhouse client --query "SELECT count() FROM test.hits"
 clickhouse client --query "SELECT count() FROM test.visits"
 
-clickhouse-test -q /usr/share/clickhouse-test/queries -j$(($(nproc)/2)) --testname --shard --zookeeper --no-stateless --hung-check --print-time $@  2>&1 | ts '%Y-%m-%d %H:%M:%S' | tee /tests_output/${TEST_TAG}_stateful_test_result.txt
+clickhouse-test -q /clickhouse-tests-env/queries -j$(($(nproc)/4)) --testname --shard --zookeeper --no-stateless --hung-check --print-time $@  2>&1 | ts '%Y-%m-%d %H:%M:%S' | tee /tests_output/${TEST_TAG}_stateful_test_result.txt
 

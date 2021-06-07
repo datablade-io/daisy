@@ -248,7 +248,7 @@ class ClickHouseCluster:
 
         # Code coverage files will be placed in database directory
         # (affect only WITH_COVERAGE=1 build)
-        env_variables['LLVM_PROFILE_FILE'] = '/var/lib/clickhouse/server_%h_%p_%m.profraw'
+        env_variables['LLVM_PROFILE_FILE'] = '/tests_output/coverage_reports/integration_tests_server_%5m.profraw'
 
         instance = ClickHouseInstance(
             cluster=self,
@@ -962,6 +962,7 @@ services:
         image: {image}:{tag}
         hostname: {hostname}
         volumes:
+            - /tests_output/coverage_reports:/tests_output/coverage_reports
             - {instance_config_dir}:/etc/clickhouse-server/
             - {db_dir}:/var/lib/clickhouse/
             - {logs_dir}:/var/log/clickhouse-server/

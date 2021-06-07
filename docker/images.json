@@ -46,8 +46,7 @@
         "dependent": [
             "docker/test/stateful",
             "docker/test/coverage",
-            "docker/test/unit",
-            "docker/test/unit/runner"
+            "docker/test/unit"
         ]
     },
     "docker/test/stateless_pytest": {
@@ -81,22 +80,10 @@
         "dependent": []
     },
     "docker/test/integration/runner": {
-        "name": "daisy/clickhouse-integration-tests-runner",
-        "dependent": []
-    },
-    "docker/test/stateless_unbundled/runner": {
-    	"name": "daisy/clickhouse-statelest-tests-runner",
-	"dependent": [
-	    "docker/test/stateful/runner"
-	]
-    },
-    "docker/test/stateful/runner": {
-    	"name": "daisy/clickhouse-stateful-tests-runner",
-	"dependent": []
-    },
-    "docker/test/unit/runner": {
-        "name": "daisy/clickhouse-unit-tests-runner",
-        "dependent": []
+        "name": "yandex/clickhouse-integration-tests-runner",
+        "dependent": [
+            "docker/test/integration/daisy_runner"
+        ]
     },
     "docker/test/testflows/runner": {
         "name": "yandex/clickhouse-testflows-runner",
@@ -149,7 +136,6 @@
     "docker/test/base": {
          "name": "yandex/clickhouse-test-base",
          "dependent": [
-	    "docker/test/stateful/runner",
             "docker/test/stateless",
             "docker/test/stateless_unbundled",
             "docker/test/stateless_pytest",
@@ -167,7 +153,6 @@
     "docker/test/stateless_unbundled": {
          "name": "yandex/clickhouse-stateless-unbundled-test",
          "dependent": [
-	    "docker/test/stateless_unbundled/runner"
          ]
     },
     "docker/test/integration/kerberized_hadoop": {
