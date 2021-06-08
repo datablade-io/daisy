@@ -318,7 +318,7 @@ void StorageDistributedMergeTree::readStreaming(
     const Names & column_names,
     const StorageMetadataPtr & metadata_snapshot,
     ContextPtr context_,
-    size_t max_block_size,
+    size_t /* max_block_size */,
     unsigned /* num_streams */)
 {
     Pipes pipes;
@@ -327,7 +327,7 @@ void StorageDistributedMergeTree::readStreaming(
     for (Int32 i = 0; i < shards; ++i)
     {
         pipes.emplace_back(std::make_shared<SourceFromInputStream>(
-            std::make_shared<StreamingBlockInputStream>(*this, metadata_snapshot, column_names, context_, max_block_size, i, log)));
+            std::make_shared<StreamingBlockInputStream>(*this, metadata_snapshot, column_names, context_, i, log)));
     }
 
     auto read_step = std::make_unique<ReadFromStorageStep>(Pipe::unitePipes(std::move(pipes)), getName());
@@ -344,7 +344,7 @@ void StorageDistributedMergeTree::read(
     size_t max_block_size,
     unsigned num_streams)
 {
-    /// FIXME : streaming table validation
+    /// FIXME : streaming table name validation
     if (!context_->streamingTables().empty())
     {
         readStreaming(query_plan, column_names, metadata_snapshot, context_, max_block_size, num_streams);

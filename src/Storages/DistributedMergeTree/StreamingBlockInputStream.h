@@ -1,9 +1,14 @@
 #pragma once
 
-#include "StorageDistributedMergeTree.h"
+#include <DataStreams/IBlockInputStream.h>
+#include <Interpreters/Context_fwd.h>
+#include <Storages/StorageInMemoryMetadata.h>
 
 namespace DB
 {
+
+class StorageDistributedMergeTree;
+class StreamingBlockReader;
 
 class StreamingBlockInputStream final : public IBlockInputStream
 {
@@ -13,7 +18,6 @@ public:
         const StorageMetadataPtr & metadata_snapshot_,
         const Names & column_names_,
         ContextPtr context_,
-        size_t max_block_size_,
         Int32 shard_,
         Poco::Logger * log_);
 
@@ -25,7 +29,7 @@ public:
 private:
     void readPrefixImpl() override;
     Block readImpl() override;
-    void fetchRecordsFromStream();
+    void readAndProcess();
 
 private:
     StorageDistributedMergeTree & storage;
@@ -33,15 +37,16 @@ private:
     ContextPtr context;
     Names column_names;
 
-    size_t max_block_size;
     Int32 shard;
     Poco::Logger * log;
 
-    String streaming_id;
-    DWAL::WALPtr dwal;
-    std::any consume_ctx;
+    std::unique_ptr<StreamingBlockReader> reader;
 
-    DWAL::RecordPtrs record_buffer;
-    DWAL::RecordPtrs::iterator iter;
+    /// std::condition_variable fire_condition;
+    /// std::mutex result_blocks_mutex;
+
+    /// Final results
+    Blocks result_blocks;
+    Blocks::iterator iter;
 };
 }
