@@ -7,6 +7,7 @@ namespace DB
 {
 StreamingBlockInputStream::StreamingBlockInputStream(
     StorageDistributedMergeTree & storage_,
+    ASTPtr query_,
     const StorageMetadataPtr & metadata_snapshot_,
     const Names & column_names_,
     ContextPtr context_,
@@ -14,6 +15,7 @@ StreamingBlockInputStream::StreamingBlockInputStream(
     Poco::Logger * log_)
     : storage(storage_)
     , metadata_snapshot(metadata_snapshot_)
+    , query(query_)
     , context(context_)
     , column_names(column_names_)
     , shard(shard_)

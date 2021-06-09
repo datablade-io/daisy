@@ -315,6 +315,7 @@ void StorageDistributedMergeTree::readRemote(
 
 void StorageDistributedMergeTree::readStreaming(
     QueryPlan & query_plan,
+    const SelectQueryInfo & query_info,
     const Names & column_names,
     const StorageMetadataPtr & metadata_snapshot,
     ContextPtr context_,
@@ -327,7 +328,7 @@ void StorageDistributedMergeTree::readStreaming(
     for (Int32 i = 0; i < shards; ++i)
     {
         pipes.emplace_back(std::make_shared<SourceFromInputStream>(
-            std::make_shared<StreamingBlockInputStream>(*this, metadata_snapshot, column_names, context_, i, log)));
+            std::make_shared<StreamingBlockInputStream>(*this, query_info.query, metadata_snapshot, column_names, context_, i, log)));
     }
 
     auto read_step = std::make_unique<ReadFromStorageStep>(Pipe::unitePipes(std::move(pipes)), getName());
@@ -347,7 +348,7 @@ void StorageDistributedMergeTree::read(
     /// FIXME : streaming table name validation
     if (!context_->streamingTables().empty())
     {
-        readStreaming(query_plan, column_names, metadata_snapshot, context_, max_block_size, num_streams);
+        readStreaming(query_plan, query_info, column_names, metadata_snapshot, context_, max_block_size, num_streams);
     }
     else if (requireDistributedQuery(context_))
     {

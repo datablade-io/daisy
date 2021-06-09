@@ -447,13 +447,13 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
                 InterpreterSetQuery(new_settings, context).executeForCurrentContext();
 
             /// Daisy : starts
-            context->setStreamingTables(streamingTables(ast));
+            context->setStreamingTables(streamingTables(ast, context->getCurrentDatabase()));
             /// Diasy : ends
         }
         else if (const auto * select_with_union_query = ast->as<ASTSelectWithUnionQuery>())
         {
             /// Daisy : starts
-            context->setStreamingTables(streamingTables(ast));
+            context->setStreamingTables(streamingTables(ast, context->getCurrentDatabase()));
             /// Daisy : ends
 
             if (!select_with_union_query->list_of_selects->children.empty())

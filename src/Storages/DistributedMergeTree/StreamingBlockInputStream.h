@@ -15,6 +15,7 @@ class StreamingBlockInputStream final : public IBlockInputStream
 public:
     StreamingBlockInputStream(
         StorageDistributedMergeTree & storage_,
+        ASTPtr query_,
         const StorageMetadataPtr & metadata_snapshot_,
         const Names & column_names_,
         ContextPtr context_,
@@ -34,6 +35,7 @@ private:
 private:
     StorageDistributedMergeTree & storage;
     StorageMetadataPtr metadata_snapshot;
+    ASTPtr query;
     ContextPtr context;
     Names column_names;
 
