@@ -35,9 +35,9 @@ class MyRequestHandlerFactory : public HTTPRequestHandlerFactory
     public:
         virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) override
         {
-            if (req.getURI() == '/')
+            if (req.getURI() == "/")
             {
-                ;
+                std::cout << "get path '/'" << std::endl;
             }
             return new MyRequestHandler;
         }
