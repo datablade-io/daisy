@@ -15,7 +15,7 @@ using namespace std;
 using namespace Poco::Net;
 using namespace Poco::Util;
 
-class MyRequestHandler : public HTTPRequestHandler
+class ParserRequestHandler : public HTTPRequestHandler
 {
     public:
         virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
@@ -30,7 +30,7 @@ class MyRequestHandler : public HTTPRequestHandler
         }
 };
 
-class MyRequestHandlerFactory : public HTTPRequestHandlerFactory
+class ParserRequestHandlerFactory : public HTTPRequestHandlerFactory
 {
     public:
         virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) override
@@ -39,16 +39,16 @@ class MyRequestHandlerFactory : public HTTPRequestHandlerFactory
             {
                 std::cout << "get path '/'" << std::endl;
             }
-            return new MyRequestHandler;
+            return new ParserRequestHandler;
         }
 };
 
-class MyServerApp :public ServerApplication
+class ParserServerApp :public ServerApplication
 {
     protected:
         int main(const vector<string> &) override
         {
-            HTTPServer s(new MyRequestHandlerFactory, ServerSocket(8080), new HTTPServerParams);
+            HTTPServer s(new ParserRequestHandlerFactory, ServerSocket(8080), new HTTPServerParams);
 
             s.start();
             cout << endl << "Server started" << endl;
@@ -65,7 +65,15 @@ class MyServerApp :public ServerApplication
 
 int main(int argc, char **argv)
 {
-    MyServerApp app;
+    std::cout << "argc = " << argc << std::endl;
+    if(argc > 1 && std::string("-d") == std::string(argv[1]))
+    {
+        argv++;
+        argc--;
+        std::cout << "daemon model" << std::endl;
+        daemon(0, 0);
+    }
+    ParserServerApp app;
 
     return app.run(argc, argv);
 }
