@@ -10,6 +10,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <set>
 
 using namespace std;
 using namespace Poco::Net;
@@ -29,6 +30,84 @@ class ParserRequestHandler : public HTTPRequestHandler
             out << "<h1>Hello World!</h1>";
         }
 };
+
+class Route
+{
+    private:
+        std::string __uri;
+        HTTPRequestHandler* __handler;
+        std::set<std::string> __methodSet;
+
+    public:
+        Route(const std::string& uri, HTTPRequestHandler* handler, std::vector<std::string> &vec)
+        {
+            __uri = uri;
+            __handler = handler;
+            setMethodSet(vec);
+        }
+
+        std::string getURI()
+        {
+            return __uri;
+        }
+
+        HTTPRequestHandler* getHandler()
+        {
+            return __handler;
+        }
+
+        int setMethodSet(std::vector<std::string> vec)
+        {
+            __methodSet.clear();
+            for(auto it = vec.begin(); it != vec.end(); it++)
+            {
+                __methodSet.insert(this -> toupper(*it));
+            }
+
+            return 0;
+        }
+
+        bool containMethod(const std::string& method)
+        {
+            return __methodSet.find(this -> toupper(method)) != __methodSet.end();
+        }
+
+        static std::string toupper(const std::string str)
+        {
+            std::string s = std::string(str);
+            transform(s.begin(), s.end(), s.begin(), ::toupper);
+            return s;
+        }
+};
+
+class ParserRouter
+{
+    private:
+        std::map<std::string, Route*> __routerMap;
+
+    public:
+        int registerRouter(const std::string &uri, HTTPRequestHandler *handler, std::vector<std::string> vec)
+        {
+            auto r = new Route(uri, handler, vec);
+            __routerMap.insert(std::make_pair(uri, r));
+
+            return 0;
+        }
+
+        HTTPRequestHandler* findHandler(const std::string &uri)
+        {
+            auto pair = __routerMap.find(uri);
+            if(__routerMap.end() == pair)
+            {
+                // no such uri
+            }
+            Route* r = pair -> second;
+
+            return r -> getHandler();
+        }
+};
+
+ParserRouter router;
 
 class ParserRequestHandlerFactory : public HTTPRequestHandlerFactory
 {
