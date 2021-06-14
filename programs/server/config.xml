@@ -1233,6 +1233,9 @@
             <role>task</role>
         </node_roles>
 
+        <schedule_intervals>
+            <node_metrics>5000</node_metrics>
+        </schedule_intervals>
     </cluster_settings>
     -->
 
