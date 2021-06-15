@@ -555,7 +555,12 @@ std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
 QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStage(
     ContextPtr context_, QueryProcessingStage::Enum to_stage, const StorageMetadataPtr & metadata_snapshot, SelectQueryInfo & query_info) const
 {
-    if (requireDistributedQuery(context_))
+    /// FIXME : streaming table name validation
+    if (!context_->streamingTables().empty())
+    {
+        return QueryProcessingStage::Enum::FetchColumns;
+    }
+    else if (requireDistributedQuery(context_))
     {
         return getQueryProcessingStageRemote(context_, to_stage, metadata_snapshot, query_info);
     }
