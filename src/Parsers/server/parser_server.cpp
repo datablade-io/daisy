@@ -6,6 +6,8 @@
 #include <Poco/Net/HTTPServerRequest.h>
 #include <Poco/Net/HTTPServerResponse.h>
 #include <Poco/Util/ServerApplication.h>
+#include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
 
 #include <iostream>
 #include <string>
@@ -28,6 +30,98 @@ class ParserRequestHandler : public HTTPRequestHandler
             ostream & out = resp.send();
 
             out << "<h1>Hello World!</h1>";
+        }
+};
+
+class ParserResponse
+{
+    private:
+        Poco::JSON::Object json;
+
+    public:
+        ParserResponse& setValue(const std::string& key, const std::string& value)
+        {
+            json.set(key, value);
+
+            return *this;
+        }
+
+        std::string stringify()
+        {
+            std::ostringstream oss;
+            oss.exceptions(std::ios::failbit);
+            json.stringify(oss);
+
+            return oss.str();
+        }
+};
+
+//for 404
+class error404Handler : public HTTPRequestHandler
+{
+    public:
+        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
+        {
+            (void)req;
+            resp.setStatus(HTTPResponse::HTTP_NOT_FOUND);
+            resp.setContentType("application/json;charset=utf-8");
+
+            ostream & out = resp.send();
+
+            ParserResponse presp;
+            out << presp.setValue(std::string("code"), std::string("404")).setValue(std::string("msg"), std::string("not found")).stringify();
+        }
+};
+
+// for 500
+class error50xHandler : public HTTPRequestHandler
+{
+    public:
+        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
+        {
+            (void)req;
+            resp.setStatus(HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+            resp.setContentType("application/json;charset=utf-8");
+
+            ostream & out = resp.send();
+
+            ParserResponse presp;
+            out << presp.setValue("code", "500").setValue("msg", "internal server error").stringify();
+        }
+};
+
+// for uri "/"
+class rootHandler : public HTTPRequestHandler
+{
+    public:
+        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
+        {
+            (void)req;
+            resp.setStatus(HTTPResponse::HTTP_OK);
+            resp.setContentType("application/json;charset=utf-8");
+
+            ostream & out = resp.send();
+
+            ParserResponse presp;
+            presp.setValue(std::string("code"), std::string("200")).setValue(std::string("msg"), std::string("success"));
+            presp.setValue(std::string("value"), std::string(""));
+            out << presp.stringify();
+        }
+};
+
+// for uri "/ping"
+class pingHandler : public HTTPRequestHandler
+{
+    public:
+        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
+        {
+            (void)req;
+            resp.setStatus(HTTPResponse::HTTP_OK);
+            resp.setContentType("application/json;charset=utf-8");
+
+            ostream & out = resp.send();
+
+            out << "";
         }
 };
 
