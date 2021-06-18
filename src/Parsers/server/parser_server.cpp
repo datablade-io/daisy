@@ -8,30 +8,29 @@
 #include <Poco/Util/ServerApplication.h>
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Parser.h>
+#include <Poco/JSON/JSON.h>
 
 #include <iostream>
 #include <string>
 #include <vector>
 #include <set>
+#include <cstdlib>
 
 using namespace std;
 using namespace Poco::Net;
 using namespace Poco::Util;
 
-class ParserRequestHandler : public HTTPRequestHandler
+template <class... T>
+std::vector<std::string> strList(T... args)
 {
-    public:
-        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
-        {
-            (void)req;
-            resp.setStatus(HTTPResponse::HTTP_OK);
-            resp.setContentType("text/html");
+    std::vector<std::string> vec;
+    for(auto x : {args...})
+    {
+        vec.push_back(std::string(x));
+    }
 
-            ostream & out = resp.send();
-
-            out << "<h1>Hello World!</h1>";
-        }
-};
+    return vec;
+}
 
 class ParserResponse
 {
@@ -125,6 +124,7 @@ class pingHandler : public HTTPRequestHandler
         }
 };
 
+
 class Route
 {
     private:
@@ -188,14 +188,30 @@ class ParserRouter
             return 0;
         }
 
-        HTTPRequestHandler* findHandler(const std::string &uri)
+        HTTPRequestHandler* findHandler(const std::string &uri, const std::string& method)
         {
             auto pair = __routerMap.find(uri);
             if(__routerMap.end() == pair)
             {
                 // no such uri
+                return new error404Handler;
             }
             Route* r = pair -> second;
+            if(nullptr == r)
+            {
+                //something wrond
+                return new error50xHandler;
+            }
+            if(nullptr == r -> getHandler())
+            {
+                //something wrond
+                return new error50xHandler;
+            }
+            if(!r -> containMethod(method))
+            {
+                //method not matched
+                return new error404Handler;
+            }
 
             return r -> getHandler();
         }
@@ -208,11 +224,7 @@ class ParserRequestHandlerFactory : public HTTPRequestHandlerFactory
     public:
         virtual HTTPRequestHandler* createRequestHandler(const HTTPServerRequest & req) override
         {
-            if (req.getURI() == "/")
-            {
-                std::cout << "get path '/'" << std::endl;
-            }
-            return new ParserRequestHandler;
+            return router.findHandler(req.getURI(), req.getMethod());
         }
 };
 
@@ -236,6 +248,13 @@ class ParserServerApp :public ServerApplication
         }
 };
 
+void registerRouter()
+{
+    // TODO add url and handler
+    router.registerRouter("/", new rootHandler, strList("GET", "POST"));
+    router.registerRouter("/ping", new rootHandler, strList("GET", "POST"));
+}
+
 int main(int argc, char **argv)
 {
     std::cout << "argc = " << argc << std::endl;
@@ -246,6 +265,7 @@ int main(int argc, char **argv)
         std::cout << "daemon model" << std::endl;
         daemon(0, 0);
     }
+    registerRouter();
     ParserServerApp app;
 
     return app.run(argc, argv);
