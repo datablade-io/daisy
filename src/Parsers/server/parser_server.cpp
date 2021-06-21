@@ -104,6 +104,7 @@ class rootHandler : public HTTPRequestHandler
             ParserResponse presp;
             presp.setValue(std::string("code"), std::string("200")).setValue(std::string("msg"), std::string("success"));
             presp.setValue(std::string("value"), std::string(""));
+            presp.setValue(std::string("uri"), std::string("/"));
             out << presp.stringify();
         }
 };
@@ -120,7 +121,11 @@ class pingHandler : public HTTPRequestHandler
 
             ostream & out = resp.send();
 
-            out << "";
+            ParserResponse presp;
+            presp.setValue(std::string("code"), std::string("200"));
+            presp.setValue(std::string("msg"), std::string("success"));
+            presp.setValue(std::string("uri"), std::string("/ping"));
+            out << presp.stringify();
         }
 };
 
@@ -190,6 +195,7 @@ class ParserRouter
 
         HTTPRequestHandler* findHandler(const std::string &uri, const std::string& method)
         {
+            std::cout << "uri : " << uri << std::endl;
             auto pair = __routerMap.find(uri);
             if(__routerMap.end() == pair)
             {
@@ -202,6 +208,7 @@ class ParserRouter
                 //something wrond
                 return new error50xHandler;
             }
+            std::cout << "find uri : " << r -> getURI() << std::endl;
             if(nullptr == r -> getHandler())
             {
                 //something wrond
@@ -252,7 +259,7 @@ void registerRouter()
 {
     // TODO add url and handler
     router.registerRouter("/", new rootHandler, strList("GET", "POST"));
-    router.registerRouter("/ping", new rootHandler, strList("GET", "POST"));
+    router.registerRouter("/ping", new pingHandler, strList("GET", "POST"));
 }
 
 int main(int argc, char **argv)
