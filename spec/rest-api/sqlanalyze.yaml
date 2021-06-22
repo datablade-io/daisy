@@ -3,8 +3,6 @@ info:
   title: daisy api
   version: '1.0'
   description: daisy api
-  contact:
-    email: fantian@360.cn
 paths:
   /dae/v1/sqlanalyzer:
     post:
@@ -38,11 +36,48 @@ paths:
         description: Post the query to analyze
       description: Analyze the query and get the required and result columns
       parameters:
-        - schema:
-            type: string
+        - name: x-bdg-request-id
           in: header
-          name: x-bdg-request-id
-          description: request id which is the same as query id
+          required: false
+          description: the unique id to identify a ddl request
+          schema:
+            type: string
+        - name: X-ClickHouse-Query-Id
+          in: header
+          required: false
+          description: the unique id to identify a ddl request
+          schema:
+            type: string
+        - name: user
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: X-ClickHouse-User
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: password
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: X-ClickHouse-Key
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: quota_key
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: X-ClickHouse-Quota
+          in: header
+          required: false
+          schema:
+            type: string
     parameters: []
 components:
   schemas: {}

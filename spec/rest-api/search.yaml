@@ -3,8 +3,6 @@ info:
   title: daisy api
   version: '1.0'
   description: daisy api
-  contact:
-    email: fantian@360.cn
 paths:
   /dae/v1/search:
     parameters: []
@@ -164,11 +162,48 @@ paths:
           in: query
           name: default_format
           description: 'query result output format, like CSV, JSONEachRow, et al. The default value is ''JSONCompact'''
-        - schema:
-            type: string
+        - name: x-bdg-request-id
           in: header
-          name: x-bdg-request-id
-          description: 'the query id, it will be passed to daisy, which can be used for tracing.'
+          required: false
+          description: the unique id to identify a ddl request
+          schema:
+            type: string
+        - name: X-ClickHouse-Query-Id
+          in: header
+          required: false
+          description: the unique id to identify a ddl request
+          schema:
+            type: string
+        - name: user
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: X-ClickHouse-User
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: password
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: X-ClickHouse-Key
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: quota_key
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: X-ClickHouse-Quota
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         content:
           application/json:
