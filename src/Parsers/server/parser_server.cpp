@@ -9,6 +9,7 @@
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Parser.h>
 #include <Poco/JSON/JSON.h>
+#include <Parsers/parseQuery.h>
 
 #include <iostream>
 #include <string>
@@ -38,6 +39,26 @@ class ParserResponse
         Poco::JSON::Object json;
 
     public:
+
+        ParserResponse(const std::string& uri)
+        {
+            init();
+            setValue(std::string("uri"), uri);
+        }
+
+        ParserResponse()
+        {
+            init();
+        }
+
+        void init()
+        {
+            setValue(std::string("code"), std::string("200"));
+            setValue(std::string("msg"), std::string("success"));
+            Poco::JSON::Object subjson;
+            json.set(std::string("value"), subjson);
+        }
+
         ParserResponse& setValue(const std::string& key, const std::string& value)
         {
             json.set(key, value);
@@ -56,7 +77,7 @@ class ParserResponse
 };
 
 //for 404
-class error404Handler : public HTTPRequestHandler
+class Error404Handler : public HTTPRequestHandler
 {
     public:
         virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
@@ -67,13 +88,18 @@ class error404Handler : public HTTPRequestHandler
 
             ostream & out = resp.send();
 
-            ParserResponse presp;
+            ParserResponse presp(req.getURI());
             out << presp.setValue(std::string("code"), std::string("404")).setValue(std::string("msg"), std::string("not found")).stringify();
+        }
+
+        static HTTPRequestHandler* getHandler()
+        {
+            return new Error404Handler;
         }
 };
 
 // for 500
-class error50xHandler : public HTTPRequestHandler
+class Error50xHandler : public HTTPRequestHandler
 {
     public:
         virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
@@ -84,13 +110,20 @@ class error50xHandler : public HTTPRequestHandler
 
             ostream & out = resp.send();
 
-            ParserResponse presp;
-            out << presp.setValue("code", "500").setValue("msg", "internal server error").stringify();
+            ParserResponse presp(req.getURI());
+            presp.setValue(std::string("code"), std::string("500"));
+            presp.setValue(std::string("msg"), std::string("internal server error"));
+            out << presp.stringify();
+        }
+
+        static HTTPRequestHandler* getHandler()
+        {
+            return new Error50xHandler;
         }
 };
 
 // for uri "/"
-class rootHandler : public HTTPRequestHandler
+class RootHandler : public HTTPRequestHandler
 {
     public:
         virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
@@ -101,16 +134,18 @@ class rootHandler : public HTTPRequestHandler
 
             ostream & out = resp.send();
 
-            ParserResponse presp;
-            presp.setValue(std::string("code"), std::string("200")).setValue(std::string("msg"), std::string("success"));
-            presp.setValue(std::string("value"), std::string(""));
-            presp.setValue(std::string("uri"), std::string("/"));
+            ParserResponse presp(req.getURI());
             out << presp.stringify();
+        }
+
+        static HTTPRequestHandler* getHandler()
+        {
+            return new RootHandler;
         }
 };
 
 // for uri "/ping"
-class pingHandler : public HTTPRequestHandler
+class PingHandler : public HTTPRequestHandler
 {
     public:
         virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
@@ -121,11 +156,13 @@ class pingHandler : public HTTPRequestHandler
 
             ostream & out = resp.send();
 
-            ParserResponse presp;
-            presp.setValue(std::string("code"), std::string("200"));
-            presp.setValue(std::string("msg"), std::string("success"));
-            presp.setValue(std::string("uri"), std::string("/ping"));
+            ParserResponse presp(req.getURI());
             out << presp.stringify();
+        }
+
+        static HTTPRequestHandler* getHandler()
+        {
+            return new PingHandler;
         }
 };
 
@@ -134,14 +171,14 @@ class Route
 {
     private:
         std::string __uri;
-        HTTPRequestHandler* __handler;
+        decltype(RootHandler::getHandler)* __handlerFactory;
         std::set<std::string> __methodSet;
 
     public:
-        Route(const std::string& uri, HTTPRequestHandler* handler, std::vector<std::string> &vec)
+        Route(const std::string& uri, decltype(RootHandler::getHandler)* handlerFactory, std::vector<std::string> &vec)
         {
             __uri = uri;
-            __handler = handler;
+            __handlerFactory = handlerFactory;
             setMethodSet(vec);
         }
 
@@ -152,7 +189,7 @@ class Route
 
         HTTPRequestHandler* getHandler()
         {
-            return __handler;
+            return __handlerFactory();
         }
 
         int setMethodSet(std::vector<std::string> vec)
@@ -185,9 +222,9 @@ class ParserRouter
         std::map<std::string, Route*> __routerMap;
 
     public:
-        int registerRouter(const std::string &uri, HTTPRequestHandler *handler, std::vector<std::string> vec)
+        int registerRouter(const std::string &uri, decltype(RootHandler::getHandler)*  handlerFactory, std::vector<std::string> vec)
         {
-            auto r = new Route(uri, handler, vec);
+            auto r = new Route(uri, handlerFactory, vec);
             __routerMap.insert(std::make_pair(uri, r));
 
             return 0;
@@ -195,32 +232,40 @@ class ParserRouter
 
         HTTPRequestHandler* findHandler(const std::string &uri, const std::string& method)
         {
-            std::cout << "uri : " << uri << std::endl;
-            auto pair = __routerMap.find(uri);
-            if(__routerMap.end() == pair)
+            try
             {
-                // no such uri
-                return new error404Handler;
+                std::cout << "uri : " << uri << std::endl;
+                auto pair = __routerMap.find(uri);
+                if(__routerMap.end() == pair)
+                {
+                    // no such uri
+                    return new Error404Handler;
+                }
+                Route* r = pair -> second;
+                if(nullptr == r)
+                {
+                    //something wrond
+                    return new Error50xHandler;
+                }
+                if(!r -> containMethod(method))
+                {
+                    //method not matched
+                    return new Error404Handler;
+                }
+                std::cout << "find uri : " << r -> getURI() << std::endl;
+                auto handler = r -> getHandler();
+                if(nullptr == handler)
+                {
+                    //something wrond
+                    return new Error50xHandler;
+                }
+                return handler;
             }
-            Route* r = pair -> second;
-            if(nullptr == r)
+            catch (...)
             {
-                //something wrond
-                return new error50xHandler;
+                std::cerr << DB::getCurrentExceptionMessage(true) << "\n";
+                return new Error50xHandler;
             }
-            std::cout << "find uri : " << r -> getURI() << std::endl;
-            if(nullptr == r -> getHandler())
-            {
-                //something wrond
-                return new error50xHandler;
-            }
-            if(!r -> containMethod(method))
-            {
-                //method not matched
-                return new error404Handler;
-            }
-
-            return r -> getHandler();
         }
 };
 
@@ -258,8 +303,8 @@ class ParserServerApp :public ServerApplication
 void registerRouter()
 {
     // TODO add url and handler
-    router.registerRouter("/", new rootHandler, strList("GET", "POST"));
-    router.registerRouter("/ping", new pingHandler, strList("GET", "POST"));
+    router.registerRouter("/", RootHandler::getHandler, strList("GET", "POST"));
+    router.registerRouter("/ping", PingHandler::getHandler, strList("GET", "POST"));
 }
 
 int main(int argc, char **argv)
