@@ -11,61 +11,61 @@ namespace DB
 {
 namespace DWAL
 {
-    class ByteVector final : public boost::noncopyable
+class ByteVector final : public boost::noncopyable
+{
+public:
+    using value_type = uint8_t;
+
+    explicit ByteVector(size_t reserved) : mem(nullptr, std::free), cap(reserved), siz(0)
     {
-    public:
-        using value_type = uint8_t;
+        mem.reset(static_cast<uint8_t *>(std::malloc(reserved)));
+        assert(mem);
+    }
 
-        explicit ByteVector(size_t reserved) : mem(nullptr, std::free), cap(reserved), siz(0)
+    ByteVector(ByteVector && other) noexcept : mem(move(other.mem)), cap(other.cap), siz(other.siz) { }
+
+    ~ByteVector() = default;
+
+    bool empty() const { return siz == 0; }
+
+    void resize(size_t new_size)
+    {
+        if (cap >= new_size)
         {
-            mem.reset(static_cast<uint8_t *>(std::malloc(reserved)));
-            assert(mem);
-        }
-
-        ByteVector(ByteVector && other) noexcept : mem(move(other.mem)), cap(other.cap), siz(other.siz) { }
-
-        ~ByteVector() = default;
-
-        bool empty() const { return siz == 0; }
-
-        void resize(size_t new_size)
-        {
-            if (cap >= new_size)
-            {
-                siz = new_size;
-                return;
-            }
-
-            auto new_cap = static_cast<size_t>(new_size * 1.5);
-            MemPtr new_mem{static_cast<uint8_t *>(std::malloc(new_cap)), std::free};
-            assert(new_mem);
-
-            std::memcpy(new_mem.get(), mem.get(), siz);
-            mem.swap(new_mem);
             siz = new_size;
-            cap = new_cap;
+            return;
         }
 
-        uint8_t * data() { return mem.get(); }
+        auto new_cap = static_cast<size_t>(new_size * 1.5);
+        MemPtr new_mem{static_cast<uint8_t *>(std::malloc(new_cap)), std::free};
+        assert(new_mem);
 
-        size_t capacity() const { return cap; }
+        std::memcpy(new_mem.get(), mem.get(), siz);
+        mem.swap(new_mem);
+        siz = new_size;
+        cap = new_cap;
+    }
 
-        size_t size() const { return siz; }
+    uint8_t * data() { return mem.get(); }
 
-        /// release the ownership of the underlying memory
-        uint8_t * release()
-        {
-            siz = 0;
-            return mem.release();
-        }
+    size_t capacity() const { return cap; }
 
-    private:
-        using MemPtr = std::unique_ptr<uint8_t, void (*)(void *)>;
+    size_t size() const { return siz; }
 
-    private:
-        MemPtr mem;
-        size_t cap;
-        size_t siz;
-    };
+    /// release the ownership of the underlying memory
+    uint8_t * release()
+    {
+        siz = 0;
+        return mem.release();
+    }
+
+private:
+    using MemPtr = std::unique_ptr<uint8_t, void (*)(void *)>;
+
+private:
+    MemPtr mem;
+    size_t cap;
+    size_t siz;
+};
 }
 }
