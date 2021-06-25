@@ -96,11 +96,14 @@ def test_create_table_catalog_case(query, status):
     del result3['request_id']
 
     assert result1 == result2 == result3
-    assert query['name'] in result1
+    assert query['name'] in json.dumps(result1)
+
 
 
 @pytest.mark.parametrize("talbe", ["demo_tb_0001", "demo_tb_0002"])
 def test_delete_table_catalog_case(talbe):
+
+    pdb.set_trace()
 
     resp = node1.http_request(method="DELETE", url="dae/v1/ddl/tables/" + talbe, data="")
     result = json.loads(resp.content)
