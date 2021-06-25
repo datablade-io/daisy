@@ -1,5 +1,6 @@
 import json
 import pytest
+import time
 
 from helpers.cluster import ClickHouseCluster
 
@@ -74,10 +75,14 @@ def started_cluster():
 ])
 def test_create_table_catalog_case(query, status):
 
+    time.sleep(10)  # wait for __system_ddls create
+
     resp = node1.http_request(method="POST", url="dae/v1/ddl/tables", data=json.dumps(query))
     result = json.loads(resp.content)
     print(result)
     assert resp.status_code == status['status']
+
+    time.sleep(10)  # wait for ddl servcie sendRequest
 
     resp1 = node1.http_request(method="GET", url="dae/v1/ddl/tables", data="")
     result1 = json.loads(resp1.content)
