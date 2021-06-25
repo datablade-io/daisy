@@ -103,8 +103,6 @@ def test_create_table_catalog_case(query, status):
 @pytest.mark.parametrize("talbe", ["demo_tb_0001", "demo_tb_0002"])
 def test_delete_table_catalog_case(talbe):
 
-    pdb.set_trace()
-
     resp = node1.http_request(method="DELETE", url="dae/v1/ddl/tables/" + talbe, data="")
     result = json.loads(resp.content)
     print(result)
