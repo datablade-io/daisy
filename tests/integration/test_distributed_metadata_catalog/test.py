@@ -18,39 +18,10 @@ node3 = cluster.add_instance('node3',
 
 nodes = [node1, node2, node3]
 
-
-def prepare_data():
-    print("prepare data")
-    node1.query("""
-        CREATE TABLE cpu
-        (
-        `created_date` Date DEFAULT today(),
-        `created_at` DateTime DEFAULT now(),
-        `time` String,
-        `tags_id` UInt32,
-        `usage_user` Nullable(Float64),
-        `usage_system` Nullable(Float64),
-        `usage_idle` Nullable(Float64),
-        `usage_nice` Nullable(Float64),
-        `usage_iowait` Nullable(Float64),
-        `usage_irq` Nullable(Float64),
-        `usage_softirq` Nullable(Float64),
-        `usage_steal` Nullable(Float64),
-        `usage_guest` Nullable(Float64),
-        `usage_guest_nice` Nullable(Float64),
-        `additional_tags` String DEFAULT ''
-        )
-        ENGINE = DistributedMergeTree(1, 1, rand())
-        PARTITION BY toYYYYMM(created_date)
-        ORDER BY (tags_id, created_at)
-    """)
-
-
 @pytest.fixture(scope="module", autouse=True)
 def started_cluster():
     try:
         cluster.start()
-        prepare_data()
         yield cluster
 
     finally:
@@ -120,12 +91,15 @@ def test_create_table_catalog_case(query, status):
     result3 = json.loads(resp3.content)
     print(result3)
 
+    del result1['request_id']
+    del result2['request_id']
+    del result3['request_id']
+
     assert result1 == result2 == result3
-    assert 'cpu' in result1
     assert query['name'] in result1
 
 
-@pytest.mark.parametrize("talbe", ["cpu", "demo_tb_0001", "demo_tb_0002"])
+@pytest.mark.parametrize("talbe", ["demo_tb_0001", "demo_tb_0002"])
 def test_delete_table_catalog_case(talbe):
 
     resp = node1.http_request(method="DELETE", url="dae/v1/ddl/tables/" + talbe, data="")
@@ -144,5 +118,9 @@ def test_delete_table_catalog_case(talbe):
     resp3 = node3.http_request(method="GET", url="dae/v1/ddl/tables", data="")
     result3 = json.loads(resp3.content)
     print(result3)
+
+    del result1['request_id']
+    del result2['request_id']
+    del result3['request_id']
 
     assert result1 == result2 == result3
