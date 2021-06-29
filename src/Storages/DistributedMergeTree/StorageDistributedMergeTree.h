@@ -163,6 +163,8 @@ public:
 
     DWAL::RecordSN lastSN() const;
 
+    void updatePerformanceCounter(const Block & block);
+
     friend struct DistributedMergeTreeCallbackData;
     friend class DistributedMergeTreeBlockOutputStream;
     friend class MergeTreeData;
@@ -302,5 +304,10 @@ private:
 
     std::atomic_flag inited = ATOMIC_FLAG_INIT;
     std::atomic_flag stopped = ATOMIC_FLAG_INIT;
+
+    // Metrics
+    Progress progress_in;
+    Progress progress_out;
+    ProfileEvents::Counters performance_counters{VariableContext::Snapshot};
 };
 }
