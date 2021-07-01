@@ -10,6 +10,12 @@
 #include <Poco/JSON/Parser.h>
 #include <Poco/JSON/JSON.h>
 #include <Parsers/parseQuery.h>
+#include "ParserResponse.hpp"
+#include "Error404Handler.hpp"
+#include "Error50xHandler.hpp"
+#include "RootHandler.hpp"
+#include "PingHandler.hpp"
+#include "RangeFilterRename.hpp"
 
 #include <iostream>
 #include <string>
@@ -32,139 +38,6 @@ std::vector<std::string> strList(T... args)
 
     return vec;
 }
-
-class ParserResponse
-{
-    private:
-        Poco::JSON::Object json;
-
-    public:
-
-        ParserResponse(const std::string& uri)
-        {
-            init();
-            setValue(std::string("uri"), uri);
-        }
-
-        ParserResponse()
-        {
-            init();
-        }
-
-        void init()
-        {
-            setValue(std::string("code"), std::string("200"));
-            setValue(std::string("msg"), std::string("success"));
-            Poco::JSON::Object subjson;
-            json.set(std::string("value"), subjson);
-        }
-
-        ParserResponse& setValue(const std::string& key, const std::string& value)
-        {
-            json.set(key, value);
-
-            return *this;
-        }
-
-        std::string stringify()
-        {
-            std::ostringstream oss;
-            oss.exceptions(std::ios::failbit);
-            json.stringify(oss);
-
-            return oss.str();
-        }
-};
-
-//for 404
-class Error404Handler : public HTTPRequestHandler
-{
-    public:
-        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
-        {
-            (void)req;
-            resp.setStatus(HTTPResponse::HTTP_NOT_FOUND);
-            resp.setContentType("application/json;charset=utf-8");
-
-            ostream & out = resp.send();
-
-            ParserResponse presp(req.getURI());
-            out << presp.setValue(std::string("code"), std::string("404")).setValue(std::string("msg"), std::string("not found")).stringify();
-        }
-
-        static HTTPRequestHandler* getHandler()
-        {
-            return new Error404Handler;
-        }
-};
-
-// for 500
-class Error50xHandler : public HTTPRequestHandler
-{
-    public:
-        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
-        {
-            (void)req;
-            resp.setStatus(HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
-            resp.setContentType("application/json;charset=utf-8");
-
-            ostream & out = resp.send();
-
-            ParserResponse presp(req.getURI());
-            presp.setValue(std::string("code"), std::string("500"));
-            presp.setValue(std::string("msg"), std::string("internal server error"));
-            out << presp.stringify();
-        }
-
-        static HTTPRequestHandler* getHandler()
-        {
-            return new Error50xHandler;
-        }
-};
-
-// for uri "/"
-class RootHandler : public HTTPRequestHandler
-{
-    public:
-        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
-        {
-            (void)req;
-            resp.setStatus(HTTPResponse::HTTP_OK);
-            resp.setContentType("application/json;charset=utf-8");
-
-            ostream & out = resp.send();
-
-            ParserResponse presp(req.getURI());
-            out << presp.stringify();
-        }
-
-        static HTTPRequestHandler* getHandler()
-        {
-            return new RootHandler;
-        }
-};
-
-// for uri "/ping"
-class PingHandler : public HTTPRequestHandler
-{
-    public:
-        virtual void handleRequest(HTTPServerRequest &req, HTTPServerResponse &resp) override
-        {
-            (void)req;
-            resp.setStatus(HTTPResponse::HTTP_OK);
-            resp.setContentType("application/json;charset=utf-8");
-
-            ostream & out = resp.send();
-
-            ParserResponse presp(req.getURI());
-            out << presp.stringify();
-        }
-
-        static HTTPRequestHandler* getHandler()
-        {
-            return new PingHandler;
-        }
-};
 
 
 class Route
@@ -222,7 +95,7 @@ class ParserRouter
         std::map<std::string, Route*> __routerMap;
 
     public:
-        int registerRouter(const std::string &uri, decltype(RootHandler::getHandler)*  handlerFactory, std::vector<std::string> vec)
+        int registerRoute(const std::string &uri, decltype(RootHandler::getHandler)*  handlerFactory, std::vector<std::string> vec)
         {
             auto r = new Route(uri, handlerFactory, vec);
             __routerMap.insert(std::make_pair(uri, r));
@@ -303,8 +176,9 @@ class ParserServerApp :public ServerApplication
 void registerRouter()
 {
     // TODO add url and handler
-    router.registerRouter("/", RootHandler::getHandler, strList("GET", "POST"));
-    router.registerRouter("/ping", PingHandler::getHandler, strList("GET", "POST"));
+    router.registerRoute("/", RootHandler::getHandler, strList("GET", "POST"));
+    router.registerRoute("/ping", PingHandler::getHandler, strList("GET", "POST"));
+    router.registerRoute("/RangeFilterRename", PingHandler::getHandler, strList("GET", "POST"));
 }
 
 int main(int argc, char **argv)
