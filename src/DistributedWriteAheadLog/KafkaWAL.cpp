@@ -599,7 +599,7 @@ void KafkaWAL::initProducer()
         std::make_pair("compression.codec", settings->compression_codec),
         std::make_pair("statistics.interval.ms", std::to_string(settings->statistic_internal_ms)),
         std::make_pair("message.max.bytes", std::to_string(settings->message_max_bytes)),
-        std::make_pair("max.request.size", std::to_string(1572864000)),
+        std::make_pair("fetch.message.max.bytes", "157286400"),
     };
 
     if (!settings->debug.empty())
