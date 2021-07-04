@@ -1,10 +1,9 @@
-#include "MordenKafkaWAL.h"
+#include "KafkaWALConsumer.h"
+#include "KafkaWALCommon.h"
 
 #include <Common/Exception.h>
 #include <Common/setThreadName.h>
 #include <common/logger_useful.h>
-
-#include <librdkafka/rdkafka.h>
 
 
 namespace DB
@@ -21,137 +20,24 @@ namespace ErrorCodes
     extern const int BAD_ARGUMENTS;
     extern const int DWAL_FATAL_ERROR;
 }
+}
 
 namespace DWAL
 {
-namespace
-{
-    /// types
-    using KConfPtr = std::unique_ptr<rd_kafka_conf_t, decltype(rd_kafka_conf_destroy) *>;
-    using KTopicConfPtr = std::unique_ptr<rd_kafka_topic_conf_t, decltype(rd_kafka_topic_conf_destroy) *>;
-    using KConfCallback = std::function<void(rd_kafka_conf_t *)>;
-    using KConfParams = std::vector<std::pair<String, String>>;
-
-    Int32 mapErrorCode(rd_kafka_resp_err_t err)
-    {
-        /// FIXME, more code mapping
-        switch (err)
-        {
-            case RD_KAFKA_RESP_ERR_NO_ERROR:
-                return ErrorCodes::OK;
-
-            case RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS:
-                return ErrorCodes::RESOURCE_ALREADY_EXISTS;
-
-            case RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION:
-                /// fallthrough
-            case RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC:
-                /// fallthrough
-            case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                return ErrorCodes::RESOURCE_NOT_FOUND;
-
-            case RD_KAFKA_RESP_ERR__INVALID_ARG:
-                return ErrorCodes::BAD_ARGUMENTS;
-
-            case RD_KAFKA_RESP_ERR__FATAL:
-                throw Exception("Fatal error occurred, shall tear down the whole program", ErrorCodes::DWAL_FATAL_ERROR);
-
-            default:
-                return ErrorCodes::UNKNOWN_EXCEPTION;
-        }
-}
-
-
-
-    std::unique_ptr<struct rd_kafka_s, void (*)(rd_kafka_t *)>
-    initRdKafkaHandle(rd_kafka_type_t type, KConfParams & params, MordenKafkaWAL::StatsPtr stats, KConfCallback cb_setup)
-    {
-        KConfPtr kconf{rd_kafka_conf_new(), rd_kafka_conf_destroy};
-        if (!kconf)
-        {
-            LOG_ERROR(stats->log, "Failed to create kafka conf, error={}", rd_kafka_err2str(rd_kafka_last_error()));
-            throw Exception("Failed to create kafka conf", mapErrorCode(rd_kafka_last_error()));
-        }
-
-        char errstr[512] = {'\0'};
-        for (const auto & param : params)
-        {
-            auto ret = rd_kafka_conf_set(kconf.get(), param.first.c_str(), param.second.c_str(), errstr, sizeof(errstr));
-            if (ret != RD_KAFKA_CONF_OK)
-            {
-                LOG_ERROR(stats->log, "Failed to set kafka param_name={} param_value={} error={}", param.first, param.second, ret);
-                throw Exception("Failed to create kafka conf", ErrorCodes::INVALID_CONFIG_PARAMETER);
-            }
-        }
-
-        if (cb_setup)
-        {
-            cb_setup(kconf.get());
-        }
-
-        rd_kafka_conf_set_opaque(kconf.get(), stats.get());
-
-        std::unique_ptr<struct rd_kafka_s, void (*)(rd_kafka_t *)> kafka_handle(
-            rd_kafka_new(type, kconf.release(), errstr, sizeof(errstr)), rd_kafka_destroy);
-        if (!kafka_handle)
-        {
-            LOG_ERROR(stats->log, "Failed to create kafka handle, error={}", errstr);
-            throw Exception("Failed to create kafka handle", mapErrorCode(rd_kafka_last_error()));
-        }
-
-        return kafka_handle;
-    }
-
-    inline RecordPtr kafkaMsgToRecord(rd_kafka_message_t * msg)
-    {
-        assert(msg != nullptr);
-
-        auto record = Record::read(static_cast<const char *>(msg->payload), msg->len);
-        if (unlikely(!record))
-        {
-            return nullptr;
-        }
-
-        record->sn = msg->offset;
-        record->partition_key = msg->partition;
-        record->topic = rd_kafka_topic_name(msg->rkt);
-
-        rd_kafka_headers_t * hdrs = nullptr;
-        if (rd_kafka_message_headers(msg, &hdrs) == RD_KAFKA_RESP_ERR_NO_ERROR)
-        {
-            /// Has headers
-            auto n = rd_kafka_header_cnt(hdrs);
-            for (size_t i = 0; i < n; ++i)
-            {
-                const char * name = nullptr;
-                const void * value = nullptr;
-                size_t size = 0;
-
-                if (rd_kafka_header_get_all(hdrs, i, &name, &value, &size) == RD_KAFKA_RESP_ERR_NO_ERROR)
-                {
-                    record->headers.emplace(name, String{static_cast<const char *>(value), size});
-                }
-            }
-        }
-
-        return record;
-}
-}
-
-MordenKafkaWAL::MordenKafkaWAL(std::unique_ptr<KafkaWALSettings> settings_)
+KafkaWALConsumer::KafkaWALConsumer(std::unique_ptr<KafkaWALSettings> settings_)
     : settings(std::move(settings_))
     , consumer_handle(nullptr, rd_kafka_destroy)
-    , log(&Poco::Logger::get("MordenKafkaWAL"))
-    , stats(std::make_shared<Stats>(log))
+    , log(&Poco::Logger::get("KafkaWALConsumer"))
+    , stats(std::make_unique<KafkaWALStats>(log))
 {
 }
 
-MordenKafkaWAL::~MordenKafkaWAL()
+KafkaWALConsumer::~KafkaWALConsumer()
 {
     shutdown();
 }
 
-void MordenKafkaWAL::startup()
+void KafkaWALConsumer::startup()
 {
     if (inited.test_and_set())
     {
@@ -161,14 +47,14 @@ void MordenKafkaWAL::startup()
 
     LOG_INFO(log, "Starting");
 
-    initConsumer();
+    initHandle();
 
     /// poller.scheduleOrThrowOnError([this] { backgroundPollConsumer(); });
 
     LOG_INFO(log, "Started");
 }
 
-void MordenKafkaWAL::shutdown()
+void KafkaWALConsumer::shutdown()
 {
     if (stopped.test_and_set())
     {
@@ -180,14 +66,14 @@ void MordenKafkaWAL::shutdown()
     LOG_INFO(log, "Stopped");
 }
 
-void MordenKafkaWAL::initConsumer()
+void KafkaWALConsumer::initHandle()
 {
     /// 1) use high level Kafka consumer
     /// 2) manually manage offset commit
     /// 3) offsets are stored in brokers and on application side.
     ///     3.1) In normal cases, application side offsets overrides offsets in borkers
     ///     3.2) In corruption cases (application offsets corruption), use offsets in borkers
-    std::vector<std::pair<String, String>> consumer_params = {
+    std::vector<std::pair<std::string, std::string>> consumer_params = {
         std::make_pair("bootstrap.servers", settings->brokers.c_str()),
         std::make_pair("group.id", settings->group_id),
         /// enable auto offset commit
@@ -219,13 +105,13 @@ void MordenKafkaWAL::initConsumer()
         rd_kafka_conf_set_offset_commit_cb(kconf, &logOffsetCommits);
     }; */
 
-    consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats, nullptr);
+    consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats.get(), nullptr);
 
     /// Forward all events to consumer queue. there may have in-balance consuming problems
     rd_kafka_poll_set_consumer(consumer_handle.get());
 }
 
-Int32 MordenKafkaWAL::addConsumptions(const TopicPartionOffsets & partitions_)
+int32_t KafkaWALConsumer::addConsumptions(const TopicPartionOffsets & partitions_)
 {
     std::lock_guard lock{partitions_mutex};
 
@@ -266,7 +152,7 @@ Int32 MordenKafkaWAL::addConsumptions(const TopicPartionOffsets & partitions_)
     return 0;
 }
 
-Int32 MordenKafkaWAL::removeConsumptions(const TopicPartionOffsets & partitions_)
+int32_t KafkaWALConsumer::removeConsumptions(const TopicPartionOffsets & partitions_)
 {
     std::lock_guard lock{partitions_mutex};
 
@@ -319,7 +205,7 @@ Int32 MordenKafkaWAL::removeConsumptions(const TopicPartionOffsets & partitions_
     return 0;
 }
 
-WAL::ConsumeResult MordenKafkaWAL::consume(Int32 timeout_ms)
+ConsumeResult KafkaWALConsumer::consume(int32_t timeout_ms)
 {
     auto rkmessage = rd_kafka_consumer_poll(consumer_handle.get(), timeout_ms);
     if (rkmessage)
@@ -332,14 +218,13 @@ WAL::ConsumeResult MordenKafkaWAL::consume(Int32 timeout_ms)
                 return;
             }*/
             auto record = kafkaMsgToRecord(rkmessage);
-            return {.err = ErrorCodes::OK, .records = {std::move(record)}};
+            return {.err = DB::ErrorCodes::OK, .records = {std::move(record)}};
         }
         else
         {
             return {.err = mapErrorCode(rkmessage->err)};
         }
     }
-    return {.err = ErrorCodes::OK};
+    return {.err = DB::ErrorCodes::OK};
 };
-}
 }

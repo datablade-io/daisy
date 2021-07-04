@@ -7,7 +7,9 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DistributedWriteAheadLog/KafkaWAL.h>
-#include <DistributedWriteAheadLog/MordenKafkaWAL.h>
+#include <DistributedWriteAheadLog/KafkaWALConsumer.h>
+#include <DistributedWriteAheadLog/KafkaWALSettings.h>
+#include <DistributedWriteAheadLog/KafkaWALContext.h>
 #include <DistributedWriteAheadLog/WAL.h>
 #include <Common/TerminalSize.h>
 #include <Common/ThreadPool.h>
@@ -18,8 +20,7 @@
 
 using namespace std;
 using namespace DB;
-using namespace DB::DWAL;
-
+using namespace DWAL;
 
 namespace
 {
@@ -582,7 +583,7 @@ struct Data
 
 void ingestAsync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex, const BenchmarkSettings & bench_settings)
 {
-    auto callback = [](const WAL::AppendResult & result, void * data) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+    auto callback = [](const AppendResult & result, void * data) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
         Data * d = static_cast<Data *>(data);
 
         TimePoint start;
@@ -685,7 +686,7 @@ void ingestSync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex,
         record.headers["_idem"] = to_string(i);
 
         auto start = chrono::steady_clock::now();
-        const WAL::AppendResult & result = wal->append(record, ctx);
+        const AppendResult & result = wal->append(record, ctx);
         if (result.err)
         {
             failed++;
@@ -843,14 +844,14 @@ void consume(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
 
 void incrementalConsume(const BenchmarkSettings & bench_settings, Int32 size)
 {
-    MordenKafkaWALPtrs wals;
+    KafkaWALConsumerPtrs wals;
     wals.reserve(size);
 
     for (Int32 i = 0; i < size; ++i)
     {
         auto settings = make_unique<KafkaWALSettings>();
         *settings = *bench_settings.wal_settings;
-        wals.push_back(make_shared<MordenKafkaWAL>(move(settings)));
+        wals.push_back(make_shared<KafkaWALConsumer>(move(settings)));
         wals.back()->startup();
     }
 
