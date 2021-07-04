@@ -8,7 +8,6 @@
 
 
 struct rd_kafka_s;
-struct rd_kafka_conf_s;
 struct rd_kafka_topic_s;
 struct rd_kafka_message_s;
 
@@ -295,7 +294,7 @@ public:
         std::atomic_uint64_t failed = 0;
         std::atomic_uint64_t bytes = 0;
 
-        // produce statistics
+        /// produce statistics
         String pstat;
 
         Poco::Logger * log;

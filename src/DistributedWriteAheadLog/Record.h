@@ -31,6 +31,7 @@ struct Record
     /// fields which are not on the wire
     uint64_t partition_key = 0;
 
+    String topic;
     RecordSequenceNumber sn = -1;
 
     bool empty() const { return block.rows() == 0; }

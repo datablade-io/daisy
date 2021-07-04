@@ -7,6 +7,7 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DistributedWriteAheadLog/KafkaWAL.h>
+#include <DistributedWriteAheadLog/MordenKafkaWAL.h>
 #include <DistributedWriteAheadLog/WAL.h>
 #include <Common/TerminalSize.h>
 #include <Common/ThreadPool.h>
@@ -117,22 +118,15 @@ struct ProducerSettings
     String topic;
 };
 
-struct TopicPartionOffset
-{
-    String topic;
-    Int32 partition;
-    Int64 offset;
-};
-
 struct ConsumerSettings
 {
     vector<TopicPartionOffset> kafka_topic_partition_offsets;
-    String auto_offset_reset = "earliest";
-    Int32 consume_callback_max_messages = 1000;
+    String auto_offset_reset = "earliest"; Int32 consume_callback_max_messages = 1000;
     Int32 max_messages = 100;
     Int32 auto_commit_interval_ms = 5000;
     Int32 wal_client_pool_size = 1;
     String mode = "sync";
+    bool incremental = false;
 
     static vector<TopicPartionOffset> parseTopicPartitionOffsets(const String & s)
     {
@@ -166,7 +160,7 @@ struct ConsumerSettings
                     return {};
                 }
             }
-            else if (*iter == ';')
+            else if (*iter == ':')
             {
                 if (state == 2)
                 {
@@ -329,13 +323,14 @@ BenchmarkSettings parseConsumeSettings(po::parsed_options & cmd_parsed, const ch
     options("group_id", value<String>(), "consumer group id");
     options("auto_offset_reset", value<String>()->default_value(""), "earliest|latest|stored");
     options("queued_min_messages", value<Int32>()->default_value(10000), "number of queued messages in client side");
-    options("kafka_topic_partition_offsets", value<String>(), "topic,partition,offset;topic,partition,offset;...");
+    options("kafka_topic_partition_offsets", value<String>(), "topic,partition,offset:topic,partition,offset:...");
     options("max_messages", value<Int32>()->default_value(100), "maximum message to consume");
     options("auto_commit_interval_ms", value<Int32>()->default_value(5000), "offsets commit interval");
     options("wal_client_pool_size", value<Int32>()->default_value(1), "WAL client pool size");
     options("mode", value<String>()->default_value("sync"), "sync or async data consumption");
     options("kafka_brokers", value<String>()->default_value("localhost:9092"), "Kafka broker lists");
     options("debug", value<String>()->default_value(""), "librdkafka components to debug, cgrp,topic,fetch");
+    options("incremental", value<bool>()->default_value(false), "incremental topic/partition consuming");
 
     vector<String> opts = po::collect_unrecognized(cmd_parsed.options, po::include_positional);
     opts.erase(opts.begin());
@@ -398,6 +393,7 @@ BenchmarkSettings parseConsumeSettings(po::parsed_options & cmd_parsed, const ch
     bench_settings.consumer_settings.mode = option_map["mode"].as<String>();
     bench_settings.consumer_settings.kafka_topic_partition_offsets
         = ConsumerSettings::parseTopicPartitionOffsets(option_map["kafka_topic_partition_offsets"].as<String>());
+    bench_settings.consumer_settings.incremental = option_map["incremental"].as<bool>();
 
     if (bench_settings.consumer_settings.kafka_topic_partition_offsets.empty())
     {
@@ -453,6 +449,13 @@ BenchmarkSettings parseTopicSettings(po::parsed_options & cmd_parsed, const char
     auto mode = option_map["mode"].as<String>();
     if (mode != "create" && mode != "delete" && mode != "describe")
     {
+        cout << "Usage: " << progname << " " << desc << "\n";
+        return {};
+    }
+
+    if (!option_map.count("name") || option_map["name"].as<String>().empty())
+    {
+        cout << "`--name` argument is required.\n";
         cout << "Usage: " << progname << " " << desc << "\n";
         return {};
     }
@@ -542,7 +545,7 @@ using ResultQueues = vector<ResultQueue>;
 using TimePoint = chrono::time_point<chrono::steady_clock>;
 using RecordContainer = unordered_map<UInt64, pair<shared_ptr<DWAL::Record>, TimePoint>>;
 
-DWalPtrs create_dwals(const BenchmarkSettings & bench_settings, Int32 size)
+DWalPtrs createDWals(const BenchmarkSettings & bench_settings, Int32 size)
 {
     DWalPtrs wals;
     wals.reserve(size);
@@ -838,6 +841,75 @@ void consume(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
     cout << "data consumption is done" << endl;
 }
 
+void incrementalConsume(const BenchmarkSettings & bench_settings, Int32 size)
+{
+    MordenKafkaWALPtrs wals;
+    wals.reserve(size);
+
+    for (Int32 i = 0; i < size; ++i)
+    {
+        auto settings = make_unique<KafkaWALSettings>();
+        *settings = *bench_settings.wal_settings;
+        wals.push_back(make_shared<MordenKafkaWAL>(move(settings)));
+        wals.back()->startup();
+    }
+
+    mutex stdout_mutex;
+    ThreadPool worker_pool{static_cast<size_t>(size)};
+
+    for (Int32 jobid = 0; jobid < size; ++jobid)
+    {
+        worker_pool.scheduleOrThrowOnError([&, jobid] {
+            auto & wal = wals[jobid];
+
+            Int32 max_messages = bench_settings.consumer_settings.max_messages;
+            Int32 consumed = 0;
+            for (; consumed < max_messages; )
+            {
+                auto result = wal->consume(1000);
+                if (result.err == 0)
+                {
+                    for (const auto & record : result.records)
+                    {
+                        consumed += 1;
+                        lock_guard<mutex> lock(stdout_mutex);
+                        cout << "topic=" << record->topic << " partition=" << record->partition_key << " offset=" << record->sn
+                             << " idem=" << record->headers["_idem"] << endl;
+                        /// dumpData(record->block);
+                    }
+                }
+                else
+                {
+                    cout << "failed to consume " << result.err << endl;
+                }
+            }
+        });
+    }
+
+    /// Add a topic/partition at a time
+    for (const auto & tpo : bench_settings.consumer_settings.kafka_topic_partition_offsets)
+    {
+        this_thread::sleep_for(20000ms);
+        cout << "adding topic=" << tpo.topic << " partition=" << tpo.partition << " offset=" << tpo.offset
+             << "\n";
+        TopicPartionOffsets tpos{tpo};
+        wals[0]->addConsumptions(tpos);
+    }
+
+    /// Remove a topic/partition at a time
+    for (const auto & tpo : bench_settings.consumer_settings.kafka_topic_partition_offsets)
+    {
+        this_thread::sleep_for(20000ms);
+        cout << "Removing topic=" << tpo.topic << " partition=" << tpo.partition << " offset=" << tpo.offset
+             << "\n";
+        TopicPartionOffsets tpos{tpo};
+        wals[0]->removeConsumptions(tpos);
+    }
+
+    worker_pool.wait();
+    cout << "incremental data consumption is done" << endl;
+}
+
 void admin(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
 {
     KafkaWALContext pctx{bench_settings.topic_settings.name};
@@ -910,7 +982,7 @@ int mainEntryClickHouseDWal(int argc, char ** argv)
 
     if (bench_settings.command == "produce")
     {
-        DWalPtrs wals{create_dwals(bench_settings, bench_settings.producer_settings.wal_client_pool_size)};
+        DWalPtrs wals{createDWals(bench_settings, bench_settings.producer_settings.wal_client_pool_size)};
 
         ResultQueues result_queues{static_cast<size_t>(bench_settings.producer_settings.concurrency)};
 
@@ -919,13 +991,20 @@ int mainEntryClickHouseDWal(int argc, char ** argv)
     }
     else if (bench_settings.command == "consume")
     {
-        DWalPtrs wals{create_dwals(bench_settings, bench_settings.consumer_settings.wal_client_pool_size)};
-        consume(wals, bench_settings);
+        if (bench_settings.consumer_settings.incremental)
+        {
+            incrementalConsume(bench_settings, bench_settings.consumer_settings.wal_client_pool_size);
+        }
+        else
+        {
+            DWalPtrs wals{createDWals(bench_settings, bench_settings.consumer_settings.wal_client_pool_size)};
+            consume(wals, bench_settings);
+        }
     }
     else
     {
         /// admin topic
-        DWalPtrs wals{create_dwals(bench_settings, 1)};
+        DWalPtrs wals{createDWals(bench_settings, 1)};
         admin(wals, bench_settings);
     }
 
