@@ -108,7 +108,9 @@ String RestRouterHandler::processQuery(const String & query, const std::function
 String
 RestRouterHandler::processQuery(const String & query, Poco::JSON::Object & resp, const std::function<void(Block &&)> & callback) const
 {
+
     executeSelectQuery(query, query_context, callback, false);
+    LOG_INFO(log, "Table Creation successfully for query_id={}. Prepare to build response", query_context->getCurrentQueryId());
     return buildResponse(query_context->getCurrentQueryId(), resp);
 }
 

@@ -893,7 +893,7 @@ bool InterpreterCreateQuery::createTableDistributed(const String & current_datab
     auto storage = static_cast<StorageDistributedMergeTree *>(res.get());
     if (storage->currentShard() >= 0)
     {
-        LOG_INFO(log, "Local DistributedMergeTree table creation with shard assigned");
+        LOG_INFO(log, "Local DistributedMergeTree table creation with shard assigned. query_id={} shard={}", ctx->getCurrentQueryId(), storage->currentShard());
 
         return false;
     }
@@ -1010,6 +1010,9 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
         return {};
     }
     /// Daisy : end
+    auto ctx = getContext();
+    auto * log = &Poco::Logger::get("InterpreterCreateQuery");
+    LOG_INFO(log, "Local Table Creation Started. query_id={}", ctx->getCurrentQueryId());
 
     // If this is a stub ATTACH query, read the query definition from the database
     if (create.attach && !create.storage && !create.columns_list)
@@ -1078,7 +1081,7 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
     }
     else if (create.attach && !create.attach_short_syntax && getContext()->getClientInfo().query_kind != ClientInfo::QueryKind::SECONDARY_QUERY)
     {
-        auto * log = &Poco::Logger::get("InterpreterCreateQuery");
+//        auto * log = &Poco::Logger::get("InterpreterCreateQuery");
         LOG_WARNING(log, "ATTACH TABLE query with full table definition is not recommended: "
                          "use either ATTACH TABLE {}; to attach existing table "
                          "or CREATE TABLE {} <table definition>; to create new table "
@@ -1123,6 +1126,8 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
 
     /// Actually creates table
     bool created = doCreateTable(create, properties);
+
+    LOG_INFO(log, "Local Table Creation Finished. query_id={}", ctx->getCurrentQueryId());
 
     if (!created)   /// Table already exists
         return {};
