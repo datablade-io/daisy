@@ -60,6 +60,8 @@ protected:
         /// Producer
         Int32 request_required_acks = 1;
         Int32 request_timeout_ms = 10000;
+        /// Compress block or not
+        bool compress_block = false;
 
         /// Consumer
         String auto_offset_reset = "earliest";

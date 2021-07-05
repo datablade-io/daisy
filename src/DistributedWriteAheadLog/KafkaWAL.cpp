@@ -382,7 +382,7 @@ int32_t KafkaWAL::doAppend(const Record & record, DeliveryReport * dr, const Kaf
         headers.swap(header_ptr);
     }
 
-    ByteVector data{Record::write(record)};
+    ByteVector data{Record::write(record, walctx.compress_block)};
 
 #ifdef __GNUC__
 #pragma GCC diagnostic push

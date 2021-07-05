@@ -18,6 +18,7 @@ struct Record
 {
     inline const static std::string IDEMPOTENT_KEY = "_idem";
     constexpr static uint8_t VERSION = 1;
+    constexpr static uint8_t COMPRESSED = 1;
 
     /// Fields on the wire
     OpCode op_code = OpCode::UNKNOWN;
@@ -52,7 +53,9 @@ struct Record
         return OpCode::UNKNOWN;
     }
 
-    static ByteVector write(const Record & record);
+    static uint8_t compression(uint64_t flags) { return (flags >> 11ul) & 0x1F; }
+
+    static ByteVector write(const Record & record, const bool compressed = false);
     static std::shared_ptr<Record> read(const char * data, size_t size);
 
     Record(OpCode op_code_, DB::Block && block_) : op_code(op_code_), block(std::move(block_)) { }

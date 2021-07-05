@@ -73,6 +73,7 @@ MetadataService::ConfigSettings CatalogService::configSettings() const
         .default_data_retention = -1,
         .request_required_acks = -1,
         .request_timeout_ms = 10000,
+        .compress_block = true,
         .auto_offset_reset = "earliest",
     };
 }
