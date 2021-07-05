@@ -104,6 +104,9 @@
             <profile>default</profile>
             <quota>default</quota>
         </ghost>
+        <system>
+            <password></password>
+        </system>
     </users>
 
     <!-- Quotas. -->
