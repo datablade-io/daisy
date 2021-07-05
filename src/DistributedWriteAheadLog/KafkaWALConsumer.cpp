@@ -95,18 +95,19 @@ void KafkaWALConsumer::initHandle()
     std::vector<std::pair<std::string, std::string>> consumer_params = {
         std::make_pair("bootstrap.servers", settings->brokers.c_str()),
         std::make_pair("group.id", settings->group_id),
-        /// enable auto offset commit
+        /// Enable auto offset commit
         std::make_pair("enable.auto.commit", "true"),
         std::make_pair("auto.commit.interval.ms", std::to_string(settings->auto_commit_interval_ms)),
         std::make_pair("fetch.message.max.bytes", std::to_string(settings->fetch_message_max_bytes)),
+        std::make_pair("fetch.wait.max.ms", std::to_string(settings->fetch_wait_max_ms)),
         std::make_pair("enable.auto.offset.store", "false"),
         std::make_pair("offset.store.method", "broker"),
         std::make_pair("enable.partition.eof", "false"),
         std::make_pair("queued.min.messages", std::to_string(settings->queued_min_messages)),
         std::make_pair("queued.max.messages.kbytes", std::to_string(settings->queued_max_messages_kbytes)),
-        /// incremental partition assignment / unassignment
+        /// Incremental partition assignment / unassignment
         std::make_pair("partition.assignment.strategy", "cooperative-sticky"),
-        /// consumer group membership heartbeat timeout
+        /// Consumer group membership heartbeat timeout
         std::make_pair("session.timeout.ms", std::to_string(settings->session_timeout_ms)),
         std::make_pair("max.poll.interval.ms", std::to_string(settings->max_poll_interval_ms)),
     };

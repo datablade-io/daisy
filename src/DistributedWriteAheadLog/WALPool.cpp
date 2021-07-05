@@ -134,6 +134,7 @@ void WALPool::init(const std::string & key)
         {".check_crcs", "Bool", &kafka_settings.check_crcs},
         {".auto_commit_interval_ms", "Int32", &kafka_settings.auto_commit_interval_ms},
         {".fetch_message_max_bytes", "Int32", &kafka_settings.fetch_message_max_bytes},
+        {".fetch_wait_max_ms", "Int32", &kafka_settings.fetch_wait_max_ms},
         {".queued_min_messages", "Int32", &kafka_settings.queued_min_messages},
         {".queued_max_messages_kbytes", "Int32", &kafka_settings.queued_max_messages_kbytes},
         {".session_timeout_ms", "Int32", &kafka_settings.session_timeout_ms},

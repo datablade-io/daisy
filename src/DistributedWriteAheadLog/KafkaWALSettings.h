@@ -32,7 +32,9 @@ struct KafkaWALSettings
     bool enable_idempotence = true;
     int32_t queue_buffering_max_messages = 100000;
     int32_t queue_buffering_max_kbytes = 1048576;
-    int32_t queue_buffering_max_ms = 5; /// same as linger.ms
+    /// queue_buffering_max_ms impacts the message producing latency
+    /// https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency
+    int32_t queue_buffering_max_ms = 50; /// same as linger.ms
     int32_t message_send_max_retries = 2;
     int32_t retry_backoff_ms = 100;
     /// none, gzip, snappy, lz4, zstd, inherit
@@ -57,6 +59,9 @@ struct KafkaWALSettings
     bool check_crcs = false;
     int32_t auto_commit_interval_ms = 5000;
     int32_t fetch_message_max_bytes = 1048576;
+    /// Max time the broker may wait to fetch.min.bytes of messages
+    /// This setting impacts the message consuming latency
+    int32_t fetch_wait_max_ms = 500;
 
     /// Global librdkafka client side settings for consumer per topic+partition
     int32_t queued_min_messages = 1000000;

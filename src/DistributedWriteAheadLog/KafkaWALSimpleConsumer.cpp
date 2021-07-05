@@ -66,13 +66,16 @@ void KafkaWALSimpleConsumer::initHandle()
     /// 3) offsets are stored in brokers and on application side.
     ///     3.1) In normal cases, application side offsets overrides offsets in borkers
     ///     3.2) In corruption cases (application offsets corruption), use offsets in borkers
+    /// https://github.com/edenhill/librdkafka/wiki/Consumer-offset-management
     std::vector<std::pair<String, String>> consumer_params = {
         std::make_pair("bootstrap.servers", settings->brokers.c_str()),
         std::make_pair("group.id", settings->group_id),
-        /// enable auto offset commit
+        /// Enable auto offset commit
         std::make_pair("enable.auto.commit", "true"),
         std::make_pair("auto.commit.interval.ms", std::to_string(settings->auto_commit_interval_ms)),
         std::make_pair("fetch.message.max.bytes", std::to_string(settings->fetch_message_max_bytes)),
+        std::make_pair("fetch.wait.max.ms", std::to_string(settings->fetch_wait_max_ms)),
+        /// Disable librdkafka committing offset prior handling messages to applications
         std::make_pair("enable.auto.offset.store", "false"),
         std::make_pair("offset.store.method", "broker"),
         std::make_pair("enable.partition.eof", "false"),
