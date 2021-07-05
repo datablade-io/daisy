@@ -116,38 +116,41 @@ namespace
         }
 
         return DB::ErrorCodes::OK;
-}
-
-int logStats(struct rd_kafka_s * /*rk*/, char * json, size_t json_len, void * opaque)
-{
-    auto * stats = static_cast<KafkaWALStats*>(opaque);
-    std::string stat(json, json + json_len);
-    stats->pstat.swap(stat);
-    return DB::ErrorCodes::OK;
-}
-
-void logErr(struct rd_kafka_s * rk, int err, const char * reason, void * opaque)
-{
-    auto * stats = static_cast<KafkaWALStats *>(opaque);
-    if (err == RD_KAFKA_RESP_ERR__FATAL)
-    {
-        char errstr[512] = {'\0'};
-        rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
-        LOG_ERROR(stats->log, "Fatal error found, error={}", errstr);
     }
-    else
+
+    int logStats(struct rd_kafka_s * /*rk*/, char * json, size_t json_len, void * opaque)
     {
+        auto * stats = static_cast<KafkaWALStats *>(opaque); std::string stat(json, json + json_len);
+        stats->pstat.swap(stat);
+        return DB::ErrorCodes::OK;
+    }
+
+    void logErr(struct rd_kafka_s * rk, int err, const char * reason, void * opaque)
+    {
+        auto * stats = static_cast<KafkaWALStats *>(opaque);
+        if (err == RD_KAFKA_RESP_ERR__FATAL)
+        {
+            char errstr[512] = {'\0'};
+            rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
+            LOG_ERROR(stats->log, "Fatal error found, error={}", errstr);
+        }
+        else
+        {
+            LOG_WARNING(
+                stats->log, "Error occurred, error={}, reason={}", rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)), reason);
+        }
+    }
+
+    void logThrottle(struct rd_kafka_s * /*rk*/, const char * broker_name, int32_t broker_id, int throttle_time_ms, void * opaque)
+    {
+        auto * stats = static_cast<KafkaWALStats *>(opaque);
         LOG_WARNING(
-            stats->log, "Error occurred, error={}, reason={}", rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)), reason);
+            stats->log,
+            "Throttling occurred on broker={}, broker_id={}, throttle_time_ms={}",
+            broker_name,
+            broker_id,
+            throttle_time_ms);
     }
-}
-
-void logThrottle(struct rd_kafka_s * /*rk*/, const char * broker_name, int32_t broker_id, int throttle_time_ms, void * opaque)
-{
-    auto * stats = static_cast<KafkaWALStats *>(opaque);
-    LOG_WARNING(
-        stats->log, "Throttling occurred on broker={}, broker_id={}, throttle_time_ms={}", broker_name, broker_id, throttle_time_ms);
-}
 
 #if 0
 void logOffsetCommits(struct rd_kafka_s * /*rk*/, rd_kafka_resp_err_t err, struct rd_kafka_topic_partition_list_s * offsets, void * opaque)
@@ -207,7 +210,7 @@ void KafkaWAL::deliveryReport(struct rd_kafka_s *, const rd_kafka_message_s * rk
         DeliveryReport * report = static_cast<DeliveryReport *>(rkmessage->_private);
         if (rd_kafka_message_status(rkmessage) == RD_KAFKA_MSG_STATUS_PERSISTED)
         {
-            /// usually for retried message and idempotent is enabled.
+            /// Usually for retried message and idempotent is enabled.
             /// In this case, the message is actually persisted in Kafka broker
             /// the `offset` in delivery report may be -1
             report->err = DB::ErrorCodes::OK;
@@ -232,6 +235,9 @@ void KafkaWAL::deliveryReport(struct rd_kafka_s *, const rd_kafka_message_s * rk
                 .err = report->err,
                 .ctx = rkmessage->partition,
             };
+            /// Since deliveryReport is invoked in the poller thread
+            /// we will need be extremely careful the `callback` and
+            /// `data`'s lifetime are still valid here.
             report->callback(result, report->data);
         }
 
@@ -282,7 +288,10 @@ void KafkaWAL::shutdown()
     }
 
     LOG_INFO(log, "Stopping");
+
+    consumer->shutdown();
     poller.wait();
+
     LOG_INFO(log, "Stopped");
 }
 
@@ -291,6 +300,8 @@ void KafkaWAL::backgroundPollProducer()
     LOG_INFO(log, "Polling producer started");
     setThreadName("KWalPPoller");
 
+    /// rd_kafka_poll is polling the delivery report of a message appended
+    /// The associated callback will be invoked in this thread
     while (!stopped.test())
     {
         rd_kafka_poll(producer_handle.get(), settings->message_delivery_async_poll_ms);
@@ -329,7 +340,7 @@ void KafkaWAL::initProducerHandle()
         rd_kafka_conf_set_error_cb(kconf, &logErr);
         rd_kafka_conf_set_throttle_cb(kconf, &logThrottle);
 
-        /// delivery report
+        /// Delivery report for async append
         rd_kafka_conf_set_dr_msg_cb(kconf, &KafkaWAL::deliveryReport);
     };
 
@@ -367,8 +378,7 @@ AppendResult KafkaWAL::append(const Record & record, std::any & ctx)
     __builtin_unreachable();
 }
 
-int32_t KafkaWAL::append(
-    const Record & record, AppendCallback callback, void * data, std::any & ctx)
+int32_t KafkaWAL::append(const Record & record, AppendCallback callback, void * data, std::any & ctx)
 {
     assert(ctx.has_value());
     assert(!record.empty());
@@ -379,7 +389,7 @@ int32_t KafkaWAL::append(
     int32_t err = doAppend(record, dr.get(), walctx);
     if (likely(err == static_cast<int32_t>(RD_KAFKA_RESP_ERR_NO_ERROR)))
     {
-        /// move the ownership to `delivery_report`
+        /// Move the ownership to `delivery_report`
         dr.release();
     }
     else
@@ -474,8 +484,7 @@ int32_t KafkaWAL::doAppend(const Record & record, DeliveryReport * dr, KafkaWALC
     return err;
 }
 
-AppendResult
-KafkaWAL::handleError(int err, const Record & record, const KafkaWALContext & ctx)
+AppendResult KafkaWAL::handleError(int err, const Record & record, const KafkaWALContext & ctx)
 {
     auto kerr = static_cast<rd_kafka_resp_err_t>(err);
     LOG_ERROR(

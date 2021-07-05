@@ -17,7 +17,7 @@ namespace DWAL
 {
 struct KafkaWALContext;
 
-/// KafkaWALSimpleConsumer consumes data from a specific topic, partition
+/// KafkaWALSimpleConsumer consumes data from a specific single partition of a topic
 class KafkaWALSimpleConsumer final
 {
 public:
@@ -27,7 +27,7 @@ public:
     void startup();
     void shutdown();
 
-    /// Register a consumer callback for topic, partition
+    /// Register a consumer callback for a partition of a topic
     int32_t consume(ConsumeCallback callback, void * data, KafkaWALContext & ctx);
 
     ConsumeResult consume(uint32_t count, int32_t timeout_ms, KafkaWALContext & ctx);

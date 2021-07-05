@@ -31,10 +31,13 @@ public:
     /// `ctx` is KafkaWALContext
     AppendResult append(const Record & record, std::any & ctx) override;
 
-    /// Async append, we don't poll result but rely on callback to deliver the result back
+    /// Async append, we don't poll result but rely on callback to deliver the append result back
+    /// The AppendCallback can be called in a different thread, so caller need make sure its
+    /// multi-thread safety and lifetime validity. Same for the `data` passed in.
     /// `ctx` is KafkaWALContext
     int32_t append(const Record & record, AppendCallback callback, void * data, std::any & ctx) override;
 
+    /// Poll the async `append` status
     void poll(int32_t timeout_ms, std::any & ctx) override;
 
     /// `ctx` is KafkaWALContext
@@ -79,6 +82,7 @@ private:
         AppendCallback callback = nullptr;
         void * data = nullptr;
         bool delete_self = false;
+
         explicit DeliveryReport(AppendCallback callback_ = nullptr, void * data_ = nullptr, bool delete_self_ = false)
             : callback(callback_), data(data_), delete_self(delete_self_)
         {
@@ -88,12 +92,12 @@ private:
 private:
     void initProducerHandle();
 
-    /// poll delivery report
+    /// Poll delivery report
     void backgroundPollProducer();
 
     AppendResult handleError(int err, const Record & record, const KafkaWALContext & ctx);
 
-    /// DeliveryReport `dr` must reside on heap. if `do_append` succeeds, the DeliveryReport object is handled over
+    /// DeliveryReport `dr` must reside on heap. if `doAppend` succeeds, the DeliveryReport object is handled over
     /// to librdkafka and will be used by `delivery_report` callback eventually
     int32_t doAppend(const Record & record, DeliveryReport * dr, KafkaWALContext & walctx);
 
