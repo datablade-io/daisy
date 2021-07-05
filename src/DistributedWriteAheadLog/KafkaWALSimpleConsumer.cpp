@@ -21,7 +21,7 @@ KafkaWALSimpleConsumer::KafkaWALSimpleConsumer(std::unique_ptr<KafkaWALSettings>
     , consumer_handle(nullptr, rd_kafka_destroy)
     , poller(1)
     , log(&Poco::Logger::get("KafkaWALSimpleConsumer"))
-    , stats{std::make_unique<KafkaWALStats>(log)}
+    , stats{std::make_unique<KafkaWALStats>(log, "simple_consumer")}
 {
 }
 
@@ -78,8 +78,6 @@ void KafkaWALSimpleConsumer::initHandle()
         std::make_pair("enable.partition.eof", "false"),
         std::make_pair("queued.min.messages", std::to_string(settings->queued_min_messages)),
         std::make_pair("queued.max.messages.kbytes", std::to_string(settings->queued_max_messages_kbytes)),
-        /// consumer group membership heartbeat timeout
-        /// std::make_pair("session.timeout.ms", ""),
     };
 
     if (!settings->debug.empty())
@@ -87,19 +85,16 @@ void KafkaWALSimpleConsumer::initHandle()
         consumer_params.emplace_back("debug", settings->debug);
     }
 
-    /// FIXME
-#if 0
     auto cb_setup = [](rd_kafka_conf_t * kconf) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-        rd_kafka_conf_set_stats_cb(kconf, &logStats);
-        rd_kafka_conf_set_error_cb(kconf, &logErr);
-        rd_kafka_conf_set_throttle_cb(kconf, &logThrottle);
+        rd_kafka_conf_set_stats_cb(kconf, &KafkaWALStats::logStats);
+        rd_kafka_conf_set_error_cb(kconf, &KafkaWALStats::logErr);
+        rd_kafka_conf_set_throttle_cb(kconf, &KafkaWALStats::logThrottle);
 
-        /// offset commits
-        rd_kafka_conf_set_offset_commit_cb(kconf, &logOffsetCommits);
+        /// Consumer offset commits
+        /// rd_kafka_conf_set_offset_commit_cb(kconf, &KafkaWALStats::logOffsetCommits);
     };
-#endif
 
-    consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats.get(), nullptr);
+    consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats.get(), cb_setup);
 
     /// Forward all events to consumer queue. there may have in-balance consuming problems
     /// rd_kafka_poll_set_consumer(consumer_handle.get());
@@ -141,7 +136,7 @@ std::shared_ptr<rd_kafka_topic_s> KafkaWALSimpleConsumer::initTopicHandle(const 
 
 inline int32_t KafkaWALSimpleConsumer::initTopicHandleIfNecessary(KafkaWALContext & ctx)
 {
-    if (!ctx.topic_handle)
+    if (unlikely(!ctx.topic_handle))
     {
         ctx.topic_handle = initTopicHandle(ctx);
         /// Always starts from broker stored offset.

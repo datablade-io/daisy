@@ -13,7 +13,7 @@ namespace DWAL
 {
 struct KafkaWALStats;
 
-int32_t mapErrorCode(rd_kafka_resp_err_t err);
+int32_t mapErrorCode(rd_kafka_resp_err_t err, bool retriable = false);
 
 /// Escape `namespace_` and `name_` to restrict char set
 std::string escapeDWalName(const std::string & namespace_, const std::string & name_);

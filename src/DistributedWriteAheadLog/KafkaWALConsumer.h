@@ -3,7 +3,8 @@
 #include "KafkaWALSettings.h"
 #include "KafkaWALStats.h"
 #include "Results.h"
-#include "WAL.h"
+
+#include <Common/ThreadPool.h>
 
 struct rd_kafka_s;
 struct rd_kafka_topic_s;
@@ -27,7 +28,6 @@ struct TopicPartionOffset
 
 using TopicPartionOffsets = std::vector<TopicPartionOffset>;
 
-
 class KafkaWALConsumer final
 {
 public:
@@ -44,6 +44,7 @@ public:
 
 private:
     void initHandle();
+    void backgroundPoll();
 
 private:
     using FreeRdKafka = void (*)(struct rd_kafka_s *);
@@ -59,6 +60,8 @@ private:
     std::unordered_map<std::string, std::vector<int32_t>> partitions;
 
     RdKafkaHandlePtr consumer_handle;
+
+    ThreadPool poller;
 
     Poco::Logger * log;
 

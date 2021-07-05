@@ -49,8 +49,10 @@ struct KafkaWALSettings
     std::string group_id = "";
     /// std::string group_instance_id
     /// std::string partition_assignment_strategy
-    /// int32_t session_timeout_ms = 10000;
-    /// int32_t max_poll_interval_ms = 30000;
+
+    int32_t session_timeout_ms = 10000;
+    int32_t max_poll_interval_ms = 30000;
+
     bool enable_auto_commit = true;
     bool check_crcs = false;
     int32_t auto_commit_interval_ms = 5000;

@@ -14,6 +14,7 @@ namespace ErrorCodes
     extern const int UNKNOWN_EXCEPTION;
     extern const int BAD_ARGUMENTS;
     extern const int DWAL_FATAL_ERROR;
+    extern const int DWAL_RETRIABLE_ERROR;
     extern const int INVALID_CONFIG_PARAMETER;
 }
 }
@@ -26,8 +27,13 @@ std::string escapeDWalName(const std::string & namespace_, const std::string & n
     return namespace_ + "." + name_;
 }
 
-int32_t mapErrorCode(rd_kafka_resp_err_t err)
+int32_t mapErrorCode(rd_kafka_resp_err_t err, bool retriable)
 {
+    if (retriable)
+    {
+        return DB::ErrorCodes::DWAL_RETRIABLE_ERROR;
+    }
+
     /// FIXME, more code mapping
     switch (err)
     {

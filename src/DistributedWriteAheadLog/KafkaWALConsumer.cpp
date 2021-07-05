@@ -5,7 +5,6 @@
 #include <Common/setThreadName.h>
 #include <common/logger_useful.h>
 
-
 namespace DB
 {
 namespace ErrorCodes
@@ -27,8 +26,9 @@ namespace DWAL
 KafkaWALConsumer::KafkaWALConsumer(std::unique_ptr<KafkaWALSettings> settings_)
     : settings(std::move(settings_))
     , consumer_handle(nullptr, rd_kafka_destroy)
+    , poller(1)
     , log(&Poco::Logger::get("KafkaWALConsumer"))
-    , stats(std::make_unique<KafkaWALStats>(log))
+    , stats(std::make_unique<KafkaWALStats>(log, "consumer"))
 {
 }
 
@@ -49,7 +49,7 @@ void KafkaWALConsumer::startup()
 
     initHandle();
 
-    /// poller.scheduleOrThrowOnError([this] { backgroundPollConsumer(); });
+    poller.scheduleOrThrowOnError([this] { backgroundPoll(); });
 
     LOG_INFO(log, "Started");
 }
@@ -62,8 +62,27 @@ void KafkaWALConsumer::shutdown()
     }
 
     LOG_INFO(log, "Stopping");
-    /// poller.wait();
+    poller.wait();
     LOG_INFO(log, "Stopped");
+}
+
+void KafkaWALConsumer::backgroundPoll()
+{
+    LOG_INFO(log, "Polling consumer started");
+    setThreadName("KWalCPoller");
+
+    while (!stopped.test())
+    {
+        rd_kafka_poll(consumer_handle.get(), 100);
+    }
+
+    auto err = rd_kafka_commit(consumer_handle.get(), nullptr, 0);
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR && err != RD_KAFKA_RESP_ERR__NO_OFFSET)
+    {
+        LOG_ERROR(log, "Failed to commit offsets, error={}", rd_kafka_err2str(err));
+    }
+
+    LOG_INFO(log, "Polling consumer stopped");
 }
 
 void KafkaWALConsumer::initHandle()
@@ -88,7 +107,8 @@ void KafkaWALConsumer::initHandle()
         /// incremental partition assignment / unassignment
         std::make_pair("partition.assignment.strategy", "cooperative-sticky"),
         /// consumer group membership heartbeat timeout
-        /// std::make_pair("session.timeout.ms", ""),
+        std::make_pair("session.timeout.ms", std::to_string(settings->session_timeout_ms)),
+        std::make_pair("max.poll.interval.ms", std::to_string(settings->max_poll_interval_ms)),
     };
 
     if (!settings->debug.empty())
@@ -96,19 +116,19 @@ void KafkaWALConsumer::initHandle()
         consumer_params.emplace_back("debug", settings->debug);
     }
 
-    /* auto cb_setup = [](rd_kafka_conf_t * kconf) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-        rd_kafka_conf_set_stats_cb(kconf, &logStats);
-        rd_kafka_conf_set_error_cb(kconf, &logErr);
-        rd_kafka_conf_set_throttle_cb(kconf, &logThrottle);
+    auto cb_setup = [](rd_kafka_conf_t * kconf) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+        rd_kafka_conf_set_stats_cb(kconf, &KafkaWALStats::logStats);
+        rd_kafka_conf_set_error_cb(kconf, &KafkaWALStats::logErr);
+        rd_kafka_conf_set_throttle_cb(kconf, &KafkaWALStats::logThrottle);
 
-        /// offset commits
-        rd_kafka_conf_set_offset_commit_cb(kconf, &logOffsetCommits);
-    }; */
+        /// Consumer offset commits
+        /// rd_kafka_conf_set_offset_commit_cb(kconf, &KafkaWALStats::logOffsetCommits);
+    };
 
-    consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats.get(), nullptr);
+    consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats.get(), cb_setup);
 
     /// Forward all events to consumer queue. there may have in-balance consuming problems
-    rd_kafka_poll_set_consumer(consumer_handle.get());
+    /// rd_kafka_poll_set_consumer(consumer_handle.get());
 }
 
 int32_t KafkaWALConsumer::addConsumptions(const TopicPartionOffsets & partitions_)
@@ -123,8 +143,7 @@ int32_t KafkaWALConsumer::addConsumptions(const TopicPartionOffsets & partitions
             auto pos = std::find(iter->second.begin(), iter->second.end(), partition.partition);
             if (pos != iter->second.end())
             {
-                /// FIXME
-                return 1;
+                return DB::ErrorCodes::BAD_ARGUMENTS;
             }
         }
     }
@@ -141,15 +160,18 @@ int32_t KafkaWALConsumer::addConsumptions(const TopicPartionOffsets & partitions
     auto err = rd_kafka_incremental_assign(consumer_handle.get(), topic_partitions.get());
     if (err)
     {
+        LOG_ERROR(log, "Failed to assign partitions incrementally, error={}", rd_kafka_error_string(err));
+
+        auto ret_code = mapErrorCode(rd_kafka_error_code(err), rd_kafka_error_is_retriable(err));
         rd_kafka_error_destroy(err);
-        return 1;
+        return ret_code;
     }
 
     for (const auto & partition : partitions_)
     {
         partitions[partition.topic].push_back(partition.partition);
     }
-    return 0;
+    return DB::ErrorCodes::OK;
 }
 
 int32_t KafkaWALConsumer::removeConsumptions(const TopicPartionOffsets & partitions_)
@@ -167,8 +189,7 @@ int32_t KafkaWALConsumer::removeConsumptions(const TopicPartionOffsets & partiti
         auto pos = std::find(iter->second.begin(), iter->second.end(), partition.partition);
         if (pos == iter->second.end())
         {
-            /// FIXME
-            return 1;
+            return DB::ErrorCodes::BAD_ARGUMENTS;
         }
     }
 
@@ -183,8 +204,11 @@ int32_t KafkaWALConsumer::removeConsumptions(const TopicPartionOffsets & partiti
     auto err = rd_kafka_incremental_unassign(consumer_handle.get(), topic_partitions.get());
     if (err)
     {
+        LOG_ERROR(log, "Failed to unassign partitions incrementally, error={}", rd_kafka_error_string(err));
+
+        auto ret_code = mapErrorCode(rd_kafka_error_code(err), rd_kafka_error_is_retriable(err));
         rd_kafka_error_destroy(err);
-        return 1;
+        return ret_code;
     }
 
     for (const auto & partition : partitions_)
@@ -202,7 +226,7 @@ int32_t KafkaWALConsumer::removeConsumptions(const TopicPartionOffsets & partiti
         }
     }
 
-    return 0;
+    return DB::ErrorCodes::OK;
 }
 
 ConsumeResult KafkaWALConsumer::consume(int32_t timeout_ms)

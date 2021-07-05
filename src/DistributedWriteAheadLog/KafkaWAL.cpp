@@ -6,7 +6,6 @@
 #include <Common/setThreadName.h>
 #include <common/logger_useful.h>
 
-
 namespace DB
 {
 namespace ErrorCodes
@@ -117,63 +116,6 @@ namespace
 
         return DB::ErrorCodes::OK;
     }
-
-    int logStats(struct rd_kafka_s * /*rk*/, char * json, size_t json_len, void * opaque)
-    {
-        auto * stats = static_cast<KafkaWALStats *>(opaque); std::string stat(json, json + json_len);
-        stats->pstat.swap(stat);
-        return DB::ErrorCodes::OK;
-    }
-
-    void logErr(struct rd_kafka_s * rk, int err, const char * reason, void * opaque)
-    {
-        auto * stats = static_cast<KafkaWALStats *>(opaque);
-        if (err == RD_KAFKA_RESP_ERR__FATAL)
-        {
-            char errstr[512] = {'\0'};
-            rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
-            LOG_ERROR(stats->log, "Fatal error found, error={}", errstr);
-        }
-        else
-        {
-            LOG_WARNING(
-                stats->log, "Error occurred, error={}, reason={}", rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)), reason);
-        }
-    }
-
-    void logThrottle(struct rd_kafka_s * /*rk*/, const char * broker_name, int32_t broker_id, int throttle_time_ms, void * opaque)
-    {
-        auto * stats = static_cast<KafkaWALStats *>(opaque);
-        LOG_WARNING(
-            stats->log,
-            "Throttling occurred on broker={}, broker_id={}, throttle_time_ms={}",
-            broker_name,
-            broker_id,
-            throttle_time_ms);
-    }
-
-#if 0
-void logOffsetCommits(struct rd_kafka_s * /*rk*/, rd_kafka_resp_err_t err, struct rd_kafka_topic_partition_list_s * offsets, void * opaque)
-{
-    auto * stats = static_cast<KafkaWALStats *>(opaque);
-    if (err != RD_KAFKA_RESP_ERR_NO_ERROR && err != RD_KAFKA_RESP_ERR__NO_OFFSET)
-    {
-        LOG_ERROR(stats->log, "Failed to commit offsets, error={}", rd_kafka_err2str(err));
-    }
-
-    for (int i = 0; offsets != nullptr && i < offsets->cnt; ++i)
-    {
-        rd_kafka_topic_partition_t * rktpar = &offsets->elems[i];
-        LOG_INFO(
-            stats->log,
-            "Commits offsets, topic={} partition={} offset={} error={}",
-            rktpar->topic,
-            rktpar->partition,
-            rktpar->offset,
-            rd_kafka_err2str(err));
-    }
-}
-#endif
 }
 
 std::shared_ptr<rd_kafka_topic_s> KafkaWAL::initProducerTopicHandle(const KafkaWALContext & walctx)
@@ -254,7 +196,7 @@ KafkaWAL::KafkaWAL(std::unique_ptr<KafkaWALSettings> settings_)
     , consumer(std::make_unique<KafkaWALSimpleConsumer>(settings->clone()))
     , poller(1)
     , log(&Poco::Logger::get("KafkaWAL"))
-    , stats{std::make_unique<KafkaWALStats>(log)}
+    , stats{std::make_unique<KafkaWALStats>(log, "producer")}
 {
 }
 
@@ -336,9 +278,9 @@ void KafkaWAL::initProducerHandle()
 
     auto cb_setup = [](rd_kafka_conf_t * kconf)
     {
-        rd_kafka_conf_set_stats_cb(kconf, &logStats);
-        rd_kafka_conf_set_error_cb(kconf, &logErr);
-        rd_kafka_conf_set_throttle_cb(kconf, &logThrottle);
+        rd_kafka_conf_set_stats_cb(kconf, &KafkaWALStats::logStats);
+        rd_kafka_conf_set_error_cb(kconf, &KafkaWALStats::logErr);
+        rd_kafka_conf_set_throttle_cb(kconf, &KafkaWALStats::logThrottle);
 
         /// Delivery report for async append
         rd_kafka_conf_set_dr_msg_cb(kconf, &KafkaWAL::deliveryReport);

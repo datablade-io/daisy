@@ -136,6 +136,8 @@ void WALPool::init(const std::string & key)
         {".fetch_message_max_bytes", "Int32", &kafka_settings.fetch_message_max_bytes},
         {".queued_min_messages", "Int32", &kafka_settings.queued_min_messages},
         {".queued_max_messages_kbytes", "Int32", &kafka_settings.queued_max_messages_kbytes},
+        {".session_timeout_ms", "Int32", &kafka_settings.session_timeout_ms},
+        {".max_poll_interval_ms", "Int32", &kafka_settings.max_poll_interval_ms},
         {".internal_pool_size", "Int32", &wal_pool_size},
     };
 

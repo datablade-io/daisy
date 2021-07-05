@@ -32,13 +32,14 @@ public:
 
     ConsumeResult consume(uint32_t count, int32_t timeout_ms, KafkaWALContext & ctx);
 
-    /// Stop consuming for topic, partition
+    /// Stop consuming for a partition of a topic
     int32_t stopConsume(KafkaWALContext & ctx);
 
+    /// Commit offset for a partition of a topic
     int32_t commit(int64_t offset, KafkaWALContext & ctx);
 
 private:
-    /// poll errors
+    /// Poll consume errors
     void backgroundPoll();
 
     void initHandle();
