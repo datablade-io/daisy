@@ -116,10 +116,11 @@ std::pair<String, Int32> TableRestRouterHandler::executeGet(const Poco::JSON::Ob
 std::pair<String, Int32> TableRestRouterHandler::executePost(const Poco::JSON::Object::Ptr & payload) const
 {
     const auto & table = payload->get("name").toString();
-    const auto & shard = getQueryParameter("shard");
-    const auto is_distributed = isDistributedDDL();
-    const auto & query_id = query_context->getCurrentQueryId();
-    LOG_INFO(log, "Table Creation Started. distributed={} table={} shard={} query_id={}", is_distributed, table, shard, query_id);
+//    const auto & shard = getQueryParameter("shard");
+//    const auto is_distributed = isDistributedDDL();
+//    const auto & query_id = query_context->getCurrentQueryId();
+//    LOG_INFO(log, "Table Creation Started. distributed={} table={} shard={} query_id={}", is_distributed, table, shard, query_id);
+    LOG_INFO(log, "Table Creation Started. table={}", table);
     /// Only check table existence when the ddl is distributed since when it is local, the creation
     /// may already happen in other nodes and broadcast to the action node, in this case, we will
     /// report table exist failure but we should not
@@ -131,6 +132,7 @@ std::pair<String, Int32> TableRestRouterHandler::executePost(const Poco::JSON::O
     }
 
 
+    const auto & shard = getQueryParameter("shard");
     const auto & query = getCreationSQL(payload, shard);
 
     if (isDistributedDDL())
@@ -138,6 +140,8 @@ std::pair<String, Int32> TableRestRouterHandler::executePost(const Poco::JSON::O
         setupDistributedQueryParameters({}, payload);
     }
 
+    const auto is_distributed = isDistributedDDL();
+    const auto & query_id = query_context->getCurrentQueryId();
     LOG_INFO(log, "Table Creation ProcessQuery. distributed={} table={} shard={} query_id={}", is_distributed, table, shard, query_id);
     return {processQuery(query), HTTPResponse::HTTP_OK};
 }
