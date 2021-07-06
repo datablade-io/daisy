@@ -231,6 +231,17 @@ Block InterpreterSelectWithUnionQuery::getSampleBlock(const ASTPtr & query_ptr_,
         return cache[key] = InterpreterSelectWithUnionQuery(query_ptr_, context_, SelectQueryOptions().analyze()).getSampleBlock();
 }
 
+/// Daisy : starts
+bool InterpreterSelectWithUnionQuery::hasAggregation() const
+{
+    for (auto & interpreter : nested_interpreters)
+    {
+        if (interpreter->hasAggregation())
+            return true;
+    }
+    return false;
+}
+/// Daisy : ends
 
 void InterpreterSelectWithUnionQuery::buildQueryPlan(QueryPlan & query_plan)
 {
