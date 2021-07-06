@@ -9,7 +9,7 @@
 
 namespace DB
 {
-namespace DB::ErrorCodes
+namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
 }
