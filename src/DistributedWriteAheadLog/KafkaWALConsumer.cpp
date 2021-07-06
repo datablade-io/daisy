@@ -3,6 +3,7 @@
 
 #include <Common/Exception.h>
 #include <Common/setThreadName.h>
+#include <common/ClockUtils.h>
 #include <common/logger_useful.h>
 
 namespace DB
@@ -18,6 +19,7 @@ namespace ErrorCodes
     extern const int UNKNOWN_EXCEPTION;
     extern const int BAD_ARGUMENTS;
     extern const int DWAL_FATAL_ERROR;
+    extern const int INVALID_OPERATION;
 }
 }
 
@@ -129,7 +131,7 @@ void KafkaWALConsumer::initHandle()
     consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats.get(), cb_setup);
 
     /// Forward all events to consumer queue. there may have in-balance consuming problems
-    /// rd_kafka_poll_set_consumer(consumer_handle.get());
+    rd_kafka_poll_set_consumer(consumer_handle.get());
 }
 
 int32_t KafkaWALConsumer::addConsumptions(const TopicPartionOffsets & partitions_)
@@ -230,26 +232,73 @@ int32_t KafkaWALConsumer::removeConsumptions(const TopicPartionOffsets & partiti
     return DB::ErrorCodes::OK;
 }
 
-ConsumeResult KafkaWALConsumer::consume(int32_t timeout_ms)
+ConsumeResult KafkaWALConsumer::consume(uint32_t count, int32_t timeout_ms)
 {
-    auto rkmessage = rd_kafka_consumer_poll(consumer_handle.get(), timeout_ms);
-    if (rkmessage)
+    ConsumeResult result;
+    if (count > 100)
     {
-        if (likely(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR))
+        result.records.reserve(100);
+    }
+    else
+    {
+        result.records.reserve(count);
+    }
+
+    auto abs_time = DB::MonotonicMilliseconds::now() + timeout_ms;
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        auto rkmessage = rd_kafka_consumer_poll(consumer_handle.get(), timeout_ms);
+        if (likely(rkmessage))
         {
-            /*if (rkmessage->offset < wrapped->ctx.offset)
+            if (likely(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR))
             {
-                /// Ignore the message which has lower offset than what clients like to have
-                return;
-            }*/
-            auto record = kafkaMsgToRecord(rkmessage);
-            return {.err = DB::ErrorCodes::OK, .records = {std::move(record)}};
+                /*if (rkmessage->offset < wrapped->ctx.offset)
+                {
+                    /// Ignore the message which has lower offset than what clients like to have
+                    return;
+                }*/
+                result.records.push_back(kafkaMsgToRecord(rkmessage));
+                rd_kafka_message_destroy(rkmessage);
+            }
+            else
+            {
+                LOG_ERROR(log, "Failed to consume error={}", rd_kafka_message_errstr(rkmessage));
+
+                result.err = mapErrorCode(rkmessage->err);
+                rd_kafka_message_destroy(rkmessage);
+                break;
+            }
+        }
+
+        auto now = DB::MonotonicMilliseconds::now();
+        if (now <= abs_time)
+        {
+            /// Timed up
+            break;
         }
         else
         {
-            return {.err = mapErrorCode(rkmessage->err)};
+            timeout_ms = abs_time - now;
         }
     }
-    return {.err = DB::ErrorCodes::OK};
-};
+    return result;
+}
+
+int32_t KafkaWALConsumer::stopConsume()
+{
+    if (consume_stopped.test_and_set())
+    {
+        LOG_ERROR(log, "Already stopped");
+        return DB::ErrorCodes::INVALID_OPERATION;
+    }
+
+    auto err = rd_kafka_consumer_close(consumer_handle.get());
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+    {
+        LOG_ERROR(log, "Failed to stop consuming, error={}", rd_kafka_err2str(err));
+        return mapErrorCode(err);
+    }
+    return DB::ErrorCodes::OK;
+}
 }

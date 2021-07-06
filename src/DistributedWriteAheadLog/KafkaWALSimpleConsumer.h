@@ -18,6 +18,8 @@ namespace DWAL
 struct KafkaWALContext;
 
 /// KafkaWALSimpleConsumer consumes data from a specific single partition of a topic
+/// It is designed on purpose that each SimpleConsumer will have dedicated thread
+/// consuming the messages
 class KafkaWALSimpleConsumer final
 {
 public:
@@ -27,7 +29,8 @@ public:
     void startup();
     void shutdown();
 
-    /// Register a consumer callback for a partition of a topic
+    /// `callback` will be invoked against the recrods for a partition of a topic
+    /// The callback happens in the same thread as the caller
     int32_t consume(ConsumeCallback callback, void * data, KafkaWALContext & ctx);
 
     ConsumeResult consume(uint32_t count, int32_t timeout_ms, KafkaWALContext & ctx);

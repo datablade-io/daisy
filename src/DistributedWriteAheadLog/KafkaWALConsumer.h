@@ -28,6 +28,10 @@ struct TopicPartionOffset
 
 using TopicPartionOffsets = std::vector<TopicPartionOffset>;
 
+/// KafkaWALConsumer consumers data from a list of topic partitions by using a single
+/// thread or a thread pool (with the same group.id). If multiple threads are used, the threads
+/// work collectively to consume the messages.
+/// KafkaWALConsumer is designed for multiple thread safety in mind
 class KafkaWALConsumer final
 {
 public:
@@ -40,7 +44,12 @@ public:
     int32_t addConsumptions(const TopicPartionOffsets & partitions);
     int32_t removeConsumptions(const TopicPartionOffsets & partitions);
 
-    ConsumeResult consume(int32_t timeout_ms);
+    ConsumeResult consume(uint32_t count, int32_t timeout_ms);
+
+    int32_t stopConsume();
+
+    /// Commit offset for a partition of a topic
+    int32_t commit(const TopicPartionOffset & tpo);
 
 private:
     void initHandle();
@@ -55,6 +64,7 @@ private:
 
     std::atomic_flag inited = ATOMIC_FLAG_INIT;
     std::atomic_flag stopped = ATOMIC_FLAG_INIT;
+    std::atomic_flag consume_stopped = ATOMIC_FLAG_INIT;
 
     std::mutex partitions_mutex;
     std::unordered_map<std::string, std::vector<int32_t>> partitions;
