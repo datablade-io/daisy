@@ -178,7 +178,7 @@ void registerRouter()
     // TODO add url and handler
     router.registerRoute("/", RootHandler::getHandler, strList("GET", "POST"));
     router.registerRoute("/ping", PingHandler::getHandler, strList("GET", "POST"));
-    router.registerRoute("/RangeFilterRename", PingHandler::getHandler, strList("GET", "POST"));
+    router.registerRoute("/RangeFilterRename", RangeFilterRename::getHandler, strList("GET", "POST"));
 }
 
 int main(int argc, char **argv)
