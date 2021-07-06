@@ -4,8 +4,6 @@
 #include "KafkaWALStats.h"
 #include "Results.h"
 
-#include <Common/ThreadPool.h>
-
 struct rd_kafka_s;
 struct rd_kafka_topic_s;
 struct rd_kafka_message_s;
@@ -49,11 +47,10 @@ public:
     int32_t stopConsume();
 
     /// Commit offset for a partition of a topic
-    int32_t commit(const TopicPartionOffset & tpo);
+    int32_t commit(const TopicPartionOffsets & tpos);
 
 private:
     void initHandle();
-    void backgroundPoll();
 
 private:
     using FreeRdKafka = void (*)(struct rd_kafka_s *);
@@ -70,8 +67,6 @@ private:
     std::unordered_map<std::string, std::vector<int32_t>> partitions;
 
     RdKafkaHandlePtr consumer_handle;
-
-    ThreadPool poller;
 
     Poco::Logger * log;
 

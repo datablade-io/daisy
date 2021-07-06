@@ -77,7 +77,9 @@ void KafkaWALSimpleConsumer::initHandle()
         std::make_pair("fetch.wait.max.ms", std::to_string(settings->fetch_wait_max_ms)),
         /// Disable librdkafka committing offset prior handling messages to applications
         std::make_pair("enable.auto.offset.store", "false"),
-        std::make_pair("offset.store.method", "broker"),
+        /// By default offset.store.method is broker. Enabling it gives a warning message
+        /// https://github.com/edenhill/librdkafka/pull/3035
+        /// std::make_pair("offset.store.method", "broker"),
         std::make_pair("enable.partition.eof", "false"),
         std::make_pair("queued.min.messages", std::to_string(settings->queued_min_messages)),
         std::make_pair("queued.max.messages.kbytes", std::to_string(settings->queued_max_messages_kbytes)),

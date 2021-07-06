@@ -2,7 +2,6 @@
 #include "KafkaWALCommon.h"
 
 #include <Common/Exception.h>
-#include <Common/setThreadName.h>
 #include <common/ClockUtils.h>
 #include <common/logger_useful.h>
 
@@ -28,7 +27,6 @@ namespace DWAL
 KafkaWALConsumer::KafkaWALConsumer(std::unique_ptr<KafkaWALSettings> settings_)
     : settings(std::move(settings_))
     , consumer_handle(nullptr, rd_kafka_destroy)
-    , poller(1)
     , log(&Poco::Logger::get("KafkaWALConsumer"))
     , stats(std::make_unique<KafkaWALStats>(log, "consumer"))
 {
@@ -51,8 +49,6 @@ void KafkaWALConsumer::startup()
 
     initHandle();
 
-    poller.scheduleOrThrowOnError([this] { backgroundPoll(); });
-
     LOG_INFO(log, "Started");
 }
 
@@ -64,27 +60,8 @@ void KafkaWALConsumer::shutdown()
     }
 
     LOG_INFO(log, "Stopping");
-    poller.wait();
+    stopConsume();
     LOG_INFO(log, "Stopped");
-}
-
-void KafkaWALConsumer::backgroundPoll()
-{
-    LOG_INFO(log, "Polling consumer started");
-    setThreadName("KWalCPoller");
-
-    while (!stopped.test())
-    {
-        rd_kafka_poll(consumer_handle.get(), 100);
-    }
-
-    auto err = rd_kafka_commit(consumer_handle.get(), nullptr, 0);
-    if (err != RD_KAFKA_RESP_ERR_NO_ERROR && err != RD_KAFKA_RESP_ERR__NO_OFFSET)
-    {
-        LOG_ERROR(log, "Failed to commit offsets, error={}", rd_kafka_err2str(err));
-    }
-
-    LOG_INFO(log, "Polling consumer stopped");
 }
 
 void KafkaWALConsumer::initHandle()
@@ -103,7 +80,10 @@ void KafkaWALConsumer::initHandle()
         std::make_pair("fetch.message.max.bytes", std::to_string(settings->fetch_message_max_bytes)),
         std::make_pair("fetch.wait.max.ms", std::to_string(settings->fetch_wait_max_ms)),
         std::make_pair("enable.auto.offset.store", "false"),
-        std::make_pair("offset.store.method", "broker"),
+
+        /// By default offset.store.method is broker. Enabling it gives a warning message
+        /// https://github.com/edenhill/librdkafka/pull/3035
+        /// std::make_pair("offset.store.method", "broker"),
         std::make_pair("enable.partition.eof", "false"),
         std::make_pair("queued.min.messages", std::to_string(settings->queued_min_messages)),
         std::make_pair("queued.max.messages.kbytes", std::to_string(settings->queued_max_messages_kbytes)),
@@ -130,7 +110,11 @@ void KafkaWALConsumer::initHandle()
 
     consumer_handle = initRdKafkaHandle(RD_KAFKA_CONSUMER, consumer_params, stats.get(), cb_setup);
 
-    /// Forward all events to consumer queue. there may have in-balance consuming problems
+    /// Forward all events from main queue to consumer queue
+    /// rd_kafka_poll shall not be invoked after this forwarding. After the fowarding,
+    /// invoking rd_kafka_consumer_poll perodically will trigger error_cb, stats_cb, throttle_ct
+    /// etc callbacks ?
+    /// https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md#threads-and-callbacks
     rd_kafka_poll_set_consumer(consumer_handle.get());
 }
 
@@ -258,7 +242,7 @@ ConsumeResult KafkaWALConsumer::consume(uint32_t count, int32_t timeout_ms)
                     /// Ignore the message which has lower offset than what clients like to have
                     return;
                 }*/
-                result.records.push_back(kafkaMsgToRecord(rkmessage));
+                result.records.push_back(kafkaMsgToRecord(rkmessage, true));
                 rd_kafka_message_destroy(rkmessage);
             }
             else
@@ -293,12 +277,42 @@ int32_t KafkaWALConsumer::stopConsume()
         return DB::ErrorCodes::INVALID_OPERATION;
     }
 
+    LOG_INFO(log, "Closing consumer");
+
     auto err = rd_kafka_consumer_close(consumer_handle.get());
     if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
     {
         LOG_ERROR(log, "Failed to stop consuming, error={}", rd_kafka_err2str(err));
         return mapErrorCode(err);
     }
+
+    LOG_INFO(log, "Closed consumer");
+    return DB::ErrorCodes::OK;
+}
+
+int32_t KafkaWALConsumer::commit(const TopicPartionOffsets & tpos)
+{
+    std::unique_ptr<rd_kafka_topic_partition_list_t, decltype(rd_kafka_topic_partition_list_destroy) *> topic_partition_list(
+        rd_kafka_topic_partition_list_new(tpos.size()), rd_kafka_topic_partition_list_destroy);
+
+    for (const auto & tpo : tpos)
+    {
+        auto partition_offset = rd_kafka_topic_partition_list_add(topic_partition_list.get(), tpo.topic.c_str(), tpo.partition);
+
+        /// rd_kafka_offsets_store commits `offset` as it is. We add 1 to the offset
+        /// to keep the same semantic as rd_kafka_offset_store
+        partition_offset->offset = tpo.offset + 1;
+
+        LOG_INFO(log, "Stores commit offset={} for topic={} partition={}", tpo.offset, tpo.topic, tpo.partition);
+    }
+
+    auto err = rd_kafka_offsets_store(consumer_handle.get(), topic_partition_list.get());
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+    {
+        LOG_ERROR(log, "Failed to commit offsets", rd_kafka_err2str(err));
+        return mapErrorCode(err);
+    }
+
     return DB::ErrorCodes::OK;
 }
 }
