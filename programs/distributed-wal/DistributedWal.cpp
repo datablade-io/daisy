@@ -122,12 +122,14 @@ struct ProducerSettings
 struct ConsumerSettings
 {
     vector<TopicPartionOffset> kafka_topic_partition_offsets;
-    String auto_offset_reset = "earliest"; Int32 consume_callback_max_messages = 1000;
+    String auto_offset_reset = "earliest";
+    Int32 consume_callback_max_messages = 1000;
     Int32 max_messages = 100;
     Int32 auto_commit_interval_ms = 5000;
     Int32 wal_client_pool_size = 1;
     String mode = "sync";
     bool incremental = false;
+    bool dumpdata = false;
 
     static vector<TopicPartionOffset> parseTopicPartitionOffsets(const String & s)
     {
@@ -322,7 +324,7 @@ BenchmarkSettings parseConsumeSettings(po::parsed_options & cmd_parsed, const ch
     auto options = desc.add_options();
     options("help", "help message");
     options("group_id", value<String>(), "consumer group id");
-    options("auto_offset_reset", value<String>()->default_value(""), "earliest|latest|stored");
+    options("auto_offset_reset", value<String>()->default_value("earliest"), "earliest|latest|stored");
     options("queued_min_messages", value<Int32>()->default_value(10000), "number of queued messages in client side");
     options("kafka_topic_partition_offsets", value<String>(), "topic,partition,offset:topic,partition,offset:...");
     options("max_messages", value<Int32>()->default_value(100), "maximum message to consume");
@@ -332,6 +334,7 @@ BenchmarkSettings parseConsumeSettings(po::parsed_options & cmd_parsed, const ch
     options("kafka_brokers", value<String>()->default_value("localhost:9092"), "Kafka broker lists");
     options("debug", value<String>()->default_value(""), "librdkafka components to debug, cgrp,topic,fetch");
     options("incremental", value<bool>()->default_value(false), "incremental topic/partition consuming");
+    options("dumpdata", value<bool>()->default_value(false), "dump the parsed data to console");
 
     vector<String> opts = po::collect_unrecognized(cmd_parsed.options, po::include_positional);
     opts.erase(opts.begin());
@@ -395,6 +398,7 @@ BenchmarkSettings parseConsumeSettings(po::parsed_options & cmd_parsed, const ch
     bench_settings.consumer_settings.kafka_topic_partition_offsets
         = ConsumerSettings::parseTopicPartitionOffsets(option_map["kafka_topic_partition_offsets"].as<String>());
     bench_settings.consumer_settings.incremental = option_map["incremental"].as<bool>();
+    bench_settings.consumer_settings.dumpdata = option_map["dumpdata"].as<bool>();
 
     if (bench_settings.consumer_settings.kafka_topic_partition_offsets.empty())
     {
@@ -751,9 +755,10 @@ struct ConsumeContext
     atomic_int32_t & consumed;
     any & ctx;
     DWalPtr & dwal;
+    bool dumpdata;
 
-    ConsumeContext(mutex & stdout_mutex_, atomic_int32_t & consumed_, any & ctx_, DWalPtr & dwal_)
-        : stdout_mutex(stdout_mutex_), consumed(consumed_), ctx(ctx_), dwal(dwal_)
+    ConsumeContext(mutex & stdout_mutex_, atomic_int32_t & consumed_, any & ctx_, DWalPtr & dwal_, bool dumpdata_)
+        : stdout_mutex(stdout_mutex_), consumed(consumed_), ctx(ctx_), dwal(dwal_), dumpdata(dumpdata_)
     {
     }
 };
@@ -773,7 +778,11 @@ void doConsume(DWAL::RecordPtrs records, void * data)
         lock_guard<mutex> lock(cctx->stdout_mutex);
 
         cout << "partition=" << record->partition_key << " offset=" << record->sn << " idem=" << record->headers["_idem"] << endl;
-        dumpData(record->block);
+
+        if (cctx->dumpdata)
+        {
+            dumpData(record->block);
+        }
     }
 
     cctx->dwal->commit(records.back()->sn, cctx->ctx);
@@ -789,6 +798,7 @@ void consume(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
         worker_pool.scheduleOrThrowOnError([&, jobid] {
             auto & wal = wals[jobid % wals.size()];
             auto & tpo = bench_settings.consumer_settings.kafka_topic_partition_offsets[jobid];
+            auto dumpdata = bench_settings.consumer_settings.dumpdata;
 
             KafkaWALContext dcctx{tpo.topic, tpo.partition, tpo.offset};
             dcctx.auto_offset_reset = bench_settings.consumer_settings.auto_offset_reset;
@@ -800,7 +810,7 @@ void consume(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
             Int32 batch = 100;
             Int32 max_messages = bench_settings.consumer_settings.max_messages;
 
-            ConsumeContext cctx{stdout_mutex, consumed, ctx, wal};
+            ConsumeContext cctx{stdout_mutex, consumed, ctx, wal, dumpdata};
 
             if (bench_settings.consumer_settings.mode == "sync")
             {
@@ -863,25 +873,39 @@ void incrementalConsume(const BenchmarkSettings & bench_settings, Int32 size)
         worker_pool.scheduleOrThrowOnError([&, jobid] {
             auto & wal = wals[jobid];
 
+            auto dumpdata = bench_settings.consumer_settings.dumpdata;
             Int32 max_messages = bench_settings.consumer_settings.max_messages;
             Int32 consumed = 0;
             for (; consumed < max_messages; )
             {
-                auto result = wal->consume(1000);
+                auto result = wal->consume(100, 1000);
                 if (result.err == 0)
                 {
                     for (const auto & record : result.records)
                     {
                         consumed += 1;
+                        TopicPartionOffset offset(record->topic, record->partition_key, record->sn);
+                        auto res = wal->commit({offset});
+
                         lock_guard<mutex> lock(stdout_mutex);
-                        cout << "topic=" << record->topic << " partition=" << record->partition_key << " offset=" << record->sn
+                        if (res != 0)
+                        {
+                            cout << "jobid=" << jobid << " failed to commit offset topic=" << record->topic << " partition=" << record->partition_key
+                                 << " offset=" << record->sn << endl;
+                        }
+
+                        cout << "jobid=" << jobid << " topic=" << record->topic << " partition=" << record->partition_key << " offset=" << record->sn
                              << " idem=" << record->headers["_idem"] << endl;
-                        /// dumpData(record->block);
+
+                        if (dumpdata)
+                        {
+                            dumpData(record->block);
+                        }
                     }
                 }
                 else
                 {
-                    cout << "failed to consume " << result.err << endl;
+                    cout << "jobid" << jobid << " failed to consume " << result.err << endl;
                 }
             }
         });
