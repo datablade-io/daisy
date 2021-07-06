@@ -52,6 +52,9 @@ struct KafkaWALSettings
     /// std::string group_instance_id
     /// std::string partition_assignment_strategy
 
+    /// Global consumer settings, but can override for a specific topic
+    std::string auto_offset_reset = "earliest";
+
     int32_t session_timeout_ms = 10000;
     int32_t max_poll_interval_ms = 30000;
 

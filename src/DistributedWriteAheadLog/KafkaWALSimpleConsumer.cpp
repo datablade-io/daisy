@@ -144,7 +144,9 @@ inline int32_t KafkaWALSimpleConsumer::initTopicHandleIfNecessary(KafkaWALContex
     if (unlikely(!ctx.topic_handle))
     {
         ctx.topic_handle = initTopicHandle(ctx);
-        /// Always starts from broker stored offset.
+        /// Always starts from broker stored offset. Since for simple consumer, if we specify a
+        // positive offset manually, it will disable auto-commit.
+        /// We will filter uneeded messages according to ctx.offset in consume function
         if (rd_kafka_consume_start(ctx.topic_handle.get(), ctx.partition, RD_KAFKA_OFFSET_STORED) == -1)
         {
             LOG_ERROR(

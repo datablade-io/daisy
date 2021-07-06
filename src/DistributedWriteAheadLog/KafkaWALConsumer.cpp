@@ -92,6 +92,7 @@ void KafkaWALConsumer::initHandle()
         /// Consumer group membership heartbeat timeout
         std::make_pair("session.timeout.ms", std::to_string(settings->session_timeout_ms)),
         std::make_pair("max.poll.interval.ms", std::to_string(settings->max_poll_interval_ms)),
+        std::make_pair("auto.offset.reset", settings->auto_offset_reset),
     };
 
     if (!settings->debug.empty())
@@ -237,11 +238,6 @@ ConsumeResult KafkaWALConsumer::consume(uint32_t count, int32_t timeout_ms)
         {
             if (likely(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR))
             {
-                /*if (rkmessage->offset < wrapped->ctx.offset)
-                {
-                    /// Ignore the message which has lower offset than what clients like to have
-                    return;
-                }*/
                 result.records.push_back(kafkaMsgToRecord(rkmessage, true));
                 rd_kafka_message_destroy(rkmessage);
             }

@@ -219,6 +219,8 @@ void KafkaWAL::startup()
 
     poller.scheduleOrThrowOnError([this] { backgroundPollProducer(); });
 
+    consumer->startup();
+
     LOG_INFO(log, "Started");
 }
 

@@ -9,7 +9,7 @@ namespace DWAL
 int KafkaWALStats::logStats(struct rd_kafka_s * /* rk */, char * json, size_t json_len)
 {
     std::string s(json, json + json_len);
-    LOG_INFO(log, "KafkaWALStats: {}", s);
+    LOG_TRACE(log, "KafkaWALStats: {}", s);
 
     std::lock_guard lock(stat_mutex);
     stat.swap(s);
