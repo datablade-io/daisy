@@ -28,10 +28,8 @@ struct TopicPartitionOffset
 
 using TopicPartitionOffsets = std::vector<TopicPartitionOffset>;
 
-/// KafkaWALConsumer consumers data from a list of topic partitions by using a single
-/// thread or a thread pool (with the same group.id). If multiple threads are used, the threads
-/// work collectively to consume the messages.
-/// KafkaWALConsumer is not multiple thread safe. Each thread shall have its own instance
+/// KafkaWALConsumer consumers data from a list of topic partitions by
+/// using a single thread.
 class KafkaWALConsumer final : private boost::noncopyable
 {
 public:

@@ -201,7 +201,7 @@ ConsumeResult KafkaWALConsumer::consume(uint32_t count, int32_t timeout_ms)
         }
 
         auto now = DB::MonotonicMilliseconds::now();
-        if (now <= abs_time)
+        if (now >= abs_time)
         {
             /// Timed up
             break;

@@ -30,6 +30,8 @@ public:
     /// Register a callback for a partition of a topic at specific offset.
     /// Once registered, the callback will be invoked asynchronously in a background thread when there
     /// is new data available, so make sure the callback handles thread safety correctly.
+    /// Please note if this function is called against same topic but with different partitions serveral
+    /// times, the late call will override the `callback `/ `data` of previous call.
     /// Return true if the subscription is good, otherwise false
     int32_t addSubscription(const TopicPartitionOffset & tpo, ConsumeCallback callback, void * data);
 
@@ -45,6 +47,23 @@ private:
     void handleResult(ConsumeResult result) const;
 
 private:
+    struct CallbackContext
+    {
+        ConsumeCallback callback;
+        void * data;
+
+        /// Only support same callback per topic
+        std::vector<int32_t> partitions;
+
+        CallbackContext(ConsumeCallback callback_, void * data_, int32_t partition_)
+            : callback(callback_), data(data_), partitions({partition_})
+        {
+        }
+    };
+
+    using CallbackContextPtr = std::shared_ptr<CallbackContext>;
+
+private:
     std::atomic_flag inited = ATOMIC_FLAG_INIT;
     std::atomic_flag stopped = ATOMIC_FLAG_INIT;
 
@@ -53,15 +72,14 @@ private:
     ThreadPool poller;
 
     mutable std::mutex callbacks_mutex;
-    /// callbacks are indexed by `topic` name. For now, we assume in one single node
+
+    /// `callbacks` are indexed by `topic` name. For now, we assume in one single node
     /// there is only one unique table / topic
-    using CallbackDataPair = std::pair<ConsumeCallback, void *>;
-    std::unordered_map<std::string, std::shared_ptr<CallbackDataPair>> callbacks;
+    std::unordered_map<std::string, CallbackContextPtr> callbacks;
 
     Poco::Logger * log;
 };
 
 using KafkaWALConsumerMultiplexerPtr = std::shared_ptr<KafkaWALConsumerMultiplexer>;
-using KafkaWALConsumerMultiplexerPtrs = std::vector<KafkaWALConsumerMultiplexerPtr >;
-
+using KafkaWALConsumerMultiplexerPtrs = std::vector<KafkaWALConsumerMultiplexerPtr>;
 }

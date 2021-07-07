@@ -8,6 +8,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int OK;
+    extern const int INVALID_OPERATION;
 }
 }
 
@@ -44,6 +45,7 @@ void KafkaWALConsumerMultiplexer::shutdown()
 {
     if (stopped.test_and_set())
     {
+        LOG_ERROR(log, "Already shutdown");
         return;
     }
 
@@ -59,9 +61,15 @@ int32_t KafkaWALConsumerMultiplexer::addSubscription(const TopicPartitionOffset 
     {
         std::lock_guard lock{callbacks_mutex};
 
-        if (callbacks.contains(tpo.topic))
+        auto iter = callbacks.find(tpo.topic);
+        if (iter != callbacks.end())
         {
-            return false;
+            /// Found topic, check partition
+            auto pos = std::find(iter->second->partitions.begin(), iter->second->partitions.end(), tpo.partition);
+            if (pos != iter->second->partitions.end())
+            {
+                return DB::ErrorCodes::INVALID_OPERATION;
+            }
         }
 
         auto res = consumer->addSubscriptions({tpo});
@@ -70,7 +78,18 @@ int32_t KafkaWALConsumerMultiplexer::addSubscription(const TopicPartitionOffset 
             return res;
         }
 
-        callbacks.emplace(tpo.topic, std::make_shared<CallbackDataPair>(callback, data));
+        if (iter == callbacks.end())
+        {
+            callbacks.emplace(tpo.topic, std::make_shared<CallbackContext>(callback, data, tpo.partition));
+        }
+        else
+        {
+            /// Found topic, but with new partition.
+            /// Override existing callback, data and add new partition
+            iter->second->callback = callback;
+            iter->second->data = data;
+            iter->second->partitions.push_back(tpo.partition);
+        }
     }
 
     LOG_INFO(log, "Successfully add subscription to topic={} partition={} offset={}", tpo.topic, tpo.partition, tpo.offset);
@@ -86,7 +105,13 @@ int32_t KafkaWALConsumerMultiplexer::removeSubscription(const TopicPartitionOffs
         auto iter = callbacks.find(tpo.topic);
         if (iter == callbacks.end())
         {
-            return false;
+            return DB::ErrorCodes::INVALID_OPERATION;
+        }
+
+        auto pos = std::find(iter->second->partitions.begin(), iter->second->partitions.end(), tpo.partition);
+        if (pos == iter->second->partitions.end())
+        {
+            return DB::ErrorCodes::INVALID_OPERATION;
         }
 
         auto res = consumer->removeSubscriptions({tpo});
@@ -95,7 +120,12 @@ int32_t KafkaWALConsumerMultiplexer::removeSubscription(const TopicPartitionOffs
             return res;
         }
 
-        callbacks.erase(iter);
+        iter->second->partitions.erase(pos);
+
+        if (iter->second->partitions.empty())
+        {
+            callbacks.erase(iter);
+        }
     }
 
     LOG_INFO(log, "Successfully remove subscription to topic={} partition={}", tpo.topic, tpo.partition);
@@ -135,21 +165,20 @@ void KafkaWALConsumerMultiplexer::handleResult(ConsumeResult result) const
 
     for (auto & topic_records : all_topic_records)
     {
-        std::shared_ptr<std::pair<ConsumeCallback, void *>> callback;
+        CallbackContextPtr callback_ctx;
         {
             std::lock_guard lock{callbacks_mutex};
 
             auto iter = callbacks.find(topic_records.first);
-            assert (iter != callbacks.end());
             if (likely(iter != callbacks.end()))
             {
-                callback = iter->second;
+                callback_ctx = iter->second;
             }
         }
 
-        if (likely(callback))
+        if (likely(callback_ctx))
         {
-            callback->first(std::move(topic_records.second), callback->second);
+            callback_ctx->callback(std::move(topic_records.second), callback_ctx->data);
         }
     }
 }
