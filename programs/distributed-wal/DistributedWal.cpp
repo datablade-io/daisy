@@ -8,8 +8,9 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <DistributedWriteAheadLog/KafkaWAL.h>
 #include <DistributedWriteAheadLog/KafkaWALConsumer.h>
-#include <DistributedWriteAheadLog/KafkaWALSettings.h>
+#include <DistributedWriteAheadLog/KafkaWALConsumerMultiplexer.h>
 #include <DistributedWriteAheadLog/KafkaWALContext.h>
+#include <DistributedWriteAheadLog/KafkaWALSettings.h>
 #include <DistributedWriteAheadLog/WAL.h>
 #include <Common/TerminalSize.h>
 #include <Common/ThreadPool.h>
@@ -121,7 +122,7 @@ struct ProducerSettings
 
 struct ConsumerSettings
 {
-    vector<TopicPartionOffset> kafka_topic_partition_offsets;
+    vector<TopicPartitionOffset> kafka_topic_partition_offsets;
     String auto_offset_reset = "earliest";
     Int32 consume_callback_max_messages = 1000;
     Int32 max_messages = 100;
@@ -131,11 +132,11 @@ struct ConsumerSettings
     bool incremental = false;
     bool dumpdata = false;
 
-    static vector<TopicPartionOffset> parseTopicPartitionOffsets(const String & s)
+    static vector<TopicPartitionOffset> parseTopicPartitionOffsets(const String & s)
     {
-        vector<TopicPartionOffset> tops;
+        vector<TopicPartitionOffset> tops;
 
-        TopicPartionOffset tpo;
+        TopicPartitionOffset tpo;
 
         Int32 state = 0;
         auto iter = s.begin();
@@ -854,84 +855,116 @@ void consume(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
 
 void incrementalConsume(const BenchmarkSettings & bench_settings, Int32 size)
 {
-    KafkaWALConsumerPtrs wals;
+    KafkaWALConsumerMultiplexerPtrs wals;
     wals.reserve(size);
+
+    mutex stdout_mutex;
 
     for (Int32 i = 0; i < size; ++i)
     {
         auto settings = make_unique<KafkaWALSettings>();
         *settings = *bench_settings.wal_settings;
-        wals.push_back(make_shared<KafkaWALConsumer>(move(settings)));
+        wals.push_back(make_shared<KafkaWALConsumerMultiplexer>(move(settings)));
         wals.back()->startup();
     }
 
-    mutex stdout_mutex;
-    ThreadPool worker_pool{static_cast<size_t>(size)};
+    atomic_int32_t consumed = 0;
 
-    for (Int32 jobid = 0; jobid < size; ++jobid)
+    struct CallbackData
     {
-        worker_pool.scheduleOrThrowOnError([&, jobid] {
-            auto & wal = wals[jobid];
+        const BenchmarkSettings & settings;
+        atomic_int32_t & consumed;
+        mutex & stdout_mutex;
+        Int32 jobid;
+        KafkaWALConsumerMultiplexerPtr wal;
 
-            auto dumpdata = bench_settings.consumer_settings.dumpdata;
-            Int32 max_messages = bench_settings.consumer_settings.max_messages;
-            Int32 consumed = 0;
-            for (; consumed < max_messages; )
+        CallbackData(
+            const BenchmarkSettings & settings_,
+            atomic_int32_t & consumed_,
+            mutex & stdout_mutex_,
+            KafkaWALConsumerMultiplexerPtr wal_,
+            Int32 jobid_)
+            : settings(settings_), consumed(consumed_), stdout_mutex(stdout_mutex_), jobid(jobid_), wal(wal_)
+        {
+        }
+    };
+
+    auto callback = [](RecordPtrs records, void * data) -> void {
+        auto pdata = static_cast<CallbackData *>(data);
+
+        pdata->consumed += records.size();
+
+        for (const auto & record : records)
+        {
+            TopicPartitionOffset offset(record->topic, record->partition_key, record->sn);
+            auto err = pdata->wal->commit(offset);
+            assert(!err);
+
+            lock_guard<mutex> lock(pdata->stdout_mutex);
+
+            if (err)
             {
-                auto result = wal->consume(100, 1000);
-                if (result.err == 0)
-                {
-                    for (const auto & record : result.records)
-                    {
-                        consumed += 1;
-                        TopicPartionOffset offset(record->topic, record->partition_key, record->sn);
-                        auto res = wal->commit({offset});
-
-                        lock_guard<mutex> lock(stdout_mutex);
-                        if (res != 0)
-                        {
-                            cout << "jobid=" << jobid << " failed to commit offset topic=" << record->topic << " partition=" << record->partition_key
-                                 << " offset=" << record->sn << endl;
-                        }
-
-                        cout << "jobid=" << jobid << " topic=" << record->topic << " partition=" << record->partition_key << " offset=" << record->sn
-                             << " idem=" << record->headers["_idem"] << endl;
-
-                        if (dumpdata)
-                        {
-                            dumpData(record->block);
-                        }
-                    }
-                }
-                else
-                {
-                    cout << "jobid" << jobid << " failed to consume " << result.err << endl;
-                }
+                cout << "jobid=" << pdata->jobid << " failed to commit, topic=" << record->topic << " partition=" << record->partition_key
+                     << " offset=" << record->sn << " error=" << err << "\n";
             }
-        });
+
+            cout << "jobid=" << pdata->jobid << " topic=" << record->topic << " partition=" << record->partition_key
+                 << " offset=" << record->sn << " idem=" << record->headers["_idem"] << endl;
+
+            if (pdata->settings.consumer_settings.dumpdata)
+            {
+                dumpData(record->block);
+            }
+        }
+    };
+
+    vector<shared_ptr<CallbackData>> datas;
+    for (Int32 i = 0; i < size; ++i)
+    {
+        datas.push_back(make_shared<CallbackData>(bench_settings, consumed, stdout_mutex, wals[i], i));
     }
 
     /// Add a topic/partition at a time
     for (const auto & tpo : bench_settings.consumer_settings.kafka_topic_partition_offsets)
     {
         this_thread::sleep_for(20000ms);
+
         cout << "adding topic=" << tpo.topic << " partition=" << tpo.partition << " offset=" << tpo.offset
              << "\n";
-        TopicPartionOffsets tpos{tpo};
-        wals[0]->addConsumptions(tpos);
+
+        Int32 jobid = 0;
+        for (auto & wal : wals)
+        {
+            auto res = wal->addSubscription(tpo, callback, datas[jobid].get());
+
+            assert(!res);
+            if (res)
+            {
+                cout << "failed to subscribe, error=" << res << "\n";
+            }
+
+            ++jobid;
+        }
     }
 
     /// Remove a topic/partition at a time
     for (const auto & tpo : bench_settings.consumer_settings.kafka_topic_partition_offsets)
     {
         this_thread::sleep_for(20000ms);
+
         cout << "Removing topic=" << tpo.topic << " partition=" << tpo.partition << " offset=" << tpo.offset
              << "\n";
-        TopicPartionOffsets tpos{tpo};
-        wals[0]->removeConsumptions(tpos);
+
+        for (auto & wal : wals)
+        {
+            wal->removeSubscription(tpo);
+        }
     }
 
-    worker_pool.wait();
+    while (consumed <= bench_settings.consumer_settings.max_messages)
+    {
+        this_thread::sleep_for(1000ms);
+    }
     cout << "incremental data consumption is done" << endl;
 }
 
