@@ -17,6 +17,7 @@
 #include "PingHandler.hpp"
 #include "RangeFilterRename.hpp"
 #include "RewriterLogger.hpp"
+#include "Result.hpp"
 
 #include <iostream>
 #include <string>

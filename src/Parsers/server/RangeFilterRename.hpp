@@ -18,6 +18,7 @@
 #include "RangeFilterRenameEcho.hpp"
 #include "RangeFilterRenameFieldRename.hpp"
 #include "Rule.hpp"
+#include "Result.hpp"
 #include "RewriterLogger.hpp"
 
 #include <iostream>
@@ -46,11 +47,11 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
             resp.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
             resp.setContentType("application/json;charset=utf-8");
 
-            std::string value ;
+            Result result;
             try
             {
-                value = action(data, resp);
-                presp.setValue(std::string("code"), int(resp.getStatus()));
+                action(data, result);
+                resp.setStatus(result.httpCode);
             }
             catch(...)
             {
@@ -58,19 +59,22 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
                 resp.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
             }
 
-            if(Poco::Net::HTTPResponse::HTTP_OK == resp.getStatus())
+            try
             {
-                rewriterLogger("HTTPResponse::HTTP_OK");
-                presp.setValue(std::string("value"), value);
+                presp.setValue(std::string("code"), int(resp.getStatus()));
+                presp.setValue(std::string("msg"), result.lastError);
+                presp.setValue(std::string("value"), result.toJsonObject());
+                std::ostream & out = resp.send();
+                out << presp.stringify();
             }
-            else
+            catch(...)
             {
-                rewriterLogger("error happend in action");
-                presp.setValue(std::string("msg"), value);
+                rewriterLogger("set value faild");
+                std::ostringstream oss;
+                oss.exceptions(std::ios::failbit);
+                oss << DB::getCurrentExceptionMessage(true) << "\n";
+                rewriterLogger(" : " + oss.str());
             }
-
-            std::ostream & out = resp.send();
-            out << presp.stringify();
         }
 
         static Poco::Net::HTTPRequestHandler* getHandler()
@@ -78,7 +82,7 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
             return new RangeFilterRename;
         }
 
-        std::string action(const std::string& json, Poco::Net::HTTPServerResponse &resp)
+        int action(const std::string& json, Result &result)
         {
             std::ostringstream oss;
             oss.exceptions(std::ios::failbit);
@@ -92,13 +96,15 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
                 object = jsonParser.parse(json).extract<Poco::JSON::Object::Ptr>();
 
                 sqlStr = object->get("sql").toString();
+                result.srcsql = sqlStr;
                 ruleList = object->get("rules").extract<Poco::JSON::Array::Ptr>();
             }
             catch(...)
             {
-                resp.setStatus(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
+                result.httpCode = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
                 oss << DB::getCurrentExceptionMessage(true) << "\n";
-                return oss.str();
+                result.lastError = oss.str();
+                return -1;
             }
 
             DB::ASTPtr ast;
@@ -110,13 +116,15 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
             catch (...)
             {
                 rewriterLogger("parse sql faild");
-                resp.setStatus(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
+                result.httpCode = Poco::Net::HTTPResponse::HTTP_BAD_REQUEST;
                 oss << DB::getCurrentExceptionMessage(true) << "\n";
-                return oss.str();
+                result.lastError = oss.str();
+                return -1;
             }
 
             try
             {
+                result.ruleCount = ruleList->size();
                 // visitor AST to do replace action
                 for(decltype(ruleList->size()) i = 0; i < ruleList->size(); i++)
                 {
@@ -127,11 +135,20 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
                     if(nullptr == handler)
                     {
                         rewriterLogger("can not find rule : " + ruleName);
+                        result.faildRuleList.push_back(ruleName);
+                        result.lastError = "not found rule : " + ruleName;
+                        continue;
                     }
-                    else
+                    try
                     {
                         handler -> action(*ast, rule);
                         delete handler;
+                        result.successCount += 1;
+                    }
+                    catch (...)
+                    {
+                        result.faildRuleList.push_back(ruleName);
+                        result.lastError = "do action faild : " + ruleName;
                     }
                 }
 
@@ -139,26 +156,27 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
             catch (...)
             {
                 oss << DB::getCurrentExceptionMessage(true) << "\n";
-                resp.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                result.httpCode = Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR;
                 rewriterLogger("visit AST faild " + oss.str());
-                return oss.str();
+                result.lastError = oss.str();
+                return -1;
             }
 
             try
             {
                 //object->set();
-                std::string value = DB::serializeAST(*ast, true);
-                return value;
+                result.sql = DB::serializeAST(*ast, true);
             }
             catch (...)
             {
                 oss << DB::getCurrentExceptionMessage(true) << "\n";
-                resp.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                result.httpCode = Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR;
                 rewriterLogger("serializeAST faild " + oss.str());
-                return oss.str();
+                result.lastError =  oss.str();
+                return -1;
             }
 
-            return "";
+            return 0;
         }
 
         static void registerRules()
