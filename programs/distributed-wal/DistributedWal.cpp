@@ -620,13 +620,22 @@ void ingestAsync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex
     pctx.request_required_acks = bench_settings.producer_settings.request_required_acks;
     any ctx{pctx};
 
+    auto result = wal->describe(bench_settings.producer_settings.topic, ctx);
+    if (result.err)
+    {
+        cout << "Failed to describe ingest topic=" << bench_settings.producer_settings.topic << " error=" << result.err << "\n";
+        return;
+    }
+
+    auto partitions = any_cast<int32_t>(result.ctx);
+
     mutex cmutex;
     RecordContainer inflights;
 
     for (Int32 i = 0; i < bench_settings.producer_settings.iterations; ++i)
     {
         auto record = make_shared<DWAL::Record>(OpCode::ADD_DATA_BLOCK, prepareData(bench_settings.producer_settings.batch_size));
-        record->partition_key = 0;
+        record->partition_key = i % partitions;
         record->headers["_idem"] = to_string(i);
 
         unique_ptr<Data> data{new Data(cmutex, inflights, result_queue, total, failed, i)};
@@ -684,10 +693,19 @@ void ingestSync(DWalPtr & wal, ResultQueue & result_queue, mutex & stdout_mutex,
     pctx.request_required_acks = bench_settings.producer_settings.request_required_acks;
     any ctx{pctx};
 
+    auto dresult = wal->describe(bench_settings.producer_settings.topic, ctx);
+    if (dresult.err)
+    {
+        cout << "Failed to describe ingest topic=" << bench_settings.producer_settings.topic << " error=" << dresult.err << "\n";
+        return;
+    }
+
+    auto partitions = any_cast<int32_t>(dresult.ctx);
+
     for (Int32 i = 0; i < bench_settings.producer_settings.iterations; ++i)
     {
         Record record{OpCode::ADD_DATA_BLOCK, prepareData(bench_settings.producer_settings.batch_size)};
-        record.partition_key = i;
+        record.partition_key = i % partitions;
         record.headers["_idem"] = to_string(i);
 
         auto start = chrono::steady_clock::now();
@@ -876,13 +894,13 @@ void incrementalConsume(const BenchmarkSettings & bench_settings, Int32 size)
         atomic_int32_t & consumed;
         mutex & stdout_mutex;
         Int32 jobid;
-        KafkaWALConsumerMultiplexerPtr wal;
+        KafkaWALConsumerMultiplexerPtr & wal;
 
         CallbackData(
             const BenchmarkSettings & settings_,
             atomic_int32_t & consumed_,
             mutex & stdout_mutex_,
-            KafkaWALConsumerMultiplexerPtr wal_,
+            KafkaWALConsumerMultiplexerPtr & wal_,
             Int32 jobid_)
             : settings(settings_), consumed(consumed_), stdout_mutex(stdout_mutex_), jobid(jobid_), wal(wal_)
         {
@@ -966,6 +984,11 @@ void incrementalConsume(const BenchmarkSettings & bench_settings, Int32 size)
         this_thread::sleep_for(1000ms);
     }
     cout << "incremental data consumption is done" << endl;
+
+    for (auto & wal : wals)
+    {
+        wal->shutdown();
+    }
 }
 
 void admin(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
@@ -999,13 +1022,14 @@ void admin(DWalPtrs & wals, const BenchmarkSettings & bench_settings)
     }
     else
     {
-        if (wals[0]->describe(bench_settings.topic_settings.name, ctx) != 0)
+        auto result = wals[0]->describe(bench_settings.topic_settings.name, ctx);
+        if (result.err != 0)
         {
             cout << "failed to describe topic " << bench_settings.topic_settings.name << "\n";
         }
         else
         {
-            cout << "describe topic " << bench_settings.topic_settings.name << " successfully\n";
+            cout << "topic " << bench_settings.topic_settings.name << " has " << any_cast<int32_t>(result.ctx) << " partitions \n";
         }
     }
 }
