@@ -16,6 +16,7 @@
 #include "RootHandler.hpp"
 #include "PingHandler.hpp"
 #include "RangeFilterRename.hpp"
+#include "RewriterLogger.hpp"
 
 #include <iostream>
 #include <string>
@@ -107,31 +108,36 @@ class ParserRouter
         {
             try
             {
-                std::cout << "uri : " << uri << std::endl;
+                rewriterLogger("uri : " + uri);
                 auto pair = __routerMap.find(uri);
                 if(__routerMap.end() == pair)
                 {
+                    rewriterLogger("no such uri in router : " + uri);
                     // no such uri
                     return new Error404Handler;
                 }
                 Route* r = pair -> second;
                 if(nullptr == r)
                 {
+                    rewriterLogger("find router for uri [" + uri + "], but it's Roue object is nullptr");
                     //something wrond
                     return new Error50xHandler;
                 }
                 if(!r -> containMethod(method))
                 {
+                    rewriterLogger("find router for uri [" + uri + "], but it's method is not supported");
                     //method not matched
                     return new Error404Handler;
                 }
-                std::cout << "find uri : " << r -> getURI() << std::endl;
+                rewriterLogger("find router for uri : " + r -> getURI());
                 auto handler = r -> getHandler();
                 if(nullptr == handler)
                 {
+                    rewriterLogger("find router for uri [" + uri + "], but it's handler is nullptr");
                     //something wrond
                     return new Error50xHandler;
                 }
+                rewriterLogger("find router for uri success " + uri + "");
                 return handler;
             }
             catch (...)
@@ -161,11 +167,11 @@ class ParserServerApp :public ServerApplication
             HTTPServer s(new ParserRequestHandlerFactory, ServerSocket(8080), new HTTPServerParams);
 
             s.start();
-            cout << endl << "Server started" << endl;
+            rewriterLogger("Server started");
 
             waitForTerminationRequest();  // wait for CTRL-C or kill
 
-            cout << endl << "Shutting down..." << endl;
+            rewriterLogger("Shutting down...");
 
             s.stop();
 
@@ -184,12 +190,11 @@ void registerRouter()
 
 int main(int argc, char **argv)
 {
-    std::cout << "argc = " << argc << std::endl;
     if(argc > 1 && std::string("-d") == std::string(argv[1]))
     {
         argv++;
         argc--;
-        std::cout << "daemon model" << std::endl;
+        rewriterLogger("daemon model");
         daemon(0, 0);
     }
     registerRouter();

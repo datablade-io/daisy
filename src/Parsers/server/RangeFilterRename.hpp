@@ -16,7 +16,9 @@
 #include <Poco/Dynamic/Var.h>
 #include "ParserResponse.hpp"
 #include "RangeFilterRenameEcho.hpp"
+#include "RangeFilterRenameFieldRename.hpp"
 #include "Rule.hpp"
+#include "RewriterLogger.hpp"
 
 #include <iostream>
 
@@ -41,12 +43,31 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
                 data = it.first;
                 break;
             }
-            std::string value = action(data);
-            presp.setValue(std::string("value"), value);
-            //std::string content = req.read(req.stream()sql);
-            //std::cout << content;
             resp.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
             resp.setContentType("application/json;charset=utf-8");
+
+            std::string value ;
+            try
+            {
+                value = action(data, resp);
+                presp.setValue(std::string("code"), int(resp.getStatus()));
+            }
+            catch(...)
+            {
+                rewriterLogger("do action faild");
+                resp.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+            }
+
+            if(Poco::Net::HTTPResponse::HTTP_OK == resp.getStatus())
+            {
+                rewriterLogger("HTTPResponse::HTTP_OK");
+                presp.setValue(std::string("value"), value);
+            }
+            else
+            {
+                rewriterLogger("error happend in action");
+                presp.setValue(std::string("msg"), value);
+            }
 
             std::ostream & out = resp.send();
             out << presp.stringify();
@@ -57,105 +78,93 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
             return new RangeFilterRename;
         }
 
-        std::string echoSql(const std::string& json)
+        std::string action(const std::string& json, Poco::Net::HTTPServerResponse &resp)
         {
-            Poco::JSON::Parser jsonParser;
-            Poco::Dynamic::Var result = jsonParser.parse(json);
-            Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-            Poco::Dynamic::Var sqlVar = object->get("sql");
-            std::string sqlStr = sqlVar.toString();
-
             std::ostringstream oss;
             oss.exceptions(std::ios::failbit);
+
+            Poco::JSON::Object::Ptr object;
+            std::string sqlStr;
+            Poco::JSON::Array::Ptr ruleList;
+            try
+            {
+                Poco::JSON::Parser jsonParser;
+                object = jsonParser.parse(json).extract<Poco::JSON::Object::Ptr>();
+
+                sqlStr = object->get("sql").toString();
+                ruleList = object->get("rules").extract<Poco::JSON::Array::Ptr>();
+            }
+            catch(...)
+            {
+                resp.setStatus(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
+                oss << DB::getCurrentExceptionMessage(true) << "\n";
+                return oss.str();
+            }
+
+            DB::ASTPtr ast;
             try
             {
                 DB::ParserQueryWithOutput sqlParser(sqlStr.data() + sqlStr.size());
-                DB::ASTPtr ast = DB::parseQuery(sqlParser, sqlStr.data(), sqlStr.data() + sqlStr.size(), "", 0, 0);
-
-                return DB::serializeAST(*ast, true);
+                ast = DB::parseQuery(sqlParser, sqlStr.data(), sqlStr.data() + sqlStr.size(), "", 0, 0);
             }
             catch (...)
             {
-                //oss << DB::getCurrentExceptionMessage(true) << "\n";
+                rewriterLogger("parse sql faild");
+                resp.setStatus(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
+                oss << DB::getCurrentExceptionMessage(true) << "\n";
+                return oss.str();
             }
-            return oss.str();
-        }
 
-        std::string action(const std::string& json)
-        {
-            Poco::JSON::Parser jsonParser;
-            Poco::JSON::Object::Ptr object = jsonParser.parse(json).extract<Poco::JSON::Object::Ptr>();
-
-            std::string sqlStr = object->get("sql").toString();
-            Poco::JSON::Array::Ptr ruleList = object->get("rules").extract<Poco::JSON::Array::Ptr>();
-
-            std::ostringstream oss;
-            oss.exceptions(std::ios::failbit);
             try
             {
-                DB::ParserQueryWithOutput sqlParser(sqlStr.data() + sqlStr.size());
-                DB::ASTPtr ast = DB::parseQuery(sqlParser, sqlStr.data(), sqlStr.data() + sqlStr.size(), "", 0, 0);
-
                 // visitor AST to do replace action
                 for(decltype(ruleList->size()) i = 0; i < ruleList->size(); i++)
                 {
                     Poco::JSON::Object::Ptr rule = ruleList->get(i).extract<Poco::JSON::Object::Ptr>();
                     std::string ruleName = rule->get("rule").toString();
-                    ActionHandler *handler = RangeFilterRename::__ruleRouter.findHandler(ruleName);
-                    handler -> action(*ast, rule);
+                    rewriterLogger("recive rule : " + ruleName);
+                    ActionHandler *handler = __ruleRouter.findHandler(ruleName);
+                    if(nullptr == handler)
+                    {
+                        rewriterLogger("can not find rule : " + ruleName);
+                    }
+                    else
+                    {
+                        handler -> action(*ast, rule);
+                        delete handler;
+                    }
                 }
-                
-                //object->set();
-                return DB::serializeAST(*ast, true);
+
             }
             catch (...)
             {
                 oss << DB::getCurrentExceptionMessage(true) << "\n";
+                resp.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                rewriterLogger("visit AST faild " + oss.str());
+                return oss.str();
             }
 
-            return oss.str();
+            try
+            {
+                //object->set();
+                std::string value = DB::serializeAST(*ast, true);
+                return value;
+            }
+            catch (...)
+            {
+                oss << DB::getCurrentExceptionMessage(true) << "\n";
+                resp.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                rewriterLogger("serializeAST faild " + oss.str());
+                return oss.str();
+            }
+
+            return "";
         }
-
-        //std::string fieldRename(DB::ASTPtr ast)
-        //{
-        //}
-
-        //std::string fieldAdd(const std::string& json)
-        //{
-        //    Poco::JSON::Parser jsonParser;
-        //    Poco::Dynamic::Var result = jsonParser.parse(json);
-        //    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-
-        //    std::string sqlStr = object->get("sql").toString();
-        //    std::string field = object->get("field").toString();
-        //    std::string from = object->get("from").toString();
-        //    std::string to = object->get("to").toString();
-
-        //    std::ostringstream oss;
-        //    oss.exceptions(std::ios::failbit);
-        //    try
-        //    {
-        //        DB::ParserQueryWithOutput sqlParser(sqlStr.data() + sqlStr.size());
-        //        DB::ASTPtr ast = DB::parseQuery(sqlParser, sqlStr.data(), sqlStr.data() + sqlStr.size(), "", 0, 0);
-
-        //        // visitor AST to do replace action
-        //        
-
-        //        object->set();
-        //        return DB::serializeAST(*ast, true);
-        //    }
-        //    catch (...)
-        //    {
-        //        oss << DB::getCurrentExceptionMessage(true) << "\n";
-        //    }
-
-        //    return oss.str();
-        //}
 
         static void registerRules()
         {
-            //__ruleRouter.registerRule("fieldrename", RangeFilterRenameFieldRename::makeHandler);
-            __ruleRouter.registerRule("echo", RangeFilterRenameEcho::makeHandler);
+            __ruleRouter.registerRule(RangeFilterRenameFieldRename::ruleName, RangeFilterRenameFieldRename::makeHandler);
+            __ruleRouter.registerRule(RangeFilterRenameEcho::ruleName, RangeFilterRenameEcho::makeHandler);
         }
 };
 RuleRouter RangeFilterRename::__ruleRouter;

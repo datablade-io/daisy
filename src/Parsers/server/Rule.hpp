@@ -2,6 +2,7 @@
 #define RULE_HPP
 
 #include "ActionHandler.hpp"
+#include "RewriterLogger.hpp"
 
 class Rule
 {
@@ -36,19 +37,19 @@ class RuleRouter
                 if(__routerMap.end() == pair)
                 {
                     // no such uri
-                    return new ActionHandler;
+                    return nullptr;
                 }
                 Rule* r = pair -> second;
                 if(nullptr == r)
                 {
                     //something wrond
-                    return new ActionHandler;
+                    return nullptr;
                 }
                 auto handler = r -> getHandler();
                 if(nullptr == handler)
                 {
                     //something wrond
-                    return new ActionHandler;
+                    return nullptr;
                 }
                 return handler;
             }
@@ -60,6 +61,7 @@ class RuleRouter
 
         void registerRule(const std::string& ruleName, decltype(ActionHandler::makeHandler)* handlerFactory)
         {
+            rewriterLogger("add rule handler : " + ruleName);
             Rule* r = new Rule(ruleName, handlerFactory);
             __routerMap.insert(std::make_pair(ruleName, r));
         }

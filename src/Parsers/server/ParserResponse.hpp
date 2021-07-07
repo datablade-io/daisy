@@ -29,7 +29,8 @@ class ParserResponse
             json.set(std::string("value"), subjson);
         }
 
-        ParserResponse& setValue(const std::string& key, const std::string& value)
+        template <class T>
+        ParserResponse& setValue(const std::string& key, const T& value)
         {
             json.set(key, value);
 

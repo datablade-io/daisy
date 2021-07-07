@@ -4,6 +4,7 @@
 #include <Poco/JSON/Object.h>
 #include <Parsers/formatAST.h>
 #include "ActionHandler.hpp"
+#include "RewriterLogger.hpp"
 
 #include <iostream>
 
@@ -12,7 +13,7 @@ class RangeFilterRenameEcho: public ActionHandler
     public:
         virtual int action(const DB::IAST & ast, Poco::JSON::Object::Ptr& jsonObj) override
         {
-            std::cout << "handle RangeFilterRenameEcho" << std::endl;
+            rewriterLogger("handle RangeFilterRenameEcho");
             (void)ast;
             (void)jsonObj;
             return 0;
@@ -22,7 +23,11 @@ class RangeFilterRenameEcho: public ActionHandler
         {
             return new RangeFilterRenameEcho;
         }
+
+    public:
+        static std::string ruleName;
 };
+std::string RangeFilterRenameEcho::ruleName = "echo";
 
 #endif
 
