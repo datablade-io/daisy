@@ -48,7 +48,7 @@ struct KafkaWALSettings
     /////////////////////////////////////////////////////
 
     /// Global settings for consumer
-    std::string group_id = "";
+    std::string group_id;
     /// std::string group_instance_id
     /// std::string partition_assignment_strategy
 

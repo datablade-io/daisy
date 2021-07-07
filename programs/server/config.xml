@@ -1197,7 +1197,8 @@
                 <session_timeout_ms>10000</session_timeout_ms>
                 <max_poll_interval_ms>30000</max_poll_interval_ms>
 
-                <internal_pool_size>2</internal_pool_size>
+                <dedicated_mode_pool_size>2</dedicated_mode_pool_size>
+                <shared_mode_pool_max_size>10</shared_mode_pool_max_size>
             </kafka>
         </streaming_storage>
 

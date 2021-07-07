@@ -42,6 +42,8 @@ public:
 
     int32_t commit(const TopicPartitionOffset & tpo);
 
+    std::string groupID() const { return consumer->groupID(); }
+
 private:
     void backgroundPoll();
     void handleResult(ConsumeResult result) const;
