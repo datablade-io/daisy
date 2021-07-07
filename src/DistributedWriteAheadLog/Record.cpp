@@ -3,6 +3,8 @@
 #include <DataStreams/NativeBlockInputStream.h>
 #include <DataStreams/NativeBlockOutputStream.h>
 /// #include <DataStreams/materializeBlock.h>
+#include <Compression/CompressedReadBuffer.h>
+#include <Compression/CompressedWriteBuffer.h>
 #include <IO/ReadBufferFromMemory.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBufferFromVector.h>
@@ -10,24 +12,35 @@
 
 namespace DWAL
 {
-ByteVector Record::write(const Record & record)
+ByteVector Record::write(const Record & record, bool compressed)
 {
     ByteVector data{static_cast<size_t>((record.block.bytes() + 2) * 1.5)};
     DB::WriteBufferFromVector wb{data};
-    DB::NativeBlockOutputStream output(wb, 0, DB::Block{});
 
     /// Write flags
     /// flags bits distribution
     /// [0-4] : Version
     /// [5-10] : OpCode
-    /// [11-63] : Reserved
-    uint64_t flags = VERSION | (static_cast<UInt8>(record.op_code) << 5ul);
+    /// [11-15] : Compression
+    /// [16-63] : Reserved
+    uint64_t flags = VERSION | (static_cast<UInt8>(record.op_code) << 5ul) | (static_cast<UInt8>(compressed)) << 11ul;
     DB::writeIntBinary(flags, wb);
 
     /// Data
     /// materializeBlockInplace(record.block);
-    output.write(record.block);
-    output.flush();
+    if (unlikely(compressed))
+    {
+        DB::CompressedWriteBuffer compressed_out = DB::CompressedWriteBuffer(wb);
+        DB::NativeBlockOutputStream output(compressed_out, 0, DB::Block{});
+        output.write(record.block);
+        output.flush();
+    }
+    else
+    {
+        DB::NativeBlockOutputStream output(wb, 0, DB::Block{});
+        output.write(record.block);
+        output.flush();
+    }
 
     /// Shrink to what has been written
     wb.finalize();
@@ -44,8 +57,17 @@ RecordPtr Record::read(const char * data, size_t size)
     /// FIXME, more graceful version handling
     assert(Record::version(flags) == VERSION);
 
-    DB::NativeBlockInputStream input{rb, 0};
+    if (unlikely(Record::compression(flags)))
+    {
+        DB::CompressedReadBuffer compressed_in = DB::CompressedReadBuffer(rb);
+        DB::NativeBlockInputStream input(compressed_in, 0);
+        return std::make_shared<Record>(Record::opcode(flags), input.read());
+    }
+    else
+    {
+        DB::NativeBlockInputStream input(rb, 0);
+        return std::make_shared<Record>(Record::opcode(flags), input.read());
+    }
+}
+}
 
-    return std::make_shared<Record>(Record::opcode(flags), input.read());
-}
-}
