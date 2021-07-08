@@ -31,6 +31,7 @@ namespace
         "distributed_flush_threshold_ms",
         "distributed_flush_threshold_count",
         "distributed_flush_threshold_size",
+        "streaming_storage_poll_mode",
     };
 }
 

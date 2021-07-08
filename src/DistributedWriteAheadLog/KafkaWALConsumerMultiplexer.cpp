@@ -138,6 +138,7 @@ void KafkaWALConsumerMultiplexer::backgroundPoll()
     LOG_INFO(log, "Polling consumer multiplexer started");
     setThreadName("KWalCMPoller");
 
+    auto last_flush = std::chrono::steady_clock::now();
     while (!stopped.test())
     {
         auto result = consumer->consume(100000, 1000);
@@ -148,9 +149,29 @@ void KafkaWALConsumerMultiplexer::backgroundPoll()
             handleResult(std::move(result));
             assert(result.records.empty());
         }
+
+        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - last_flush).count() >= 10)
+        {
+            flush();
+            last_flush = std::chrono::steady_clock::now();
+        }
     }
 
     LOG_INFO(log, "Polling consumer multiplexer stopped");
+}
+
+void KafkaWALConsumerMultiplexer::flush() const
+{
+    std::lock_guard lock{callbacks_mutex};
+
+    for (const auto & topic_callback : callbacks)
+    {
+        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - topic_callback.second->last_call_ts).count() >= 10)
+        {
+            topic_callback.second->callback({}, topic_callback.second->data);
+            topic_callback.second->last_call_ts = std::chrono::steady_clock::now();
+        }
+    }
 }
 
 void KafkaWALConsumerMultiplexer::handleResult(ConsumeResult result) const
@@ -179,6 +200,7 @@ void KafkaWALConsumerMultiplexer::handleResult(ConsumeResult result) const
         if (likely(callback_ctx))
         {
             callback_ctx->callback(std::move(topic_records.second), callback_ctx->data);
+            callback_ctx->last_call_ts = std::chrono::steady_clock::now();
         }
     }
 }

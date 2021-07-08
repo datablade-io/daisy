@@ -42,11 +42,14 @@ public:
 
     int32_t commit(const TopicPartitionOffset & tpo);
 
-    std::string groupID() const { return consumer->groupID(); }
-
 private:
     void backgroundPoll();
     void handleResult(ConsumeResult result) const;
+
+    /// `flush` calls callbacks perioridically with empty records
+    /// callbacks can use this as a signal to flush outstanding offset
+    /// to checkpoint
+    void flush() const;
 
 private:
     struct CallbackContext
@@ -56,6 +59,8 @@ private:
 
         /// Only support same callback per topic
         std::vector<int32_t> partitions;
+
+        std::chrono::time_point<std::chrono::steady_clock> last_call_ts = std::chrono::steady_clock::now();
 
         CallbackContext(ConsumeCallback callback_, void * data_, int32_t partition_)
             : callback(callback_), data(data_), partitions({partition_})
