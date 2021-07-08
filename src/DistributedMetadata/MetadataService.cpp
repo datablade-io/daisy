@@ -27,7 +27,7 @@ namespace
     const String DATA_RETENTION_KEY = "data_retention";
     const String LOG_ROLL_SIZE_KEY = "log_roll_size";
     const String LOG_ROLL_PERIOD_KEY = "log_roll_period";
-    const String ENABLE_COMPRESS_INTERNAL_TOPIC = "cluster_settings.streaming_storage.kafka.enable_compress_internal_topic";
+    const String COMPRESSION_KEY = "compression";
 
     const String THIS_HOST = getFQDNOrHostName();
 }
@@ -268,7 +268,7 @@ void MetadataService::startup()
     kctx.request_required_acks = conf.request_required_acks;
     kctx.request_timeout_ms = conf.request_timeout_ms;
     /// Compression settings
-    kctx.enable_compress_internal_topic = config.getBool(ENABLE_COMPRESS_INTERNAL_TOPIC, false);
+    kctx.client_side_compression = config.getBool(conf.key_prefix + COMPRESSION_KEY , false);
 
     const String & this_role = role();
     for (const auto & key : role_keys)

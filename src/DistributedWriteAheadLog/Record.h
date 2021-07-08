@@ -40,7 +40,7 @@ struct Record
     std::string & idempotentKey() { return headers.at(IDEMPOTENT_KEY); }
     void setIdempotentKey(const std::string & key) { headers[IDEMPOTENT_KEY] = key; }
 
-    static uint8_t ALWAYS_INLINE version(uint64_t flags) { return flags & 0x1F; }
+    static uint8_t ALWAYS_INLINE version(uint64_t flags) { return flags & 0x07; }
 
     static OpCode ALWAYS_INLINE opcode(uint64_t flags)
     {

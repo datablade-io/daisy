@@ -5,6 +5,7 @@
 /// #include <DataStreams/materializeBlock.h>
 #include <Compression/CompressedReadBuffer.h>
 #include <Compression/CompressedWriteBuffer.h>
+#include <Compression/CompressionFactory.h>
 #include <IO/ReadBufferFromMemory.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBufferFromVector.h>
@@ -21,8 +22,8 @@ ByteVector Record::write(const Record & record, bool compressed)
     /// flags bits distribution
     /// [0-4] : Version
     /// [5-10] : OpCode
-    /// [11-15] : Compression
-    /// [16-63] : Reserved
+    /// [11-13] : Compression
+    /// [14-63] : Reserved
     uint64_t flags = VERSION | (static_cast<UInt8>(record.op_code) << 5ul) | (static_cast<UInt8>(compressed)) << 11ul;
     DB::writeIntBinary(flags, wb);
 
@@ -30,7 +31,8 @@ ByteVector Record::write(const Record & record, bool compressed)
     /// materializeBlockInplace(record.block);
     if (unlikely(compressed))
     {
-        DB::CompressedWriteBuffer compressed_out = DB::CompressedWriteBuffer(wb);
+        DB::CompressedWriteBuffer compressed_out
+            = DB::CompressedWriteBuffer(wb, DB::CompressionCodecFactory::instance().get("LZ4", {}), DBMS_DEFAULT_BUFFER_SIZE);
         DB::NativeBlockOutputStream output(compressed_out, 0, DB::Block{});
         output.write(record.block);
         output.flush();

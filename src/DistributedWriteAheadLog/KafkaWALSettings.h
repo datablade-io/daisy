@@ -39,7 +39,7 @@ struct KafkaWALSettings
     int32_t retry_backoff_ms = 100;
     /// none, gzip, snappy, lz4, zstd, inherit
     std::string compression_codec = "snappy";
-    bool enable_compress_internal_topic = false;
+    bool client_side_compression = false;
 
     /// Global librdkafka client side settings for producer
     int32_t message_timeout_ms = 40000;
@@ -92,7 +92,7 @@ struct KafkaWALSettings
         settings.push_back("message_send_max_retries=" + std::to_string(message_send_max_retries));
         settings.push_back("retry_backoff_ms=" + std::to_string(retry_backoff_ms));
         settings.push_back("compression_codec=" + compression_codec);
-        settings.push_back("enable_compress_internal_topic=" + std::to_string(enable_compress_internal_topic));
+        settings.push_back("client_side_compression=" + std::to_string(client_side_compression));
         settings.push_back("message_timeout_ms=" + std::to_string(message_timeout_ms));
         settings.push_back("message_delivery_async_poll_ms=" + std::to_string(message_delivery_async_poll_ms));
         settings.push_back("message_delivery_sync_poll_ms=" + std::to_string(message_delivery_sync_poll_ms));

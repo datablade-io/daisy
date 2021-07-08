@@ -146,7 +146,7 @@ void KafkaWAL::initProducerTopicHandle(KafkaWALContext & ctx) const
         std::make_pair("partitioner", "consistent_random"),
     };
 
-    if (ctx.enable_compress_internal_topic)
+    if (ctx.client_side_compression)
         topic_params.push_back(std::make_pair("compression.codec", "none"));
     else
         topic_params.push_back(std::make_pair("compression.codec", "snappy"));
@@ -283,7 +283,7 @@ void KafkaWAL::initProducerHandle()
         std::make_pair("message.send.max.retries", std::to_string(settings->message_send_max_retries)),
         std::make_pair("retry.backoff.ms", std::to_string(settings->retry_backoff_ms)),
         std::make_pair("enable.idempotence", std::to_string(settings->enable_idempotence)),
-        std::make_pair("compression.codec", settings->enable_compress_internal_topic ? "none" : settings->compression_codec),
+        std::make_pair("compression.codec", settings->client_side_compression ? "none" : settings->compression_codec),
         std::make_pair("statistics.interval.ms", std::to_string(settings->statistic_internal_ms)),
         std::make_pair("message.max.bytes", std::to_string(settings->message_max_bytes)),
     };
@@ -386,7 +386,7 @@ int32_t KafkaWAL::doAppend(const Record & record, DeliveryReport * dr, const Kaf
         headers.swap(header_ptr);
     }
 
-    ByteVector data{Record::write(record, ctx.enable_compress_internal_topic)};
+    ByteVector data{Record::write(record, ctx.client_side_compression)};
 
 #ifdef __GNUC__
 #pragma GCC diagnostic push
