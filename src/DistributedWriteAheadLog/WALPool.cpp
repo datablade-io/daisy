@@ -259,6 +259,7 @@ KafkaWALConsumerMultiplexerPtr WALPool::getOrCreateConsumerMultiplexer(const std
         kafka_settings->group_id += "-shared";
 
         auto multiplexer = std::make_shared<KafkaWALConsumerMultiplexer>(std::move(kafka_settings));
+        multiplexer->startup();
         cluster_multiplexers.push_back(multiplexer);
         return multiplexer;
     };

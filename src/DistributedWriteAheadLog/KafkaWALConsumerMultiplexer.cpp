@@ -45,7 +45,6 @@ void KafkaWALConsumerMultiplexer::shutdown()
 {
     if (stopped.test_and_set())
     {
-        LOG_ERROR(log, "Already shutdown");
         return;
     }
 
@@ -57,7 +56,7 @@ void KafkaWALConsumerMultiplexer::shutdown()
 
 int32_t KafkaWALConsumerMultiplexer::addSubscription(const TopicPartitionOffset & tpo, ConsumeCallback callback, void * data)
 {
-    assert(callback && data != nullptr);
+    assert(callback && consumer);
     {
         std::lock_guard lock{callbacks_mutex};
 
@@ -99,6 +98,7 @@ int32_t KafkaWALConsumerMultiplexer::addSubscription(const TopicPartitionOffset 
 
 int32_t KafkaWALConsumerMultiplexer::removeSubscription(const TopicPartitionOffset & tpo)
 {
+    assert(consumer);
     {
         std::lock_guard lock{callbacks_mutex};
 
@@ -207,6 +207,7 @@ void KafkaWALConsumerMultiplexer::handleResult(ConsumeResult result) const
 
 int32_t KafkaWALConsumerMultiplexer::commit(const TopicPartitionOffset & tpo)
 {
+    assert(consumer);
     return consumer->commit({tpo});
 }
 }

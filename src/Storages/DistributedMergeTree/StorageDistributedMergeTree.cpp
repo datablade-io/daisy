@@ -351,15 +351,15 @@ void StorageDistributedMergeTree::startup()
     {
         storage->startup();
 
-        if (storage_settings.get()->streaming_storage_poll_mode.value == "dedicated")
-        {
-            /// Dedicated mode has dedicated tailer thread
-            tailer->scheduleOrThrowOnError([this] { backgroundPoll(); });
-        }
-        else
+        if (storage_settings.get()->streaming_storage_poll_mode.value == "shared")
         {
             /// Shared mode, register callback
             addSubscription();
+        }
+        else
+        {
+            /// Dedicated mode has dedicated tailer thread
+            tailer->scheduleOrThrowOnError([this] { backgroundPoll(); });
         }
     }
 }
