@@ -136,7 +136,7 @@ void processNode(const YAML::Node & node, Poco::XML::Element & parent_xml_elemen
     }
 }
 
-/// Daisy : start
+/// Daisy : starts
 bool processNodeToJson(const YAML::Node & ynode, Poco::Dynamic::Var & jnode)
 {
     switch (ynode.Type())
@@ -209,7 +209,7 @@ bool processNodeToJson(const YAML::Node & ynode, Poco::Dynamic::Var & jnode)
     }
     return true;
 }
-/// Daisy : end
+/// Daisy : ends
 }
 
 Poco::AutoPtr<Poco::XML::Document> YAMLParser::parse(const String& path)
@@ -236,7 +236,7 @@ Poco::AutoPtr<Poco::XML::Document> YAMLParser::parse(const String& path)
     return xml;
 }
 
-/// Daisy : start
+/// Daisy : starts
 Poco::JSON::Object YAMLParser::parseToJson(const String & path)
 {
     YAML::Node node_yml;
@@ -260,7 +260,7 @@ Poco::JSON::Object YAMLParser::parseToJson(const String & path)
 
     return value.extract<Poco::JSON::Object>();
 }
-/// Daisy : end
+/// Daisy : ends
 
 }
 #endif

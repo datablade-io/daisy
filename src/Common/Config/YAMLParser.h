@@ -10,9 +10,9 @@
 #include "Poco/DOM/AutoPtr.h"
 #include <common/logger_useful.h>
 
-/// Daisy : start
+/// Daisy : starts
 #include <Poco/JSON/Object.h>
-/// Daisy : end
+/// Daisy : ends
 
 #if USE_YAML_CPP
 
@@ -25,9 +25,9 @@ class YAMLParserImpl
 public:
     static Poco::AutoPtr<Poco::XML::Document> parse(const String& path);
 
-    /// Daisy : start
+    /// Daisy : starts
     static  Poco::JSON::Object parseToJson(const String& path);
-    /// Daisy : end
+    /// Daisy : ends
 
 };
 
