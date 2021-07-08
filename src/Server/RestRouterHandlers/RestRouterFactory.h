@@ -11,6 +11,7 @@
 #include "RestRouterHandler.h"
 #include "SQLAnalyzerRestRouterHandler.h"
 #include "SearchHandler.h"
+#include "SpecDocHandler.h"
 #include "TabularTableRestRouterHandler.h"
 #include "TaskRestRouterHandler.h"
 
@@ -150,6 +151,13 @@ public:
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<DB::ClusterInfoHandler>(query_context);
+            });
+
+        factory.registerRouterHandler(
+            "/dae/spec/doc",
+            "GET",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<DB::SpecDocHandler>(query_context);
             });
     }
 

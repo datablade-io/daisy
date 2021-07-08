@@ -599,6 +599,7 @@ include (cmake/check_flags.cmake)
 add_subdirectory (base)
 add_subdirectory (src)
 add_subdirectory (programs)
+add_subdirectory (spec)
 add_subdirectory (tests)
 add_subdirectory (utils)
 

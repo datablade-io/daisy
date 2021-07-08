@@ -76,6 +76,9 @@ then
     cp ../programs/server/config.xml /output/config
     cp ../programs/server/users.xml /output/config
     cp -r --dereference ../programs/server/config.d /output/config
+    # Daisy : start
+    cp -r ../spec output/spec
+    # Daisy : end
     tar -cv -I pigz -f "$COMBINED_OUTPUT.tgz" /output
     rm -r /output/*
     mv "$COMBINED_OUTPUT.tgz" /output

@@ -136,6 +136,80 @@ void processNode(const YAML::Node & node, Poco::XML::Element & parent_xml_elemen
     }
 }
 
+/// Daisy : start
+bool processNodeToJson(const YAML::Node & ynode, Poco::Dynamic::Var & jnode)
+{
+    switch (ynode.Type())
+    {
+        case YAML::NodeType::Scalar:
+        {
+            Poco::Dynamic::Var v;
+            if (ynode.Scalar() == "false" || ynode.Scalar() == "true")
+            {
+                v = {ynode.as<bool>()};
+            }
+            else
+            {
+                v = {ynode.as<std::string>()};
+            }
+
+            jnode.swap(v);
+            return true;
+        }
+
+        case YAML::NodeType::Sequence:
+        {
+            Poco::JSON::Array arry;
+            for (const auto & child_node : ynode)
+            {
+                Poco::Dynamic::Var v;
+                if (processNodeToJson(child_node, v))
+                {
+                    arry.add(v);
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            jnode = arry;
+            return true;
+        }
+
+        case YAML::NodeType::Map:
+        {
+            Poco::JSON::Object obj;
+            for (const auto key_value_pair : ynode)
+            {
+                Poco::Dynamic::Var v;
+                if (processNodeToJson(key_value_pair.second, v))
+                {
+                    obj.set(key_value_pair.first.Scalar(), v);
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            jnode = obj;
+            return true;
+        }
+
+        case YAML::NodeType::Null:
+            return false;
+
+        case YAML::NodeType::Undefined:
+        {
+            throw Exception(
+                ErrorCodes::CANNOT_PARSE_YAML,
+                "YAMLParser has encountered node with undefined type and cannot continue parsing of the file");
+        }
+    }
+    return true;
+}
+/// Daisy : end
 }
 
 Poco::AutoPtr<Poco::XML::Document> YAMLParser::parse(const String& path)
@@ -161,6 +235,32 @@ Poco::AutoPtr<Poco::XML::Document> YAMLParser::parse(const String& path)
     processNode(node_yml, *root_node);
     return xml;
 }
+
+/// Daisy : start
+Poco::JSON::Object YAMLParser::parseToJson(const String & path)
+{
+    YAML::Node node_yml;
+    try
+    {
+        node_yml = YAML::LoadFile(path);
+    }
+    catch (const YAML::ParserException & e)
+    {
+        /// yaml-cpp cannot parse the file because its contents are incorrect
+        throw Exception(ErrorCodes::CANNOT_PARSE_YAML, "Unable to parse YAML configuration file {}", path, e.what());
+    }
+    catch (const YAML::BadFile &)
+    {
+        /// yaml-cpp cannot open the file even though it exists
+        throw Exception(ErrorCodes::CANNOT_OPEN_FILE, "Unable to open YAML configuration file {}", path);
+    }
+
+    Poco::Dynamic::Var value;
+    processNodeToJson(node_yml, value);
+
+    return value.extract<Poco::JSON::Object>();
+}
+/// Daisy : end
 
 }
 #endif

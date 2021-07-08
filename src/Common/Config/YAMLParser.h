@@ -10,6 +10,10 @@
 #include "Poco/DOM/AutoPtr.h"
 #include <common/logger_useful.h>
 
+/// Daisy : start
+#include <Poco/JSON/Object.h>
+/// Daisy : end
+
 #if USE_YAML_CPP
 
 namespace DB
@@ -20,6 +24,11 @@ class YAMLParserImpl
 {
 public:
     static Poco::AutoPtr<Poco::XML::Document> parse(const String& path);
+
+    /// Daisy : start
+    static  Poco::JSON::Object parseToJson(const String& path);
+    /// Daisy : end
+
 };
 
 using YAMLParser = YAMLParserImpl;

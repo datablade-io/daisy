@@ -1,0 +1,1 @@
+install(DIRECTORY rest-api DESTINATION "${CLICKHOUSE_ETC_DIR}/clickhouse-spec" COMPONENT clickhouse)
