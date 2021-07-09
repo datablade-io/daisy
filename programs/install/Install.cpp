@@ -383,7 +383,7 @@ int mainEntryClickHouseInstall(int argc, char ** argv)
         fs::path config_dir = prefix / options["config-path"].as<std::string>();
 
         /// Daisy : starts
-        fs::path spec_dir = prefix / options["scpe-path"].as<std::string>();
+        fs::path spec_dir = prefix / options["spec-path"].as<std::string>();
         /// Daisy : ends
 
         if (!fs::exists(config_dir))
