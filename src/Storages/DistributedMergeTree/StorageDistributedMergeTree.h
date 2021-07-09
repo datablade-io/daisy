@@ -34,7 +34,7 @@ class StorageDistributedMergeTree final : public ext::shared_ptr_helper<StorageD
 public:
     void startup() override;
     void shutdown() override;
-    ~StorageDistributedMergeTree() override = default;
+    ~StorageDistributedMergeTree() override;
 
     String getName() const override;
 
@@ -224,6 +224,7 @@ private:
     void commitSNLocal(DWAL::RecordSN commit_sn);
     void commitSNRemote(DWAL::RecordSN commit_sn, std::any & dwal_consume_ctx);
 
+    void finalCommit(std::any & ctx);
     void periodicallyCommit(std::any & ctx);
 
     void progressSequences(const SequencePair & seq);
@@ -258,6 +259,7 @@ private:
 
     /// For shared consumption
     DWAL::KafkaWALConsumerMultiplexerPtr multiplexer;
+    std::weak_ptr<DWAL::KafkaWALConsumerMultiplexer::CallbackContext> shared_subscription_ctx;
 
     IngestingBlocks ingesting_blocks;
 
@@ -266,7 +268,7 @@ private:
 
     /// Forwarding storage if it is not virtual
     std::shared_ptr<StorageMergeTree> storage;
-    std::optional<ThreadPool> tailer;
+    std::optional<ThreadPool> poller;
 
     ThreadPool & part_commit_pool;
 

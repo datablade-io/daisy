@@ -244,7 +244,6 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
             merging_params_,
             std::move(settings_),
             has_force_restore_data_flag_);
-        tailer.emplace(1);
 
         buildIdempotentKeysIndex(storage->lastIdempotentKeys());
         auto sn = storage->committedSN();
@@ -271,6 +270,12 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
         sharding_key_is_deterministic = isExpressionActionsDeterministics(sharding_key_expr);
         sharding_key_column_name = sharding_key_->getColumnName();
     }
+}
+
+StorageDistributedMergeTree::~StorageDistributedMergeTree()
+{
+    LOG_INFO(log, "~StorageDistributedMergeTree");
+    shutdown();
 }
 
 void StorageDistributedMergeTree::readRemote(
@@ -349,18 +354,21 @@ void StorageDistributedMergeTree::startup()
 
     if (storage)
     {
+        LOG_INFO(log, "Starting");
         storage->startup();
 
-        if (storage_settings.get()->streaming_storage_poll_mode.value == "shared")
+        if (storage_settings.get()->streaming_storage_subscription_mode.value == "shared")
         {
             /// Shared mode, register callback
             addSubscription();
         }
         else
         {
-            /// Dedicated mode has dedicated tailer thread
-            tailer->scheduleOrThrowOnError([this] { backgroundPoll(); });
+            /// Dedicated mode has dedicated poll thread
+            poller.emplace(1);
+            poller->scheduleOrThrowOnError([this] { backgroundPoll(); });
         }
+        LOG_INFO(log, "Started");
     }
 }
 
@@ -374,9 +382,9 @@ void StorageDistributedMergeTree::shutdown()
     LOG_INFO(log, "Stopping");
     if (storage)
     {
-        if (tailer)
+        if (poller)
         {
-            tailer->wait();
+            poller->wait();
         }
         else
         {
@@ -1268,19 +1276,19 @@ void StorageDistributedMergeTree::backgroundPoll()
     consume_ctx.auto_offset_reset = ssettings->streaming_storage_auto_offset_reset.value;
     consume_ctx.consume_callback_timeout_ms = ssettings->distributed_flush_threshold_ms.value;
     consume_ctx.consume_callback_max_rows = ssettings->distributed_flush_threshold_count;
-    consume_ctx.consume_callback_max_messages_size = ssettings->distributed_flush_threshold_size;
+    consume_ctx.consume_callback_max_bytes = ssettings->distributed_flush_threshold_bytes;
     const auto & missing_sequence_ranges = storage->missingSequenceRanges();
 
     LOG_INFO(
         log,
         "Start consuming records from shard={} sn={} distributed_flush_threshold_ms={} "
         "distributed_flush_threshold_count={} "
-        "distributed_flush_threshold_size={} with missing_sequence_ranges={}",
+        "distributed_flush_threshold_bytes={} with missing_sequence_ranges={}",
         shard,
         consume_ctx.offset,
         consume_ctx.consume_callback_timeout_ms,
         consume_ctx.consume_callback_max_rows,
-        consume_ctx.consume_callback_max_messages_size,
+        consume_ctx.consume_callback_max_bytes,
         sequenceRangesToString(missing_sequence_ranges));
 
     std::any dwal_consume_ctx{consume_ctx};
@@ -1319,7 +1327,12 @@ void StorageDistributedMergeTree::backgroundPoll()
     callback_data->wait();
 
     /// When tearing down, commit whatever it has
-    commitSN(dwal_consume_ctx);
+    finalCommit(dwal_consume_ctx);
+}
+
+inline void StorageDistributedMergeTree::finalCommit(std::any & ctx)
+{
+    commitSN(ctx);
 
     DWAL::RecordSN commit_sn = -1;
     {
@@ -1389,10 +1402,12 @@ void StorageDistributedMergeTree::addSubscription()
 
     DWAL::TopicPartitionOffset tpo{topic, shard, snLoaded()};
     auto res = multiplexer->addSubscription(tpo, &StorageDistributedMergeTree::consumeCallback, callback_data.get());
-    if (res != ErrorCodes::OK)
+    if (res.err != ErrorCodes::OK)
     {
-        throw Exception("Failed to add subscription for shard=" + std::to_string(shard), res);
+        throw Exception("Failed to add subscription for shard=" + std::to_string(shard), res.err);
     }
+
+    shared_subscription_ctx = res.ctx;
 
     LOG_INFO(
         log,
@@ -1405,6 +1420,13 @@ void StorageDistributedMergeTree::addSubscription()
 
 void StorageDistributedMergeTree::removeSubscription()
 {
+    if (!multiplexer)
+    {
+        /// It is possible that storage is called with `shutdown` without calling `startup`
+        /// during system startup and partitially deleted table gets cleaned up
+        return;
+    }
+
     DWAL::TopicPartitionOffset tpo{topic, shard, snLoaded()};
     auto res = multiplexer->removeSubscription(tpo);
     if (res != ErrorCodes::OK)
@@ -1413,7 +1435,15 @@ void StorageDistributedMergeTree::removeSubscription()
     }
 
     callback_data->wait();
+
+    while (!shared_subscription_ctx.expired())
+    {
+        LOG_INFO(log, "Waiting for subscription context to get away for shard={}", shard);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
     LOG_INFO(log, "Removed subscription for shard={}", shard);
+
+    finalCommit(dwal_append_ctx);
 }
 
 void StorageDistributedMergeTree::initWal()

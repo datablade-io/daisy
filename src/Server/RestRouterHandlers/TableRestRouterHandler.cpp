@@ -25,13 +25,13 @@ namespace
 {
     const std::vector<String> CREATE_TABLE_SETTINGS = {
         "streaming_storage_cluster_id",
-        "streaming_storage_poll_mode",
+        "streaming_storage_subscription_mode",
         "streaming_storage_auto_offset_reset",
         "streaming_storage_request_required_acks",
         "streaming_storage_request_timeout_ms",
         "distributed_flush_threshold_ms",
         "distributed_flush_threshold_count",
-        "distributed_flush_threshold_size",
+        "distributed_flush_threshold_bytes",
     };
 }
 
@@ -324,7 +324,7 @@ String TableRestRouterHandler::getAndValidateStorageSetting(const String & key) 
         return value;
     }
 
-    if (key == "streaming_storage_poll_mode")
+    if (key == "streaming_storage_subscription_mode")
     {
         if (value != "shared" && value != "dedicated")
         {

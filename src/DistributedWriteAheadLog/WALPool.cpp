@@ -106,8 +106,8 @@ void WALPool::init(const std::string & key)
     const auto & config = global_context->getConfigRef();
 
     KafkaWALSettings kafka_settings;
-    int32_t dedicated_mode_wal_pool_size = 2;
-    int32_t shared_mode_wal_pool_max_size = 10;
+    int32_t dedicated_subscription_wal_pool_size = 2;
+    int32_t shared_subscription_wal_pool_max_size = 10;
     bool system_default = false;
 
     std::vector<std::tuple<String, String, void *>> settings = {
@@ -139,8 +139,11 @@ void WALPool::init(const std::string & key)
         {".queued_max_messages_kbytes", "Int32", &kafka_settings.queued_max_messages_kbytes},
         {".session_timeout_ms", "Int32", &kafka_settings.session_timeout_ms},
         {".max_poll_interval_ms", "Int32", &kafka_settings.max_poll_interval_ms},
-        {".dedicated_mode_pool_size", "Int32", &dedicated_mode_wal_pool_size},
-        {".shared_mode_pool_max_size", "Int32", &shared_mode_wal_pool_max_size},
+        {".dedicated_subscription_pool_size", "Int32", &dedicated_subscription_wal_pool_size},
+        {".shared_subscription_pool_max_size", "Int32", &shared_subscription_wal_pool_max_size},
+        {".shared_subscription_flush_threshold_count", "Int32", &kafka_settings.shared_subscription_flush_threshold_count},
+        {".shared_subscription_flush_threshold_bytes", "Int32", &kafka_settings.shared_subscription_flush_threshold_bytes},
+        {".shared_subscription_flush_threshold_ms", "Int32", &kafka_settings.shared_subscription_flush_threshold_ms},
     };
 
     for (const auto & t : settings)
@@ -189,7 +192,7 @@ void WALPool::init(const std::string & key)
     /// Create WALs
     LOG_INFO(log, "Creating Kafka WAL with settings: {}", kafka_settings.string());
 
-    for (int32_t i = 0; i < dedicated_mode_wal_pool_size; ++i)
+    for (int32_t i = 0; i < dedicated_subscription_wal_pool_size; ++i)
     {
         auto ksettings = kafka_settings.clone();
 
@@ -202,7 +205,7 @@ void WALPool::init(const std::string & key)
     indexes[kafka_settings.cluster_id] = 0;
 
     multiplexers.emplace(
-        kafka_settings.cluster_id, std::make_pair<size_t, KafkaWALConsumerMultiplexerPtrs>(shared_mode_wal_pool_max_size, {}));
+        kafka_settings.cluster_id, std::make_pair<size_t, KafkaWALConsumerMultiplexerPtrs>(shared_subscription_wal_pool_max_size, {}));
     cluster_kafka_settings.emplace(kafka_settings.cluster_id, kafka_settings.clone());
 
     if (system_default)
