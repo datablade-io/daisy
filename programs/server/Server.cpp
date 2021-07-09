@@ -54,7 +54,6 @@
 #include <Interpreters/UserDefinedSQLObjectsLoader.h>
 #include <Interpreters/JIT/CompiledExpressionCache.h>
 #include <Access/AccessControlManager.h>
-#include <DistributedWriteAheadLog/WALPool.h>
 #include <Storages/StorageReplicatedMergeTree.h>
 #include <Storages/System/attachSystemTables.h>
 #include <Storages/System/attachInformationSchemaTables.h>
@@ -86,6 +85,7 @@
 #include <DistributedMetadata/CatalogService.h>
 #include <DistributedMetadata/DDLService.h>
 #include <DistributedMetadata/PlacementService.h>
+#include <DistributedWriteAheadLog/KafkaWALPool.h>
 #include <Server/RestRouterHandlers/RestRouterFactory.h>
 
 #if !defined(ARCADIA_BUILD)
@@ -258,7 +258,7 @@ int waitServersToFinish(std::vector<DB::ProtocolServerAdapter> & servers, size_t
 ///     -> Task
 void initDistributedMetadataServices(DB::ContextPtr & global_context)
 {
-    auto & pool = DWAL::WALPool::instance(global_context);
+    auto & pool = DWAL::KafkaWALPool::instance(global_context);
     pool.startup();
 
     auto & catalog_service = DB::CatalogService::instance(global_context);
@@ -293,7 +293,7 @@ void deinitDistributedMetadataServices(DB::ContextPtr & global_context)
     auto & task_status_service = DB::TaskStatusService::instance(global_context);
     task_status_service.shutdown();
 
-    auto & pool = DWAL::WALPool::instance(global_context);
+    auto & pool = DWAL::KafkaWALPool::instance(global_context);
     pool.shutdown();
 }
 /// Daisy : ends
