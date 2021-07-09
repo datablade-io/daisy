@@ -956,10 +956,10 @@ void incrementalConsume(const BenchmarkSettings & bench_settings, Int32 size)
         auto & wal = wals[i % wals.size()];
         auto res = wal->addSubscription(tpo, callback, datas[i % wals.size()].get());
 
-        assert(!res);
-        if (res)
+        assert(!res.err);
+        if (res.err)
         {
-            cout << "failed to subscribe, error=" << res << "\n";
+            cout << "failed to subscribe, error=" << res.err << "\n";
         }
         ++i;
     }
