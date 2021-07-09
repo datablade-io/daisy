@@ -34,7 +34,7 @@ class StorageDistributedMergeTree final : public ext::shared_ptr_helper<StorageD
 public:
     void startup() override;
     void shutdown() override;
-    ~StorageDistributedMergeTree() override;
+    ~StorageDistributedMergeTree() override = default;
 
     String getName() const override;
 

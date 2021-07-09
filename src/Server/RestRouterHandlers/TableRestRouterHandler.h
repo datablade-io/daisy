@@ -22,10 +22,10 @@ protected:
 
     String getEngineExpr(const Poco::JSON::Object::Ptr & payload) const;
 
-    /// return empty string if the request is invalid
+    /// Return empty string if the request is invalid
     String getCreationSQL(const Poco::JSON::Object::Ptr & payload, const String & shard) const;
 
-    /// return empty string if the setting is invalid
+    /// Return empty string if the setting is invalid
     String getAndValidateStorageSetting(const String & key) const;
 
     bool validatePost(const Poco::JSON::Object::Ptr & payload, String & error_msg) const override;

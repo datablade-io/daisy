@@ -272,12 +272,6 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     }
 }
 
-StorageDistributedMergeTree::~StorageDistributedMergeTree()
-{
-    LOG_INFO(log, "~StorageDistributedMergeTree");
-    shutdown();
-}
-
 void StorageDistributedMergeTree::readRemote(
     QueryPlan & query_plan, SelectQueryInfo & query_info, ContextPtr context_, QueryProcessingStage::Enum processed_stage)
 {
