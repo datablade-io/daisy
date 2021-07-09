@@ -133,6 +133,9 @@ int mainEntryClickHouseInstall(int argc, char ** argv)
         ("prefix", po::value<std::string>()->default_value(""), "prefix for all paths")
         ("binary-path", po::value<std::string>()->default_value("/usr/bin"), "where to install binaries")
         ("config-path", po::value<std::string>()->default_value("/etc/clickhouse-server"), "where to install configs")
+        /// Daisy : starts
+        ("spec-path", po::value<std::string>()->default_value("/etc/clickhouse-spec"), "where to store spec docs")
+        /// Daisy : ends
         ("log-path", po::value<std::string>()->default_value("/var/log/clickhouse-server"), "where to create log directory")
         ("data-path", po::value<std::string>()->default_value("/var/lib/clickhouse"), "directory for data")
         ("pid-path", po::value<std::string>()->default_value("/var/run/clickhouse-server"), "directory for pid file")
@@ -379,6 +382,10 @@ int mainEntryClickHouseInstall(int argc, char ** argv)
 
         fs::path config_dir = prefix / options["config-path"].as<std::string>();
 
+        /// Daisy : starts
+        fs::path spec_dir = prefix / options["scpe-path"].as<std::string>();
+        /// Daisy : ends
+
         if (!fs::exists(config_dir))
         {
             fmt::print("Creating config directory {}.\n", config_dir.string());
@@ -474,6 +481,28 @@ int mainEntryClickHouseInstall(int argc, char ** argv)
                 has_password_for_default_user = true;
             }
         }
+
+        fmt::print("current paht : %s.\n", fs::current_path().string());
+        /// Daisy : starts
+        if (fs::exists(spec_dir))
+        {
+            fmt::print("Spec directory {} already exists.\n", data_path);
+        }
+        else
+        {
+            fmt::print("Creating spec directory {} that is used to store rest api documents.\n", spec_dir.string());
+
+            fs::create_directory(spec_dir);
+            if(fs::exists("clickhouse-spec"))
+            {
+                fmt::print("There is no spec docs, you have to download it and place to {}.\n", spec_dir.string());
+            }
+            else
+            {
+              fs::copy("clickhouse-spec", spec_dir);  
+            }
+        }
+        /// Daisy : ends
 
         /// Chmod and chown configs
         {
