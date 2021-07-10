@@ -16,13 +16,12 @@ package() {
     # This code was requisited from kmeaw@ https://aur.archlinux.org/packages/clickhouse/ .
     SRC=${ClickHouse_SOURCE_DIR}
     BIN=${ClickHouse_BINARY_DIR}
-    mkdir -p $pkgdir/etc/clickhouse-server/ $pkgdir/etc/clickhouse-client/ $pkgdir/etc/clickhouse-spec/
+    mkdir -p $pkgdir/etc/clickhouse-server/ $pkgdir/etc/clickhouse-client/
     mkdir -p $pkgdir/usr/bin/
     mkdir -p $pkgdir/usr/lib/systemd/system
     ln -s clickhouse-client $pkgdir/usr/bin/clickhouse-server
     cp $SRC/programs/server/config.xml $SRC/programs/server/users.xml $pkgdir/etc/clickhouse-server/
     cp $BIN/programs/clickhouse $pkgdir/usr/bin/clickhouse-client
-    cp -r $SRC/spec $pkgdir/etc/clickhouse-spec/
     patchelf --remove-rpath $pkgdir/usr/bin/clickhouse-client
     patchelf --replace-needed libz.so.1 libz-ng.so.1 $pkgdir/usr/bin/clickhouse-client
     cp $SRC/programs/client/clickhouse-client.xml $pkgdir/etc/clickhouse-client/config.xml
