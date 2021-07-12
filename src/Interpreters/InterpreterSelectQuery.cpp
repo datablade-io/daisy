@@ -69,6 +69,7 @@
 #include <Processors/Transforms/FilterTransform.h>
 #include <Processors/Transforms/JoiningTransform.h>
 
+#include <Storages/StorageDistributed.h>
 #include <Storages/MergeTree/MergeTreeWhereOptimizer.h>
 #include <Storages/IStorage.h>
 #include <Storages/StorageView.h>
@@ -315,7 +316,32 @@ InterpreterSelectQuery::InterpreterSelectQuery(
         table_lock = storage->lockForShare(context->getInitialQueryId(), context->getSettingsRef().lock_acquire_timeout);
         table_id = storage->getStorageID();
         if (!metadata_snapshot)
-            metadata_snapshot = storage->getInMemoryMetadataPtr();
+        {
+            if (storage->getName() != "Distributed")
+            {
+                metadata_snapshot = storage->getInMemoryMetadataPtr();
+            }
+            else
+            {
+                StorageMetadataPtr metadata_distributed = storage->getInMemoryMetadataPtr();
+                /// If distributed table has redefined columns, then use the metadata of Distributed table
+                if (!metadata_distributed->getColumns().empty())
+                    metadata_snapshot = metadata_distributed;
+                else
+                {
+                    const StorageDistributed * storage_distributed = static_cast<const StorageDistributed *>(storage.get());
+                    const auto & remote_database = storage_distributed->getRemoteDatabaseName();
+                    const auto & remote_table = storage_distributed->getRemoteTableName();
+                    StoragePtr storage_replicated;
+                    if (!remote_table.empty())
+                        storage_replicated = DatabaseCatalog::instance().getTable(
+                            StorageID(remote_database.empty() ? context->getCurrentDatabase() : remote_database, remote_table), *context);
+                    StorageMetadataPtr metadata_snapshot_snapshot;
+                    if (storage_replicated)
+                        metadata_snapshot_snapshot = storage_replicated->getInMemoryMetadataPtr();
+                }
+            }
+        }
     }
 
     if (has_input || !joined_tables.resolveTables())
