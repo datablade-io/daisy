@@ -5,11 +5,13 @@
 #include <DistributedWriteAheadLog/KafkaWALCommon.h>
 #include <DistributedWriteAheadLog/KafkaWALPool.h>
 #include <Functions/IFunction.h>
+#include <IO/Progress.h>
 #include <Interpreters/ClusterProxy/DistributedSelectStreamFactory.h>
 #include <Interpreters/ClusterProxy/executeQuery.h>
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/InDepthNodeVisitor.h>
 #include <Interpreters/InterpreterSelectQuery.h>
+#include <Interpreters/QueryThreadLog.h>
 #include <Interpreters/TreeRewriter.h>
 #include <Interpreters/createBlockSelector.h>
 #include <Interpreters/evaluateConstantExpression.h>
@@ -21,8 +23,18 @@
 #include <Storages/MergeTree/MergeTreeBlockOutputStream.h>
 #include <Storages/StorageMergeTree.h>
 #include <Common/randomSeed.h>
+#include <common/ClockUtils.h>
 #include <common/logger_useful.h>
 
+namespace ProfileEvents
+{
+    extern const Event KafkaRowsSent;
+    extern const Event KafkaBytesSent;
+    extern const Event DistributedMergeTreeRowsWrite;
+    extern const Event DistributedMergeTreeBytesWrite;
+    extern const Event DistributedMergeTreeInsertWaitMicroseconds;
+    extern const Event DistributedMergeTreeKafkaConsumeCount;
+}
 
 namespace DB
 {
@@ -103,6 +115,41 @@ void replaceConstantExpressions(
 
     InDepthNodeVisitor<ReplacingConstantExpressionsMatcher, true> visitor(block_with_constants);
     visitor.visit(node);
+}
+
+//inline UInt64 time_in_nanoseconds(std::chrono::time_point<std::chrono::system_clock> timepoint)
+//{
+//    return std::chrono::duration_cast<std::chrono::nanoseconds>(timepoint.time_since_epoch()).count();
+//}
+
+inline UInt64 time_in_microseconds(std::chrono::time_point<std::chrono::system_clock> timepoint)
+{
+    return std::chrono::duration_cast<std::chrono::microseconds>(timepoint.time_since_epoch()).count();
+}
+
+
+inline UInt64 time_in_seconds(std::chrono::time_point<std::chrono::system_clock> timepoint)
+{
+    return std::chrono::duration_cast<std::chrono::seconds>(timepoint.time_since_epoch()).count();
+}
+
+void logToQueryThreadLog(QueryThreadLog & thread_log, QueryThreadLogElement &elem, const String & current_database, const String & current_table, std::chrono::time_point<std::chrono::system_clock> now)
+{
+
+
+    // construct current_time and current_time_microseconds using the same time point
+    // so that the two times will always be equal up to a precision of a second.
+    auto current_time = time_in_seconds(now);
+    auto current_time_microseconds = time_in_microseconds(now);
+
+    elem.event_time = current_time;
+    elem.event_time_microseconds = current_time_microseconds;
+
+    elem.thread_name = getThreadName();
+    elem.current_database = current_database;
+
+    elem.query = current_table;
+    thread_log.add(elem);
 }
 
 /// Returns one of the following:
@@ -233,6 +280,7 @@ StorageDistributedMergeTree::StorageDistributedMergeTree(
     , part_commit_pool(context_->getPartCommitPool())
     , rng(randomSeed())
 {
+    performance_counters.resetCounters();
     if (!relative_data_path_.empty())
     {
         /// Virtual table which is for data ingestion only
@@ -867,6 +915,12 @@ DWAL::RecordSN StorageDistributedMergeTree::lastSN() const
     return last_sn;
 }
 
+void StorageDistributedMergeTree::updatePerformanceCounter(const Block & block)
+{
+    performance_counters.increment(ProfileEvents::KafkaRowsSent, block.rows());
+    performance_counters.increment(ProfileEvents::KafkaBytesSent, block.bytes());
+}
+
 std::unique_ptr<StorageDistributedMergeTree::WriteCallbackData>
 StorageDistributedMergeTree::writeCallbackData(const String & query_status_poll_id, UInt16 block_id)
 {
@@ -1213,11 +1267,20 @@ void StorageDistributedMergeTree::commit(DWAL::RecordPtrs records, SequenceRange
 
     Block block;
     auto keys = std::make_shared<IdempotentKeys>();
+    bool is_wait_recorded = false;
 
+    performance_counters.increment(ProfileEvents::DistributedMergeTreeKafkaConsumeCount, 1);
     for (auto & rec : records)
     {
         if (likely(rec->op_code == DWAL::OpCode::ADD_DATA_BLOCK))
         {
+            if (rec->headers.contains("_send_time") && !rec->headers.at("_send_time").empty() && !is_wait_recorded)
+            {
+                Int64 latency = UTCMilliseconds::now() - std::atoll(rec->headers["_send_time"].c_str());
+                performance_counters.increment(ProfileEvents::DistributedMergeTreeInsertWaitMicroseconds, latency);
+                is_wait_recorded = true;
+            }
+
             if (dedupBlock(rec))
             {
                 continue;
@@ -1245,6 +1308,24 @@ void StorageDistributedMergeTree::commit(DWAL::RecordPtrs records, SequenceRange
             /// FIXME: execute the later before doing any ingestion
             throw Exception("Not impelemented", ErrorCodes::NOT_IMPLEMENTED);
         }
+    }
+
+    performance_counters.increment(ProfileEvents::DistributedMergeTreeRowsWrite, block.rows());
+    performance_counters.increment(ProfileEvents::DistributedMergeTreeBytesWrite, block.rows());
+    progress_in.incrementPiecewiseAtomically(Progress(block.rows(), block.bytes(), block.rows()));
+    const auto now = std::chrono::system_clock::now();
+
+    auto global_context_ptr = getContext()->getGlobalContext();
+    if (auto thread_log = global_context_ptr->getQueryThreadLog())
+    {
+        QueryThreadLogElement elem;
+        elem.read_rows = performance_counters[ProfileEvents::DistributedMergeTreeRowsWrite].load(std::memory_order_relaxed);
+        elem.read_bytes = performance_counters[ProfileEvents::DistributedMergeTreeBytesWrite].load(std::memory_order_relaxed);
+        elem.written_rows = performance_counters[ProfileEvents::KafkaRowsSent].load(std::memory_order_relaxed);
+        elem.written_bytes = performance_counters[ProfileEvents::KafkaRowsSent].load(std::memory_order_relaxed);
+        elem.profile_counters = std::make_shared<ProfileEvents::Counters>(performance_counters.getPartiallyAtomicSnapshot());
+        auto table_id = getStorageID();
+        logToQueryThreadLog(*thread_log, elem, table_id.database_name, table_id.table_name, now);
     }
 
     LOG_DEBUG(
