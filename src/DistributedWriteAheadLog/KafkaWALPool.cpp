@@ -125,7 +125,6 @@ void KafkaWALPool::init(const std::string & key)
         {".message_send_max_retries", "Int32", &kafka_settings.message_send_max_retries},
         {".retry_backoff_ms", "Int32", &kafka_settings.retry_backoff_ms},
         {".compression_codec", "String", &kafka_settings.compression_codec},
-        {".client_side_compression", "Bool", &kafka_settings.client_side_compression},
         {".message_timeout_ms", "Int32", &kafka_settings.message_timeout_ms},
         {".message_delivery_async_poll_ms", "Int32", &kafka_settings.message_delivery_async_poll_ms},
         {".message_delivery_sync_poll_ms", "Int32", &kafka_settings.message_delivery_sync_poll_ms},
@@ -198,7 +197,6 @@ void KafkaWALPool::init(const std::string & key)
 
         ksettings->group_id += "-dedicated";
         /// Non internal WAL will not enable compression
-        ksettings->client_side_compression = false;
         auto kwal = std::make_shared<KafkaWAL>(std::move(ksettings));
 
         kwal->startup();
