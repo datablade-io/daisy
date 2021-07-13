@@ -71,6 +71,32 @@ void TabularTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, c
         table_mapping_json.set("order_by_expression", table->sorting_key);
         table_mapping_json.set("partition_by_expression", table->partition_key);
 
+        const auto & catalog_service = CatalogService::instance(query_context);
+        const auto & table_nodes = catalog_service.findTableByName(database, table->name);
+
+        std::multimap<int, String> nodes;
+        for (auto node : table_nodes)
+        {
+            nodes.emplace(node->shard, node->host);
+        }
+
+        Poco::JSON::Array placements;
+        for (auto it = nodes.begin(); it != nodes.end(); it = nodes.upper_bound(it->first))
+        {
+            Poco::JSON::Object placement;
+            placement.set("shard", it->first);
+
+            auto range = nodes.equal_range(it->first);
+            Poco::JSON::Array replicas;
+            while (range.first != range.second)
+            {
+                replicas.add(range.first++->second);
+            }
+            placement.set("replicas", replicas);
+            placements.add(placement);
+        }
+        table_mapping_json.set("placements", placements);
+
         if (create.storage->ttl_table)
         {
             table_mapping_json.set("ttl", queryToString(*create.storage->ttl_table));
