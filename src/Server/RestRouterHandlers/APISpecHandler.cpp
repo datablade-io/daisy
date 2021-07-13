@@ -1,5 +1,4 @@
 #include "APISpecHandler.h"
-
 #include "YAMLParser.h"
 
 #include <Poco/DirectoryIterator.h>
