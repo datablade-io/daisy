@@ -70,6 +70,7 @@ void TabularTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, c
         table_mapping_json.set("engine", table->engine);
         table_mapping_json.set("order_by_expression", table->sorting_key);
         table_mapping_json.set("partition_by_expression", table->partition_key);
+
         if (create.storage->ttl_table)
         {
             table_mapping_json.set("ttl", queryToString(*create.storage->ttl_table));
