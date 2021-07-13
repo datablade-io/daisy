@@ -315,6 +315,11 @@ TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInMemory(const Strin
 
 TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInTable(const String & id)
 {
+    if(!tableExists())
+    {
+        return nullptr;
+    }
+
     CurrentThread::detachQueryIfNotDetached();
     /// FIXME: Remove DISTINCT when we resolve the checkpointing issue
     auto query_template = "SELECT DISTINCT id, status, progress, "
@@ -372,6 +377,11 @@ void TaskStatusService::findByUserInMemory(const String & user, std::vector<Task
 
 void TaskStatusService::findByUserInTable(const String & user, std::vector<TaskStatusService::TaskStatusPtr> & res)
 {
+    if(!tableExists())
+    {
+        return;
+    }
+
     assert(!user.empty());
     CurrentThread::detachQueryIfNotDetached();
     auto query_template = "SELECT DISTINCT id, status, progress, "
