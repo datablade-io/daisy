@@ -141,7 +141,7 @@ class RangeFilterRename : public Poco::Net::HTTPRequestHandler
                     }
                     try
                     {
-                        handler -> action(*ast, rule);
+                        handler -> action(ast, rule);
                         delete handler;
                         result.successCount += 1;
                     }

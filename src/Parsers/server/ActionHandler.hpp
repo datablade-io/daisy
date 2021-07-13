@@ -10,7 +10,7 @@ class ActionHandler
     public:
         ActionHandler() {}
 
-        virtual int action(const DB::IAST & ast, Poco::JSON::Object::Ptr& jsonObj)
+        virtual int action(DB::ASTPtr & ast, Poco::JSON::Object::Ptr& jsonObj)
         {
             (void)ast;
             (void)jsonObj;

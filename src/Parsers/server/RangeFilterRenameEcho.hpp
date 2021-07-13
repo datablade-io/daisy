@@ -11,7 +11,7 @@
 class RangeFilterRenameEcho: public ActionHandler
 {
     public:
-        virtual int action(const DB::IAST & ast, Poco::JSON::Object::Ptr& jsonObj) override
+        virtual int action(DB::ASTPtr & ast, Poco::JSON::Object::Ptr& jsonObj) override
         {
             rewriterLogger("handle RangeFilterRenameEcho");
             (void)ast;
