@@ -1,5 +1,6 @@
 #pragma once
 
+#include "APISpecHandler.h"
 #include "ClusterInfoHandler.h"
 #include "ColumnRestRouterHandler.h"
 #include "DatabaseRestRouterHandler.h"
@@ -11,7 +12,6 @@
 #include "RestRouterHandler.h"
 #include "SQLAnalyzerRestRouterHandler.h"
 #include "SearchHandler.h"
-#include "SpecDocHandler.h"
 #include "TabularTableRestRouterHandler.h"
 #include "TaskRestRouterHandler.h"
 
@@ -154,10 +154,10 @@ public:
             });
 
         factory.registerRouterHandler(
-            "/dae/spec/doc",
+            "/dae/apis",
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
-                return std::make_shared<DB::SpecDocHandler>(query_context);
+                return std::make_shared<DB::APISpecHandler>(query_context);
             });
     }
 
