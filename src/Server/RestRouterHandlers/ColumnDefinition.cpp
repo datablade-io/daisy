@@ -67,7 +67,11 @@ String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, String
 
     if (payload->has("default"))
     {
-        update_segments.push_back(" MODIFY COLUMN " + column_name + " DEFAULT " + payload->get("default").toString());
+        String default_str = "''";
+        if (!payload->get("default").toString().empty())
+            default_str = payload->get("default").toString();
+
+        update_segments.push_back(" MODIFY COLUMN " + column_name + " DEFAULT " + default_str);
     }
 
     if (payload->has("ttl_expression"))
