@@ -93,9 +93,25 @@ namespace
 /// broadcast the table definitions to notify all CatalogService
 void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextPtr & context)
 {
-    if (!context->isDistributed() || context->isDistributedDDLOperation())
+    if (context->isDistributedDDLOperation())
     {
-        return;
+        if (auto create = ast->as<ASTCreateQuery>())
+        {
+            if (create->storage->engine->name == "DistributedMergeTree")
+                return;
+        }
+
+        if (auto drop = ast->as<ASTDropQuery>())
+        {
+            if (CatalogService::instance(context).findTableByName(drop->database, drop->table)[0]->engine == "DistributedMergeTree")
+                return;
+        }
+
+        if (auto alter = ast->as<ASTAlterQuery>())
+        {
+            if (CatalogService::instance(context).findTableByName(alter->database, alter->table)[0]->engine == "DistributedMergeTree")
+                return;
+        }
     }
 
     if (auto create = ast->as<ASTCreateQuery>())

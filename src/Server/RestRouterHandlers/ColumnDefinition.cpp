@@ -21,7 +21,11 @@ String getCreateColumnDefination(const Poco::JSON::Object::Ptr & column)
 
     if (column->has("default"))
     {
-        column_definition.push_back(" DEFAULT " + column->get("default").toString());
+        String default_str = "''";
+        if (!column->get("default").toString().empty())
+            default_str = column->get("default").toString();
+
+        column_definition.push_back(" DEFAULT " + default_str);
     }
 
     if (column->has("compression_codec"))
