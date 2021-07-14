@@ -123,24 +123,47 @@ TEST(CheckRecordSerializationDeserialization, Compression)
     checkRecord(cols, *r, *rr);
 }
 
-TEST(CheckRecordSerializationDeserialization, Benchmark)
+TEST(CheckRecordSerializationDeserialization, WriteBenchmark)
 {
     auto r = createRecord();
-    /// 100000 write/read
-    auto write_read_loop = [&](bool compressed) {
-        for (auto i = 0; i < 100000; i++)
+
+    int32_t n = 1000000;
+    auto write_loop = [&](bool compressed) {
+        for (auto i = 0; i < n; i++)
         {
-            ByteVector data{Record::write(*r, compressed)};
-            auto rr = Record::read(reinterpret_cast<char *>(data.data()), data.size());
+            Record::write(*r, compressed);
         }
     };
 
     auto t = std::chrono::high_resolution_clock::now();
-    write_read_loop(false);
+    write_loop(false);
     std::chrono::duration<double> duration0 = std::chrono::high_resolution_clock::now() - t;
 
     t = std::chrono::high_resolution_clock::now();
-    write_read_loop(true);
+    write_loop(true);
     std::chrono::duration<double> duration1 = std::chrono::high_resolution_clock::now() - t;
-    std::cout << "uncompressed: " << duration0.count() << " (s)\tcompressed: " << duration1.count() << " (s)" << std::endl;
+    std::cout << "write uncompressed: " << int32_t(n / duration0.count()) << "/s write compressed: " << int32_t(n / duration1.count()) << "/s" << std::endl;
+}
+
+TEST(CheckRecordSerializationDeserialization, ReadBenchmark)
+{
+    auto r = createRecord();
+
+    int32_t n = 1000000;
+    auto read_loop = [&](bool compressed) {
+    	ByteVector data{Record::write(*r, compressed)};
+        for (auto i = 0; i < n; i++)
+        {
+            Record::read(reinterpret_cast<char *>(data.data()), data.size());
+        }
+    };
+
+    auto t = std::chrono::high_resolution_clock::now();
+    read_loop(false);
+    std::chrono::duration<double> duration0 = std::chrono::high_resolution_clock::now() - t;
+
+    t = std::chrono::high_resolution_clock::now();
+    read_loop(true);
+    std::chrono::duration<double> duration1 = std::chrono::high_resolution_clock::now() - t;
+    std::cout << "read uncompressed: " << int32_t(n / duration0.count()) << "/s read compressed: " << int32_t(n / duration1.count()) << "/s" << std::endl;
 }
