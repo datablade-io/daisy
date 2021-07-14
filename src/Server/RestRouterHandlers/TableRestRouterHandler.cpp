@@ -258,7 +258,7 @@ void TableRestRouterHandler::buildTablePlacements(Poco::JSON::Object & resp_tabl
         nodes.emplace(node->shard, node->host);
     }
 
-    Poco::JSON::Array placements;
+    Poco::JSON::Array shards;
     for (auto it = nodes.begin(); it != nodes.end(); it = nodes.upper_bound(it->first))
     {
         Poco::JSON::Object placement;
@@ -271,9 +271,9 @@ void TableRestRouterHandler::buildTablePlacements(Poco::JSON::Object & resp_tabl
             replicas.add(range.first++->second);
         }
         placement.set("replicas", replicas);
-        placements.add(placement);
+        shards.add(placement);
     }
-    resp_table.set("placements", placements);
+    resp_table.set("shards", shards);
 }
 
 String TableRestRouterHandler::getEngineExpr(const Poco::JSON::Object::Ptr & payload) const
