@@ -49,17 +49,24 @@ String getSpecPath(const String & config_path)
 
 std::pair<String, Int32> APISpecHandler::executeGet(const Poco::JSON::Object::Ptr & /*payload*/) const
 {
-    const String  & spec_path = getSpecPath(query_context->getConfigPath());
+    const String & spec_path = getSpecPath(query_context->getConfigPath());
+    if (spec_path.empty())
+    {
+        return {
+            jsonErrorResponse(
+                "The clickhouse-spec file : '" + spec_path
+                    + "' could not be found, please keep it consistent with the clickhouse-server path",
+                ErrorCodes::RESOURCE_NOT_FOUND),
+            HTTPResponse::HTTP_NOT_FOUND};
+    }
+
     Poco::Path path(spec_path);
     path.append("rest-api");
-
     if (!Poco::File(path).exists())
     {
         return {
             jsonErrorResponse(
-                "The clickhouse-spec file : '" + path.toString()
-                    + "' could not be found, please keep it consistent with the clickhouse-server path",
-                ErrorCodes::RESOURCE_NOT_FOUND),
+                "Failed to find the rest-api under the clickhouse-spec , path is : " + path.toString(), ErrorCodes::RESOURCE_NOT_FOUND),
             HTTPResponse::HTTP_NOT_FOUND};
     }
 

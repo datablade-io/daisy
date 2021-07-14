@@ -7,7 +7,7 @@ namespace DB
 class APISpecHandler final : public RestRouterHandler
 {
 public:
-   explicit APISpecHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "SpecDoc") { }
+   explicit APISpecHandler(ContextPtr query_context_) : RestRouterHandler(query_context_, "APISpec") { }
    ~APISpecHandler() override { }
 
 private:
