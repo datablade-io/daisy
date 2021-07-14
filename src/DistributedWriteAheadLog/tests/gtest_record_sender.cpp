@@ -26,7 +26,7 @@ std::unique_ptr<Record> createRecord()
 
     auto id_col = uint64_type->createColumn();
     /// auto id_col = make_shared<ColumnInt64>();
-    auto *id_col_inner = typeid_cast<ColumnUInt64 *>(id_col.get());
+    auto * id_col_inner = typeid_cast<ColumnUInt64 *>(id_col.get());
     id_col_inner->insertValue(102);
     id_col_inner->insertValue(101);
     id_col_inner->insertValue(100);
@@ -36,7 +36,7 @@ std::unique_ptr<Record> createRecord()
 
     auto cpu_col = float64_type->createColumn();
     /// auto cpu_col = make_shared<ColumnFloat64>();
-    auto *cpu_col_inner = typeid_cast<ColumnFloat64 *>(cpu_col.get());
+    auto * cpu_col_inner = typeid_cast<ColumnFloat64 *>(cpu_col.get());
     cpu_col_inner->insertValue(13.338);
     cpu_col_inner->insertValue(17.378);
     cpu_col_inner->insertValue(11.539);
@@ -54,7 +54,7 @@ std::unique_ptr<Record> createRecord()
 
     auto time_col = datetime64_type->createColumn();
     /// auto time_col = make_shared<ColumnDecimal<DateTime64>>;
-    auto *time_col_inner = typeid_cast<ColumnDecimal<DateTime64> *>(time_col.get());
+    auto * time_col_inner = typeid_cast<ColumnDecimal<DateTime64> *>(time_col.get());
     time_col_inner->insertValue(1612286044.256326);
     time_col_inner->insertValue(1612296044.256326);
     time_col_inner->insertValue(1612276044.256326);
@@ -127,9 +127,8 @@ TEST(CheckRecordSerializationDeserialization, Benchmark)
 {
     auto r = createRecord();
     /// 100000 write/read
-    auto write_read_loop = [&](bool compressed)
-    {
-        for(auto i=0;i<100000;i++)
+    auto write_read_loop = [&](bool compressed) {
+        for (auto i = 0; i < 100000; i++)
         {
             ByteVector data{Record::write(*r, compressed)};
             auto rr = Record::read(reinterpret_cast<char *>(data.data()), data.size());

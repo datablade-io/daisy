@@ -22,8 +22,8 @@ ByteVector Record::write(const Record & record, bool compressed)
     /// flags bits distribution
     /// [0-4] : Version
     /// [5-10] : OpCode
-    /// [11-13] : Compression
-    /// [14-63] : Reserved
+    /// [11] : Compression
+    /// [12-63] : Reserved
     uint64_t flags = VERSION | (static_cast<UInt8>(record.op_code) << 5ul) | (static_cast<UInt8>(compressed)) << 11ul;
     DB::writeIntBinary(flags, wb);
 
