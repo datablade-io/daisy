@@ -27,7 +27,7 @@ namespace
     const String DATA_RETENTION_KEY = "data_retention";
     const String LOG_ROLL_SIZE_KEY = "log_roll_size";
     const String LOG_ROLL_PERIOD_KEY = "log_roll_period";
-    const String COMPRESSION_KEY = "compression";
+    const String COMPRESSION_KEY = "client_side_compression";
 
     const String THIS_HOST = getFQDNOrHostName();
 }

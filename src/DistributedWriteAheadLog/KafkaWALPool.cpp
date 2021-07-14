@@ -196,7 +196,6 @@ void KafkaWALPool::init(const std::string & key)
         auto ksettings = kafka_settings.clone();
 
         ksettings->group_id += "-dedicated";
-        /// Non internal WAL will not enable compression
         auto kwal = std::make_shared<KafkaWAL>(std::move(ksettings));
 
         kwal->startup();
