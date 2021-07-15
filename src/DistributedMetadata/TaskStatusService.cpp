@@ -221,10 +221,16 @@ bool TaskStatusService::validateSchema(const Block & block, const std::vector<St
 
 bool TaskStatusService::tableExists() const
 {
+    static bool table_exists = false;
+    if(table_exists)
+    {
+        return true;
+    }
     StorageID sid{"system", "tasks"};
     /// Try local catalog
     if (DatabaseCatalog::instance().isTableExist(sid, global_context))
     {
+        table_exists = true;
         return true;
     }
 
@@ -234,13 +240,15 @@ bool TaskStatusService::tableExists() const
     auto & catalog_service = CatalogService::instance(global_context);
     if (catalog_service.tableExists(sid.getDatabaseName(), sid.getTableName()))
     {
+        table_exists = true;
         return true;
     }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     /// Try topic name
     auto result = dwal->describe(DWAL::escapeDWalName("system", "tasks"), dwal_append_ctx);
-    return result.err == ErrorCodes::OK;
+    table_exists = (result.err == ErrorCodes::OK);
+    return table_exists;
 }
 
 TaskStatusService::TaskStatusPtr TaskStatusService::buildTaskStatusFromRecord(const DWAL::RecordPtr & record) const
