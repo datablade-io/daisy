@@ -288,7 +288,7 @@ void DDLService::createTable(DWAL::RecordPtr record)
         const String * url_parameters = nullptr;
         if (record->headers.contains("url_parameters"))
         {
-            url_parameters = &record->headers.at("url_paramaters");
+            url_parameters = &record->headers.at("url_parameters");
         }
         /// Create a DWAL for this table.
         createDWAL(database, table, shards, replication_factor, url_parameters);
