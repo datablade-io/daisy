@@ -219,10 +219,9 @@ bool TaskStatusService::validateSchema(const Block & block, const std::vector<St
     return true;
 }
 
-bool TaskStatusService::tableExists() const
+bool TaskStatusService::tableExists()
 {
-    static bool table_exists = false;
-    if(table_exists)
+    if (table_exists)
     {
         return true;
     }
@@ -323,7 +322,7 @@ TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInMemory(const Strin
 
 TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInTable(const String & id)
 {
-    if(!tableExists())
+    if (!tableExists())
     {
         return nullptr;
     }
@@ -385,7 +384,7 @@ void TaskStatusService::findByUserInMemory(const String & user, std::vector<Task
 
 void TaskStatusService::findByUserInTable(const String & user, std::vector<TaskStatusService::TaskStatusPtr> & res)
 {
-    if(!tableExists())
+    if (!tableExists())
     {
         return;
     }
@@ -502,7 +501,7 @@ void TaskStatusService::persistentFinishedTask()
     (*persistent_task)->scheduleAfter(RESCHEDULE_TIME_MS);
 }
 
-bool TaskStatusService::createTaskTable() const
+bool TaskStatusService::createTaskTable()
 {
     const auto & config = global_context->getConfigRef();
     const auto & conf = configSettings();
