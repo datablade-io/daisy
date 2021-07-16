@@ -305,6 +305,19 @@ std::pair<CatalogService::TablePtr, StoragePtr> CatalogService::findTableStorage
     return {table_p, nullptr};
 }
 
+void CatalogService::deleteTableStorageByName(const String & database, const String & table)
+{
+    std::shared_lock storage_guard{storage_rwlock};
+
+    auto storage_iter = storages.find(std::make_pair(database, table));
+    if (storage_iter != storages.end())
+    {
+        auto removed = storages.erase(storage_iter);
+        assert(removed == 1);
+        (void)removed;
+    }
+}
+
 CatalogService::TablePtrs CatalogService::findTableByName(const String & database, const String & table) const
 {
     std::vector<TablePtr> results;
@@ -386,6 +399,8 @@ void CatalogService::deleteCatalogForNode(const NodePtr & node)
     {
         auto iter_by_name = indexed_by_name.find(std::make_pair(p.second->database, p.second->name));
         assert(iter_by_name != indexed_by_name.end());
+
+        deleteTableStorageByName(p.second->database, p.second->name);
 
         /// Deleted table, remove from `indexed_by_name` and `indexed_by_id`
         auto removed = iter_by_name->second.erase(std::make_pair(p.second->node_identity, p.second->shard));
@@ -650,6 +665,7 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             auto iter_by_name = indexed_by_name.find(std::make_pair(p.second->database, p.second->name));
             assert(iter_by_name != indexed_by_name.end());
 
+            deleteTableStorageByName(p.second->database, p.second->name);
             /// Deleted table, remove from `indexed_by_name` and `indexed_by_id`
             auto removed = iter_by_name->second.erase(std::make_pair(p.second->node_identity, p.second->shard));
             assert(removed == 1);
@@ -695,7 +711,7 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
         }
 
         {
-            /// FIXME, if table definition changed, we will need update the storage inline
+            deleteTableStorageByName(p.second->database, p.second->name);
             std::unique_lock storage_guard{storage_rwlock};
             if (uuid != UUIDHelpers::Nil)
             {
