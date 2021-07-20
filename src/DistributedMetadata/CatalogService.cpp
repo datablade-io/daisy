@@ -305,17 +305,10 @@ std::pair<CatalogService::TablePtr, StoragePtr> CatalogService::findTableStorage
     return {table_p, nullptr};
 }
 
-void CatalogService::deleteTableStorageByName(const String & database, const String & table)
+inline void CatalogService::deleteTableStorageByName(const String & database, const String & table)
 {
     std::shared_lock storage_guard{storage_rwlock};
-
-    auto storage_iter = storages.find(std::make_pair(database, table));
-    if (storage_iter != storages.end())
-    {
-        auto removed = storages.erase(storage_iter);
-        assert(removed == 1);
-        (void)removed;
-    }
+    storages.erase(std::make_pair(database, table));
 }
 
 CatalogService::TablePtrs CatalogService::findTableByName(const String & database, const String & table) const
@@ -711,10 +704,11 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
         }
 
         {
-            deleteTableStorageByName(p.second->database, p.second->name);
             std::unique_lock storage_guard{storage_rwlock};
             if (uuid != UUIDHelpers::Nil)
             {
+                deleteTableStorageByName(p.second->database, p.second->name);
+
                 auto removed = indexed_by_id.erase(uuid);
                 (void)removed;
                 assert(removed);
