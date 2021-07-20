@@ -147,9 +147,9 @@ bool RestHTTPRequestHandler::authenticateUser(
 
     /// The user and password can be passed by headers (similar to X-Auth-*),
     /// which is used by load balancers to pass authentication information.
-    std::string user = request.get("X-ClickHouse-User", "");
-    std::string password = request.get("X-ClickHouse-Key", "");
-    std::string quota_key = request.get("X-ClickHouse-Quota", "");
+    std::string user = request.get("X-Daisy-User", "");
+    std::string password = request.get("X-Daisy-Key", "");
+    std::string quota_key = request.get("X-Daisy-Quota", "");
 
     std::string spnego_challenge;
 
@@ -203,7 +203,7 @@ bool RestHTTPRequestHandler::authenticateUser(
         /// It is prohibited to mix different authorization schemes.
         if (request.hasCredentials() || params.has("user") || params.has("password") || params.has("quota_key"))
             throw Exception(
-                "Invalid authentication: it is not allowed to use X-ClickHouse HTTP headers and other authentication methods "
+                "Invalid authentication: it is not allowed to use X-Daisy HTTP headers and other authentication methods "
                 "simultaneously",
                 ErrorCodes::AUTHENTICATION_FAILED);
     }
@@ -338,14 +338,14 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
 
     /// Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
     ClientInfo & client_info = request_context->getClientInfo();
-    request_context->setCurrentQueryId(request.get("x-bdg-request-id", request.get("X-ClickHouse-Query-Id", "")));
+    request_context->setCurrentQueryId(request.get("x-daisy-request-id", request.get("X-Daisy-Query-Id", "")));
     client_info.initial_query_id = client_info.current_query_id;
 
     /// Setup idemopotent key if it is passed by user
-    String idem_key = request.get("X-ClickHouse-Idempotent-Id", "");
+    String idem_key = request.get("X-Daisy-Idempotent-Id", "");
     if (idem_key.empty())
     {
-        idem_key = request.get("x-bdg-idempotent-id", "");
+        idem_key = request.get("x-daisy-idempotent-id", "");
     }
 
     if (!idem_key.empty())
@@ -356,7 +356,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     CurrentThread::QueryScope query_scope{request_context};
     /// Setup common response headers etc
     response.setContentType("application/json; charset=UTF-8");
-    response.add("X-ClickHouse-Query-Id", request_context->getCurrentQueryId());
+    response.add("X-Daisy-Query-Id", request_context->getCurrentQueryId());
 
     /// Set keep alive timeout
     const auto & config = server.config();
@@ -430,7 +430,7 @@ void RestHTTPRequestHandler::trySendExceptionToClient(
 {
     try
     {
-        response.set("X-ClickHouse-Exception-Code", std::to_string(exception_code));
+        response.set("X-Daisy-Exception-Code", std::to_string(exception_code));
 
         /// FIXME: make sure that no one else is reading from the same stream at the moment.
 
@@ -447,7 +447,7 @@ void RestHTTPRequestHandler::trySendExceptionToClient(
 
         if (auth_fail)
         {
-            response.requireAuthentication("ClickHouse server HTTP API");
+            response.requireAuthentication("Daisy server HTTP API");
         }
         else
         {

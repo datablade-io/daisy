@@ -46,12 +46,12 @@ std::pair<String, Int32> sendRequest(
         request.setContentLength(payload.size());
         request.setContentType("application/json");
         /// FIXME : query ID chain. Change the query ID to avoid same query ID issue
-        request.add("X-ClickHouse-Query-Id", "from-" + query_id);
-        request.add("X-ClickHouse-User", user);
+        request.add("X-Daisy-Query-Id", "from-" + query_id);
+        request.add("X-Daisy-User", user);
 
         if (!password.empty())
         {
-            request.add("X-ClickHouse-Key", password);
+            request.add("X-Daisy-Key", password);
         }
 
         auto & ostr = session->sendRequest(request);
