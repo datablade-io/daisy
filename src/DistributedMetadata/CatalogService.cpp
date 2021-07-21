@@ -704,6 +704,7 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
         }
 
         {
+            /// FIXME, if table definition changed, we will need update the storage inline
             std::unique_lock storage_guard{storage_rwlock};
             if (uuid != UUIDHelpers::Nil)
             {
