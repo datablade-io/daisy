@@ -77,7 +77,7 @@ paths:
           description: the unique id to identify a ddl request
           schema:
             type: string
-        - name: X-Daisy-Query-Id
+        - name: x-daisy-query-id
           in: header
           required: false
           description: the unique id to identify a ddl request
@@ -88,7 +88,7 @@ paths:
           required: false
           schema:
             type: string
-        - name: X-Daisy-User
+        - name: x-daisy-user
           in: header
           required: false
           schema:
@@ -98,7 +98,7 @@ paths:
           required: false
           schema:
             type: string
-        - name: X-Daisy-Key
+        - name: x-daisy-key
           in: header
           required: false
           schema:
@@ -108,7 +108,7 @@ paths:
           required: false
           schema:
             type: string
-        - name: X-Daisy-Quota
+        - name: x-daisy-quota
           in: header
           required: false
           schema:
@@ -332,7 +332,7 @@ paths:
           description: the unique id to identify a ddl request
           schema:
             type: string
-        - name: X-Daisy-Query-Id
+        - name: x-daisy-query-id
           in: header
           required: false
           description: the unique id to identify a ddl request
@@ -343,7 +343,7 @@ paths:
           required: false
           schema:
             type: string
-        - name: X-Daisy-User
+        - name: x-daisy-user
           in: header
           required: false
           schema:
@@ -353,7 +353,7 @@ paths:
           required: false
           schema:
             type: string
-        - name: X-Daisy-Key
+        - name: x-daisy-key
           in: header
           required: false
           schema:
@@ -363,7 +363,7 @@ paths:
           required: false
           schema:
             type: string
-        - name: X-Daisy-Quota
+        - name: x-daisy-quota
           in: header
           required: false
           schema:
@@ -383,7 +383,7 @@ paths:
         description: the unique id to identify a ddl request
         schema:
           type: string
-      - name: X-Daisy-Query-Id
+      - name: x-daisy-query-id
         in: header
         required: false
         description: the unique id to identify a ddl request
@@ -394,7 +394,7 @@ paths:
         required: false
         schema:
           type: string
-      - name: X-Daisy-User
+      - name: x-daisy-user
         in: header
         required: false
         schema:
@@ -404,7 +404,7 @@ paths:
         required: false
         schema:
           type: string
-      - name: X-Daisy-Key
+      - name: x-daisy-key
         in: header
         required: false
         schema:
@@ -414,7 +414,7 @@ paths:
         required: false
         schema:
           type: string
-      - name: X-Daisy-Quota
+      - name: x-daisy-quota
         in: header
         required: false
         schema:
