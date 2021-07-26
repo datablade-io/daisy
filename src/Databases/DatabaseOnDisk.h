@@ -1,11 +1,11 @@
 #pragma once
 
+#include <mutex>
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Databases/DatabasesCommon.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Storages/IStorage.h>
-#include <mutex>
 
 namespace DB
 {
@@ -111,7 +111,7 @@ protected:
     };
 
     const MetaDataCacheElem* findCache(const String & key) const;
-    void setCache(const String & key, const MetaDataCacheElem& value) const;
+    void setCache(const String & key, const MetaDataCacheElem & value) const;
 
     mutable std::unordered_map<String, MetaDataCacheElem> metadata_cache;
     mutable std::shared_mutex cache_rw_mutex;
