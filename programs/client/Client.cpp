@@ -864,7 +864,23 @@ private:
         if (!config().has("multiquery"))
         {
             assert(!query_fuzzer_runs);
-            processTextAsSingleQuery(text);
+            String::size_type idx1 = text.find( " stream " );
+            String::size_type idx2 = text.find(" STREAM ");
+            if (idx1 != String::npos || idx2 != String::npos)
+            {
+                bool if_success = true;
+                while (true && if_success)
+                {
+                    if_success = processTextAsSingleQuery(text);
+                    sleep(5);
+                }
+
+            }
+            else
+            {
+                processTextAsSingleQuery(text);
+            }
+
             return true;
         }
 
@@ -1509,7 +1525,7 @@ private:
         return true;
     }
 
-    void processTextAsSingleQuery(const String & text_)
+    bool processTextAsSingleQuery(const String & text_)
     {
         full_query = text_;
 
@@ -1519,7 +1535,9 @@ private:
         parsed_query = parseQuery(begin, begin + full_query.size(), false);
 
         if (!parsed_query)
-            return;
+        {
+            return false;
+        }
 
         // An INSERT query may have the data that follow query text. Remove the
         /// Send part of query without data, because data will be sent separately.
@@ -1538,7 +1556,9 @@ private:
         if (have_error)
         {
             reportQueryError();
+            return false;
         }
+        return true;
     }
 
     // Parameters are in global variables:
