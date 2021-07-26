@@ -1,8 +1,10 @@
 #include <Databases/DatabasesCommon.h>
 #include <Interpreters/InterpreterCreateQuery.h>
 #include <Interpreters/Context.h>
+#include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/formatAST.h>
+#include <Parsers/queryToString.h>
 #include <Storages/StorageDictionary.h>
 #include <Storages/StorageFactory.h>
 #include <Common/typeid_cast.h>
@@ -19,6 +21,34 @@ namespace ErrorCodes
     extern const int UNKNOWN_TABLE;
     extern const int UNKNOWN_DATABASE;
 }
+
+/// Daisy: starts.
+std::tuple<String, String> IDatabase::astToQueryAndEngineStringImpl(ASTPtr ast, ContextPtr context) const
+{
+    String query_string;
+    String engine_full;
+    if (ast)
+    {
+        auto & ast_create = ast->as<ASTCreateQuery &>();
+        if (!context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil)
+        {
+            ast_create.uuid = UUIDHelpers::Nil;
+            ast_create.to_inner_uuid = UUIDHelpers::Nil;
+        }
+        query_string = queryToString(ast);
+
+        if (ast_create.storage)
+        {
+            engine_full = queryToString(*ast_create.storage);
+
+            static const char * const extra_head = " ENGINE = ";
+            if (startsWith(engine_full, extra_head))
+                engine_full = engine_full.substr(strlen(extra_head));
+        }
+    }
+    return {query_string, engine_full};
+}
+/// Daisy: ends.
 
 DatabaseWithOwnTablesBase::DatabaseWithOwnTablesBase(const String & name_, const String & logger, ContextPtr context_)
         : IDatabase(name_), WithContext(context_->getGlobalContext()), log(&Poco::Logger::get(logger))

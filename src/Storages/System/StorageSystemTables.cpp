@@ -357,37 +357,11 @@ protected:
 
                 if (columns_mask[src_index] || columns_mask[src_index + 1])
                 {
-                    ASTPtr ast = database->tryGetCreateTableQuery(table_name, context);
-
-                    if (ast && !context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil)
-                    {
-                        auto & create = ast->as<ASTCreateQuery &>();
-                        create.uuid = UUIDHelpers::Nil;
-                        create.to_inner_uuid = UUIDHelpers::Nil;
-                    }
-
+                    auto [query, engine_full] = database->getCreateTableQueryAndEngineFullString(table_name, context);
                     if (columns_mask[src_index++])
-                        res_columns[res_index++]->insert(ast ? queryToString(ast) : "");
-
+                        res_columns[res_index++]->insert(query);
                     if (columns_mask[src_index++])
-                    {
-                        String engine_full;
-
-                        if (ast)
-                        {
-                            const auto & ast_create = ast->as<ASTCreateQuery &>();
-                            if (ast_create.storage)
-                            {
-                                engine_full = queryToString(*ast_create.storage);
-
-                                static const char * const extra_head = " ENGINE = ";
-                                if (startsWith(engine_full, extra_head))
-                                    engine_full = engine_full.substr(strlen(extra_head));
-                            }
-                        }
-
                         res_columns[res_index++]->insert(engine_full);
-                    }
                 }
                 else
                     src_index += 2;
