@@ -82,8 +82,7 @@ def parse_env_variables(build_type, compiler, sanitizer, package_type, image_typ
     # Explicitly use LLD with Clang by default.
     # Don't force linker for cross-compilation.
     # Daisy : starts. Don't force linker for sccache & ccache.
-    if is_clang and not is_cross_compile and not cache == 'sccache' and not
-    cache == 'ccache':
+    if is_clang and not is_cross_compile and not cache == 'sccache' and not cache == 'ccache':
         cmake_flags.append("-DLINKER_NAME=lld")
     # Daisy : ends.
 
