@@ -75,7 +75,7 @@ void KafkaWALConsumer::initHandle()
         std::make_pair("bootstrap.servers", settings->brokers.c_str()),
         std::make_pair("group.id", settings->group_id),
         /// Enable auto offset commit
-        std::make_pair("enable.auto.commit", "true"),
+        std::make_pair("enable.auto.commit", std::to_string(settings->enable_auto_commit)),
         std::make_pair("auto.commit.interval.ms", std::to_string(settings->auto_commit_interval_ms)),
         std::make_pair("fetch.message.max.bytes", std::to_string(settings->fetch_message_max_bytes)),
         std::make_pair("fetch.wait.max.ms", std::to_string(settings->fetch_wait_max_ms)),
@@ -93,6 +93,10 @@ void KafkaWALConsumer::initHandle()
         std::make_pair("session.timeout.ms", std::to_string(settings->session_timeout_ms)),
         std::make_pair("max.poll.interval.ms", std::to_string(settings->max_poll_interval_ms)),
         std::make_pair("auto.offset.reset", settings->auto_offset_reset),
+        /// ensuring no on-the-wire or on-disk corruption to the messages occurred
+        std::make_pair("check.crcs", std::to_string(settings->check_crcs)),
+        std::make_pair("statistics.interval.ms", std::to_string(settings->statistic_internal_ms)),
+        std::make_pair("security.protocol", settings->security_protocol.c_str()), 
     };
 
     if (!settings->debug.empty())
