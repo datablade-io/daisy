@@ -275,6 +275,7 @@ void KafkaWAL::initProducerHandle()
     std::vector<std::pair<std::string, std::string>> producer_params = {
         std::make_pair("bootstrap.servers", settings->brokers.c_str()),
         std::make_pair("queue.buffering.max.messages", std::to_string(settings->queue_buffering_max_messages)),
+        std::make_pair("queue.buffering.max.kbytes", std::to_string(settings->queue_buffering_max_kbytes)),
         std::make_pair("queue.buffering.max.ms", std::to_string(settings->queue_buffering_max_ms)),
         std::make_pair("message.send.max.retries", std::to_string(settings->message_send_max_retries)),
         std::make_pair("retry.backoff.ms", std::to_string(settings->retry_backoff_ms)),
