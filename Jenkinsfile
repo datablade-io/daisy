@@ -548,7 +548,7 @@ pipeline {
                 stage ('Case-5: Tests On Coverage') {
                     agent { 
                         node {
-                            label 'ph'
+                            label 'test1'
                             customWorkspace "${env.WORKSPACE}/CICD_Tests_On_Coverage"
                         }
                     }
