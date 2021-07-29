@@ -704,11 +704,9 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
         }
 
         /// FIXME, if table definition changed, we will need update the storage inline
+        if (uuid != UUIDHelpers::Nil)
         {
-            if (uuid != UUIDHelpers::Nil)
-            {
-                deleteTableStorageByName(p.second->database, p.second->name);
-            }
+            deleteTableStorageByName(p.second->database, p.second->name);
         }
 
         {

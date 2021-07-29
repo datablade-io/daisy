@@ -75,7 +75,7 @@ void KafkaWALConsumer::initHandle()
         std::make_pair("bootstrap.servers", settings->brokers.c_str()),
         std::make_pair("group.id", settings->group_id),
         /// Enable auto offset commit
-        std::make_pair("enable.auto.commit", std::to_string(settings->enable_auto_commit)),
+        std::make_pair("enable.auto.commit", "true"),
         std::make_pair("auto.commit.interval.ms", std::to_string(settings->auto_commit_interval_ms)),
         std::make_pair("fetch.message.max.bytes", std::to_string(settings->fetch_message_max_bytes)),
         std::make_pair("fetch.wait.max.ms", std::to_string(settings->fetch_wait_max_ms)),
