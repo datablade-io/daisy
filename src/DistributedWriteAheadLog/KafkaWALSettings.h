@@ -58,6 +58,7 @@ struct KafkaWALSettings
     int32_t session_timeout_ms = 10000;
     int32_t max_poll_interval_ms = 30000;
 
+    bool enable_auto_commit = true;
     bool check_crcs = false;
     int32_t auto_commit_interval_ms = 5000;
     int32_t fetch_message_max_bytes = 1048576;
@@ -93,6 +94,7 @@ struct KafkaWALSettings
         settings.push_back("message_timeout_ms=" + std::to_string(message_timeout_ms));
         settings.push_back("message_delivery_async_poll_ms=" + std::to_string(message_delivery_async_poll_ms));
         settings.push_back("message_delivery_sync_poll_ms=" + std::to_string(message_delivery_sync_poll_ms));
+        settings.push_back("enable_auto_commit=" + std::to_string(enable_auto_commit));
         settings.push_back("check_crcs=" + std::to_string(check_crcs));
         settings.push_back("auto_commit_interval_ms=" + std::to_string(auto_commit_interval_ms));
         settings.push_back("queued_min_messages=" + std::to_string(queued_min_messages));
