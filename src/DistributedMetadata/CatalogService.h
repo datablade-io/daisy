@@ -70,6 +70,8 @@ public:
 
     bool tableExists(const String & database, const String & table) const;
     std::pair<bool, bool> columnExists(const String & database, const String & table, const String & column) const;
+    std::pair<bool, bool> localColumnExists(const String & database, const String & table, const String & column) const;
+    String getColumnType(const String & database, const String & table, const String & column) const;
 
     TablePtrs tables() const;
     std::vector<String> databases() const;

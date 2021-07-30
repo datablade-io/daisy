@@ -105,7 +105,7 @@ std::pair<String, Int32> ColumnRestRouterHandler::executePatch(const Poco::JSON:
 
     std::vector<String> update_segments;
     update_segments.push_back("ALTER TABLE " + database + "." + table);
-    update_segments.push_back(getUpdateColumnDefination(payload, column));
+    update_segments.push_back(getUpdateColumnDefination(payload, database, table, column));
     const String & query = boost::algorithm::join(update_segments, " ");
 
     return {processQuery(query), HTTPResponse::HTTP_OK};
@@ -138,7 +138,20 @@ std::pair<String, Int32> ColumnRestRouterHandler::executeDelete(const Poco::JSON
 std::pair<bool, String> ColumnRestRouterHandler::assertColumnExists(const String & table, const String & column) const
 {
     const auto & catalog_service = CatalogService::instance(query_context);
-    auto [table_exist, column_exist] = catalog_service.columnExists(database, table, column);
+
+    bool table_exist, column_exist;
+    if (isDistributedDDL())
+    {
+        auto result = catalog_service.columnExists(database, table, column);
+        table_exist = std::get<0>(result);
+        column_exist = std::get<1>(result);
+    }
+    else
+    {
+        auto result = catalog_service.localColumnExists(database, table, column);
+        table_exist = std::get<0>(result);
+        column_exist = std::get<1>(result);
+    }
 
     if (!table_exist)
     {
@@ -156,7 +169,20 @@ std::pair<bool, String> ColumnRestRouterHandler::assertColumnExists(const String
 std::pair<bool, String> ColumnRestRouterHandler::assertColumnNotExists(const String & table, const String & column) const
 {
     const auto & catalog_service = CatalogService::instance(query_context);
-    auto [table_exist, column_exist] = catalog_service.columnExists(database, table, column);
+
+    bool table_exist, column_exist;
+    if (isDistributedDDL())
+    {
+        auto result = catalog_service.columnExists(database, table, column);
+        table_exist = std::get<0>(result);
+        column_exist = std::get<1>(result);
+    }
+    else
+    {
+        auto result = catalog_service.localColumnExists(database, table, column);
+        table_exist = std::get<0>(result);
+        column_exist = std::get<1>(result);
+    }
 
     if (!table_exist)
     {

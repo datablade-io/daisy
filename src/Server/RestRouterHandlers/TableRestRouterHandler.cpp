@@ -7,8 +7,10 @@
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/queryToString.h>
+#include <common/string.h>
 
 #include <boost/algorithm/string/join.hpp>
+
 
 #include <vector>
 
@@ -220,11 +222,17 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
 
         if (col_decl.default_expression)
         {
-            if (col_decl.default_specifier == "DEFAULT")
-            {
-                cloumn_mapping_json.set("default", queryToString(col_decl.default_expression));
+            String default_str = queryToString(col_decl.default_expression);
+            if(type == "String"){
+                default_str = default_str.substr(1, default_str.length() - 1);
             }
-            else if (col_decl.default_specifier == "ALIAS")
+
+            cloumn_mapping_json.set("default", default_str);
+        }
+        else
+        {
+            String alias = col_decl.tryGetAlias();
+            if (!alias.empty())
             {
                 cloumn_mapping_json.set("alias", queryToString(col_decl.default_expression));
             }
@@ -232,7 +240,9 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
 
         if (col_decl.comment)
         {
-            cloumn_mapping_json.set("comment", queryToString(col_decl.comment));
+            String comment = queryToString(col_decl.comment);
+            comment = comment.substr(1, comment.length() - 1);
+            cloumn_mapping_json.set("comment", comment);
         }
 
         if (col_decl.codec)

@@ -7,8 +7,10 @@
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/parseQuery.h>
+#include <Parsers/queryToString.h>
 #include <Storages/IStorage.h>
 #include <Common/Exception.h>
+#include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
 #include <Poco/Util/AbstractConfiguration.h>
@@ -37,6 +39,7 @@ namespace
 /// Globals
 const String CATALOG_KEY_PREFIX = "cluster_settings.system_catalogs.";
 const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
+const String THIS_HOST = getFQDNOrHostName();
 
 std::regex PARSE_SHARD_REGEX{"shard\\s*=\\s*(\\d+)"};
 std::regex PARSE_SHARDS_REGEX{"DistributedMergeTree\\(\\s*\\d+,\\s*(\\d+)\\s*,"};
@@ -378,6 +381,59 @@ std::pair<bool, bool> CatalogService::columnExists(const String & database, cons
     return {true, false};
 }
 
+std::pair<bool, bool> CatalogService::localColumnExists(const String & database, const String & table, const String & column) const
+{
+    const auto & tables = findTableByName(database, table);
+
+    if (tables.empty())
+        return {false, false};
+
+    ASTPtr query_ptr;
+    for (const auto & table_ptr : tables)
+    {
+        if (table_ptr->host == THIS_HOST && table_ptr->node_identity.find(toString(http_port)) != String::npos)
+        {
+            query_ptr = parseQuery(table_ptr->create_table_query, global_context);
+        }
+    }
+
+    if (query_ptr == nullptr)
+         return {true, false};
+
+    const auto & create = query_ptr->as<const ASTCreateQuery &>();
+    const auto & columns_ast = create.columns_list->columns;
+
+    for (auto ast_it = columns_ast->children.begin(); ast_it != columns_ast->children.end(); ++ast_it)
+    {
+        const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
+        if (col_decl.name == column)
+        {
+            return {true, true};
+        }
+    }
+
+    return {true, false};
+}
+
+String CatalogService::getColumnType(const String & database, const String & table, const String & column) const
+{
+    const auto & tables = findTableByName(database, table);
+    const auto & query_ptr = parseQuery(tables[0]->create_table_query, global_context);
+    const auto & create = query_ptr->as<const ASTCreateQuery &>();
+    const auto & columns_ast = create.columns_list->columns;
+
+    for (auto ast_it = columns_ast->children.begin(); ast_it != columns_ast->children.end(); ++ast_it)
+    {
+        const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
+        if (col_decl.name == column)
+        {
+            return queryToString(col_decl.type);
+        }
+    }
+
+    return "";
+}
+
 void CatalogService::deleteCatalogForNode(const NodePtr & node)
 {
     std::unique_lock guard{catalog_rwlock};
@@ -658,6 +714,7 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             auto iter_by_name = indexed_by_name.find(std::make_pair(p.second->database, p.second->name));
             assert(iter_by_name != indexed_by_name.end());
 
+            /// Deleted Store remove from `storages`
             deleteTableStorageByName(p.second->database, p.second->name);
             /// Deleted table, remove from `indexed_by_name` and `indexed_by_id`
             auto removed = iter_by_name->second.erase(std::make_pair(p.second->node_identity, p.second->shard));
@@ -700,6 +757,13 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
                 /// If uuid changed (table with same name got deleted and recreatd), delete it from indexed_by_id
                 uuid = node_shard_iter->second->uuid;
             }
+
+            /// Judged table definition changed
+            if(node_shard_iter->second != p.second)
+            {
+                deleteTableStorageByName(p.second->database, p.second->name);
+            }
+
             iter_by_name->second.insert_or_assign(std::move(node_shard), p.second);
         }
 
