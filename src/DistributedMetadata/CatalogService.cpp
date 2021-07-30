@@ -398,7 +398,7 @@ std::pair<bool, bool> CatalogService::localColumnExists(const String & database,
     }
 
     if (query_ptr == nullptr)
-         return {true, false};
+        return {true, false};
 
     const auto & create = query_ptr->as<const ASTCreateQuery &>();
     const auto & columns_ast = create.columns_list->columns;
@@ -756,21 +756,16 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             {
                 /// If uuid changed (table with same name got deleted and recreatd), delete it from indexed_by_id
                 uuid = node_shard_iter->second->uuid;
+                deleteTableStorageByName(p.second->database, p.second->name);
             }
 
             /// if table definition changed , delete the storage
-            if(node_shard_iter != iter_by_name->second.end() && node_shard_iter->second != p.second)
+            if (node_shard_iter != iter_by_name->second.end() && node_shard_iter->second != p.second)
             {
                 deleteTableStorageByName(p.second->database, p.second->name);
             }
 
             iter_by_name->second.insert_or_assign(std::move(node_shard), p.second);
-        }
-
-        /// FIXME, if table definition changed, we will need update the storage inline
-        if (uuid != UUIDHelpers::Nil)
-        {
-            deleteTableStorageByName(p.second->database, p.second->name);
         }
 
         {

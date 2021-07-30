@@ -11,7 +11,6 @@
 
 #include <boost/algorithm/string/join.hpp>
 
-
 #include <vector>
 
 namespace DB
@@ -223,7 +222,8 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
         if (col_decl.default_expression)
         {
             String default_str = queryToString(col_decl.default_expression);
-            if(type == "String"){
+            if (type == "String")
+            {
                 default_str = default_str.substr(1, default_str.length() - 1);
             }
 

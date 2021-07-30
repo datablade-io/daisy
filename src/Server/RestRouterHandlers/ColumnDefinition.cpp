@@ -6,7 +6,6 @@
 
 namespace DB
 {
-
 String getCreateColumnDefination(const Poco::JSON::Object::Ptr & column)
 {
     std::vector<String> column_definition;
@@ -25,9 +24,9 @@ String getCreateColumnDefination(const Poco::JSON::Object::Ptr & column)
     {
         String default_str = column->get("default").toString();
 
-        if(column->get("type").toString() == "String")
+        if (column->get("type").toString() == "String")
         {
-            default_str = "'" + default_str +  "'";
+            default_str = "'" + default_str + "'";
         }
 
         column_definition.push_back(" DEFAULT " + default_str);
@@ -81,9 +80,9 @@ String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, const 
 
         String default_str = payload->get("default").toString();
 
-        if(type == "String")
+        if (type == "String")
         {
-            default_str = "'" + default_str +  "'";
+            default_str = "'" + default_str + "'";
         }
 
         update_segments.push_back(" MODIFY COLUMN " + column + " DEFAULT " + default_str);
