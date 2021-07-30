@@ -758,8 +758,8 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
                 uuid = node_shard_iter->second->uuid;
             }
 
-            /// Judged table definition changed
-            if(node_shard_iter->second != p.second)
+            /// if table definition changed , delete the storage
+            if(node_shard_iter != iter_by_name->second.end() && node_shard_iter->second != p.second)
             {
                 deleteTableStorageByName(p.second->database, p.second->name);
             }
