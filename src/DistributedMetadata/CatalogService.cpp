@@ -719,7 +719,6 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             {
                 /// If uuid changed (table with same name got deleted and recreatd), delete it from indexed_by_id
                 uuid = node_shard_iter->second->uuid;
-                deleteTableStorageByName(p.second->database, p.second->name);
             }
 
             /// if table definition changed , delete the storage
