@@ -59,7 +59,7 @@ public:
 
             return true;
         }
-        friend bool operator !=(const Table & lhs, const Table & rhs) { return !(lhs == rhs); }
+        friend bool operator!=(const Table & lhs, const Table & rhs) { return !(lhs == rhs); }
     };
 
     using TablePtr = std::shared_ptr<Table>;
