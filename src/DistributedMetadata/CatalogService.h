@@ -46,14 +46,13 @@ public:
 
         friend bool operator==(const Table & lhs, const Table & rhs)
         {
-            return (
-                (lhs.node_identity == rhs.node_identity) && (lhs.host == rhs.host) && (lhs.database == rhs.database)
+            return (lhs.node_identity == rhs.node_identity) && (lhs.host == rhs.host) && (lhs.database == rhs.database)
                 && (lhs.name == rhs.name) && (lhs.uuid == rhs.uuid) && (lhs.engine == rhs.engine)
                 && (lhs.metadata_path == rhs.metadata_path) && (lhs.data_paths == rhs.data_paths)
                 && (lhs.dependencies_database == rhs.dependencies_database) && (lhs.dependencies_table == rhs.dependencies_table)
                 && (lhs.create_table_query == rhs.create_table_query) && (lhs.engine_full == rhs.engine_full)
                 && (lhs.partition_key == rhs.partition_key) && (lhs.sorting_key == rhs.sorting_key) && (lhs.primary_key == rhs.primary_key)
-                && (lhs.sampling_key == rhs.sampling_key) && (lhs.storage_policy == rhs.storage_policy) && (lhs.shard == rhs.shard));
+                && (lhs.sampling_key == rhs.sampling_key) && (lhs.storage_policy == rhs.storage_policy) && (lhs.shard == rhs.shard);
         }
         friend bool operator!=(const Table & lhs, const Table & rhs) { return !(lhs == rhs); }
     };
