@@ -7,10 +7,8 @@
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/parseQuery.h>
-#include <Parsers/queryToString.h>
 #include <Storages/IStorage.h>
 #include <Common/Exception.h>
-#include <common/getFQDNOrHostName.h>
 #include <common/logger_useful.h>
 
 #include <Poco/Util/AbstractConfiguration.h>
@@ -39,7 +37,6 @@ namespace
 /// Globals
 const String CATALOG_KEY_PREFIX = "cluster_settings.system_catalogs.";
 const String CATALOG_DEFAULT_TOPIC = "__system_catalogs";
-const String THIS_HOST = getFQDNOrHostName();
 
 std::regex PARSE_SHARD_REGEX{"shard\\s*=\\s*(\\d+)"};
 std::regex PARSE_SHARDS_REGEX{"DistributedMergeTree\\(\\s*\\d+,\\s*(\\d+)\\s*,"};
