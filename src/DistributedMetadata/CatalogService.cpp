@@ -7,6 +7,7 @@
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/parseQuery.h>
+#include <Parsers/queryToString.h>
 #include <Storages/IStorage.h>
 #include <Common/Exception.h>
 #include <common/logger_useful.h>
@@ -722,12 +723,9 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             }
 
             /// if table definition changed , delete the storage
-            if (node_shard_iter != iter_by_name->second.end())
+            if (node_shard_iter != iter_by_name->second.end() && *node_shard_iter->second != *p.second)
             {
-                if (*node_shard_iter->second != *p.second)
-                {
-                    deleteTableStorageByName(p.second->database, p.second->name);
-                }
+                deleteTableStorageByName(p.second->database, p.second->name);
             }
 
             iter_by_name->second.insert_or_assign(std::move(node_shard), p.second);

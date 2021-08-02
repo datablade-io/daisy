@@ -241,7 +241,7 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
         if (col_decl.comment)
         {
             String comment = queryToString(col_decl.comment);
-            comment = comment.substr(1, comment.length()-2);
+            comment = comment.substr(1, comment.length() - 2);
             cloumn_mapping_json.set("comment", comment);
         }
 
