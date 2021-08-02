@@ -381,40 +381,6 @@ std::pair<bool, bool> CatalogService::columnExists(const String & database, cons
     return {true, false};
 }
 
-std::pair<bool, bool> CatalogService::localColumnExists(const String & database, const String & table, const String & column) const
-{
-    const auto & tables = findTableByName(database, table);
-
-    if (tables.empty())
-        return {false, false};
-
-    ASTPtr query_ptr;
-    for (const auto & table_ptr : tables)
-    {
-        if (table_ptr->host == THIS_HOST && table_ptr->node_identity.find(toString(http_port)) != String::npos)
-        {
-            query_ptr = parseQuery(table_ptr->create_table_query, global_context);
-        }
-    }
-
-    if (query_ptr == nullptr)
-        return {true, false};
-
-    const auto & create = query_ptr->as<const ASTCreateQuery &>();
-    const auto & columns_ast = create.columns_list->columns;
-
-    for (auto ast_it = columns_ast->children.begin(); ast_it != columns_ast->children.end(); ++ast_it)
-    {
-        const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
-        if (col_decl.name == column)
-        {
-            return {true, true};
-        }
-    }
-
-    return {true, false};
-}
-
 String CatalogService::getColumnType(const String & database, const String & table, const String & column) const
 {
     const auto & tables = findTableByName(database, table);
@@ -760,9 +726,12 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             }
 
             /// if table definition changed , delete the storage
-            if (node_shard_iter != iter_by_name->second.end() && node_shard_iter->second != p.second)
+            if (node_shard_iter != iter_by_name->second.end())
             {
-                deleteTableStorageByName(p.second->database, p.second->name);
+                if (*node_shard_iter->second != *p.second)
+                {
+                    deleteTableStorageByName(p.second->database, p.second->name);
+                }
             }
 
             iter_by_name->second.insert_or_assign(std::move(node_shard), p.second);
