@@ -357,11 +357,24 @@ protected:
 
                 if (columns_mask[src_index] || columns_mask[src_index + 1])
                 {
-                    auto [query, engine_full] = database->getCreateTableQueryAndEngineFullString(table_name, context);
+                    /// Daisy: starts.
+                    StorageInMemoryCreateQueryPtr create_query_snapshot;
+                    if (table)
+                        create_query_snapshot = table->getInMemoryCreateQueryPtr();
+
                     if (columns_mask[src_index++])
+                    {
+                        const auto & query = create_query_snapshot ?
+                                (context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil
+                                    ? create_query_snapshot->getQueryUUID() : create_query_snapshot->getQuery()) : "";
                         res_columns[res_index++]->insert(query);
+                    }
                     if (columns_mask[src_index++])
+                    {
+                        const auto & engine_full = create_query_snapshot ? create_query_snapshot->getEngineFull() : "";
                         res_columns[res_index++]->insert(engine_full);
+                    }
+                    /// Daisy: ends.
                 }
                 else
                     src_index += 2;

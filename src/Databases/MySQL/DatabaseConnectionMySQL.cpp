@@ -496,6 +496,11 @@ void DatabaseConnectionMySQL::createTable(ContextPtr, const String & table_name,
             ErrorCodes::UNEXPECTED_AST_STRUCTURE);
 
     attachTable(table_name, storage, {});
+
+    /// Daisy: starts.
+    const auto & new_create_query = parseCreateQueryFromAST(create_query, database_name, table_name);
+    storage->setInMemoryCreateQuery(new_create_query);
+    /// Daisy: ends.
 }
 
 }

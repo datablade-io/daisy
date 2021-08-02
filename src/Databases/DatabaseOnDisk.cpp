@@ -1,6 +1,5 @@
 #include <Databases/DatabaseOnDisk.h>
 
-#include <sys/stat.h>
 #include <IO/ReadBufferFromFile.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBufferFromFile.h>
@@ -191,6 +190,7 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
     }
 }
 
+
 DatabaseOnDisk::DatabaseOnDisk(
     const String & name,
     const String & metadata_path_,
@@ -239,6 +239,11 @@ void DatabaseOnDisk::createTable(
         /// Metadata already exists, table was detached
         removeDetachedPermanentlyFlag(local_context, table_name, table_metadata_path, true);
         attachTable(table_name, table, getTableDataPath(create));
+
+        /// Daisy: starts.
+        const auto & new_create_query = parseCreateQueryFromAST(query, database_name, table_name);
+        table->setInMemoryCreateQuery(new_create_query);
+        /// Daisy: ends.
         return;
     }
 
@@ -277,6 +282,11 @@ void DatabaseOnDisk::createTable(
     commitCreateTable(create, table, table_metadata_tmp_path, table_metadata_path, local_context);
 
     removeDetachedPermanentlyFlag(local_context, table_name, table_metadata_path, false);
+
+    /// Daisy: starts.
+    const auto & new_create_query = parseCreateQueryFromAST(query, database_name, table_name);
+    table->setInMemoryCreateQuery(new_create_query);
+    /// Daisy: ends.
 }
 
 /// If the table was detached permanently we will have a flag file with
@@ -689,58 +699,15 @@ ASTPtr DatabaseOnDisk::parseQueryFromMetadata(
 ASTPtr DatabaseOnDisk::getCreateQueryFromMetadata(const String & database_metadata_path, bool throw_on_error) const
 {
     ASTPtr ast = parseQueryFromMetadata(log, getContext(), database_metadata_path, throw_on_error);
+
     if (ast)
     {
         auto & ast_create_query = ast->as<ASTCreateQuery &>();
         ast_create_query.attach = false;
         ast_create_query.database = getDatabaseName();
     }
+
     return ast;
 }
 
-/// Daisy: starts.
-const DatabaseOnDisk::MetaDataCacheElem* DatabaseOnDisk::findCache(const String & key) const
-{
-    std::shared_lock lock(cache_rw_mutex);
-    auto iter = metadata_cache.find(key);
-    if (iter != metadata_cache.end())
-        return &(iter->second);
-    return nullptr;
-}
-
-void DatabaseOnDisk::setCache(const String & key, const DatabaseOnDisk::MetaDataCacheElem& value) const
-{
-    std::lock_guard lock(cache_rw_mutex);
-    metadata_cache[key] = value;
-}
-
-
-#if defined(_WIN32)
-#define stat _stat
-#endif
-std::tuple<String, String> DatabaseOnDisk::getCreateTableQueryAndEngineFullString(const String & table_name, ContextPtr local_context) const
-{
-    /// We build a metadata cache here to avoid frequent load and parse.
-    /// When the metadata file has been cached and the current metadata file has not been modified, the cache is hit
-    /// NOTE: Use 'st_mtime' as metada modified key, although there is precision error, but it can still work correctly
-    auto table_metadata_path = getObjectMetadataPath(table_name);
-    struct stat st;
-    bool use_cache = (stat(table_metadata_path.c_str(), &st) == 0);
-    if (use_cache)
-    {
-        const auto & cache = findCache(table_metadata_path);
-        if (cache && st.st_mtime == cache->_last_update_time)
-            return {cache->_query, cache->_engine_full};
-    }
-
-    ASTPtr ast = getCreateTableQueryImpl(table_name, local_context, false);
-    auto [query, engine_full] = astToQueryAndEngineStringImpl(ast, local_context);
-
-    if (ast && use_cache)
-        setCache(table_metadata_path, {st.st_mtime, query, engine_full});
-
-    return {query, engine_full};
-}
-
-/// Daisy: ends.
 }

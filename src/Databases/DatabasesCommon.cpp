@@ -22,34 +22,6 @@ namespace ErrorCodes
     extern const int UNKNOWN_DATABASE;
 }
 
-/// Daisy: starts.
-std::tuple<String, String> IDatabase::astToQueryAndEngineStringImpl(ASTPtr ast, ContextPtr context) const
-{
-    String query_string;
-    String engine_full;
-    if (ast)
-    {
-        auto & ast_create = ast->as<ASTCreateQuery &>();
-        if (!context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil)
-        {
-            ast_create.uuid = UUIDHelpers::Nil;
-            ast_create.to_inner_uuid = UUIDHelpers::Nil;
-        }
-        query_string = queryToString(ast);
-
-        if (ast_create.storage)
-        {
-            engine_full = queryToString(*ast_create.storage);
-
-            static const char * const extra_head = " ENGINE = ";
-            if (startsWith(engine_full, extra_head))
-                engine_full = engine_full.substr(strlen(extra_head));
-        }
-    }
-    return {query_string, engine_full};
-}
-/// Daisy: ends.
-
 DatabaseWithOwnTablesBase::DatabaseWithOwnTablesBase(const String & name_, const String & logger, ContextPtr context_)
         : IDatabase(name_), WithContext(context_->getGlobalContext()), log(&Poco::Logger::get(logger))
 {
@@ -196,4 +168,66 @@ StoragePtr DatabaseWithOwnTablesBase::getTableUnlocked(const String & table_name
                     backQuote(database_name), backQuote(table_name));
 }
 
+/// Daisy: starts.
+StorageInMemoryCreateQuery parseCreateQueryFromAST(const ASTPtr & query, const String & database_, const String & table_)
+{
+    return parseCreateQueryFromAST(query.get(), database_, table_);
+}
+
+StorageInMemoryCreateQuery parseCreateQueryFromAST(const IAST * query, const String & database_, const String & table_)
+{
+    StorageInMemoryCreateQuery parsed_create_query;
+    if (query)
+    {
+        ASTPtr query_clone = query->clone();
+        auto * create = query_clone->as<ASTCreateQuery>();
+
+        if (!create)
+        {
+            WriteBufferFromOwnString query_buf;
+            formatAST(*query, query_buf, true);
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Query '{}' is not CREATE query", query_buf.str());
+        }
+
+        create->attach = false;
+        create->database = database_;
+        create->table = table_;
+
+        /// We remove everything that is not needed for ATTACH from the query.
+        assert(!create->temporary);
+        create->as_database.clear();
+        create->as_table.clear();
+        create->if_not_exists = false;
+        create->is_populate = false;
+        create->replace_view = false;
+        create->replace_table = false;
+        create->create_or_replace = false;
+
+        /// For views it is necessary to save the SELECT query itself, for the rest - on the contrary
+        if (!create->isView())
+            create->select = nullptr;
+
+        create->format = nullptr;
+        create->out_file = nullptr;
+
+        /// parse 'query_uuid'
+        parsed_create_query.query_uuid = queryToString(*create);
+
+        /// parse 'query'
+        create->uuid = UUIDHelpers::Nil;
+        create->to_inner_uuid = UUIDHelpers::Nil;
+        parsed_create_query.query = queryToString(*create);
+
+        /// parse 'engine_full'
+        if (create->storage)
+        {
+            parsed_create_query.engine_full = queryToString(*(create->storage));
+            static const char * const extra_head = " ENGINE = ";
+            if (startsWith(parsed_create_query.engine_full, extra_head))
+                parsed_create_query.engine_full = parsed_create_query.engine_full.substr(strlen(extra_head));
+        }
+    }
+    return parsed_create_query;
+}
+/// Daisy: starts.
 }

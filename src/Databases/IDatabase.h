@@ -211,15 +211,6 @@ public:
         return static_cast<time_t>(0);
     }
 
-    /// Daisy: starts.
-    /// Get the CREATE TABLE query and Engine Full for the table. It can also provide information for detached tables for which there is metadata.
-    virtual std::tuple<String, String> getCreateTableQueryAndEngineFullString(const String & table_name, ContextPtr context) const
-    {
-        ASTPtr ast = getCreateTableQueryImpl(table_name, context, false);
-        return astToQueryAndEngineStringImpl(ast, context);
-    }
-    /// Daisy: ends.
-
     /// Get the CREATE TABLE query for the table. It can also provide information for detached tables for which there is metadata.
     ASTPtr tryGetCreateTableQuery(const String & name, ContextPtr context) const noexcept
     {
@@ -283,10 +274,6 @@ protected:
             throw Exception("There is no SHOW CREATE TABLE query for Database" + getEngineName(), ErrorCodes::CANNOT_GET_CREATE_TABLE_QUERY);
         return nullptr;
     }
-
-    /// Daisy: starts.
-    std::tuple<String, String> astToQueryAndEngineStringImpl(ASTPtr ast, ContextPtr context) const;
-    /// Daisy: ends.
 
     mutable std::mutex mutex;
     String database_name;
