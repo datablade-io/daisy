@@ -370,31 +370,25 @@ protected:
                     ASTPtr ast = database->tryGetCreateTableQuery(table_name, context);
                     auto * ast_create = ast ? ast->as<ASTCreateQuery>() : nullptr;
 
-                    if (ast_create && !context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil)
+                    /// Daisy: starts.
+                    StorageInMemoryCreateQueryPtr create_query_snapshot;
+                    if (table)
+                        create_query_snapshot = table->getInMemoryCreateQuery();
+
+                    if (columns_mask[src_index++])
                     {
-                        ast_create->uuid = UUIDHelpers::Nil;
-                        ast_create->to_inner_uuid = UUIDHelpers::Nil;
+                        const auto & query = create_query_snapshot ?
+                                (context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil
+                                    ? create_query_snapshot->getQueryUUID() : create_query_snapshot->getQuery()) : "";
+                        res_columns[res_index++]->insert(query);
                     }
-
-                    if (columns_mask[src_index++])
-                        res_columns[res_index++]->insert(ast ? queryToString(ast) : "");
-
                     if (columns_mask[src_index++])
                     {
-                        String engine_full;
-
-                        if (ast_create && ast_create->storage)
-                        {
-                            engine_full = queryToString(*ast_create->storage);
-
-                            static const char * const extra_head = " ENGINE = ";
-                            if (startsWith(engine_full, extra_head))
-                                engine_full = engine_full.substr(strlen(extra_head));
-                        }
-
+                        const auto & engine_full = create_query_snapshot ? create_query_snapshot->getEngineFull() : "";
                         res_columns[res_index++]->insert(engine_full);
                     }
-
+                    /// Daisy: ends.
+                    
                     if (columns_mask[src_index++])
                     {
                         String as_select;
