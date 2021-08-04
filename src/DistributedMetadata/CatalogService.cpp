@@ -396,7 +396,7 @@ String CatalogService::getColumnType(const String & database, const String & tab
         }
     }
 
-    throw Exception("Could found the column : " + column + " in table : " + table, ErrorCodes::NO_SUCH_COLUMN_IN_TABLE);
+    throw Exception("Could not found the column : " + column + " in table : " + table, ErrorCodes::NO_SUCH_COLUMN_IN_TABLE);
 }
 
 void CatalogService::deleteCatalogForNode(const NodePtr & node)
