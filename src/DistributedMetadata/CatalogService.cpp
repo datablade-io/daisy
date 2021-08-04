@@ -386,16 +386,19 @@ String CatalogService::getColumnType(const String & database, const String & tab
     const auto & create = query_ptr->as<const ASTCreateQuery &>();
     const auto & columns_ast = create.columns_list->columns;
 
+    String type;
     for (auto ast_it = columns_ast->children.begin(); ast_it != columns_ast->children.end(); ++ast_it)
     {
         const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
         if (col_decl.name == column)
         {
-            return queryToString(col_decl.type);
+            type = queryToString(col_decl.type);
+            break;
         }
     }
+    assert(!type.empty());
 
-    return "";
+    return type;
 }
 
 void CatalogService::deleteCatalogForNode(const NodePtr & node)
@@ -678,7 +681,6 @@ void CatalogService::mergeCatalog(const NodePtr & node, TableContainerPerNode sn
             auto iter_by_name = indexed_by_name.find(std::make_pair(p.second->database, p.second->name));
             assert(iter_by_name != indexed_by_name.end());
 
-            /// Deleted Store remove from `storages`
             deleteTableStorageByName(p.second->database, p.second->name);
             /// Deleted table, remove from `indexed_by_name` and `indexed_by_id`
             auto removed = iter_by_name->second.erase(std::make_pair(p.second->node_identity, p.second->shard));

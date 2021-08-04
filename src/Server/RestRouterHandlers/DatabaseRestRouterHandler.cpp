@@ -54,7 +54,7 @@ std::pair<String, Int32> DatabaseRestRouterHandler::executePost(const Poco::JSON
     }
 
     const String & database_name = payload->get("name").toString();
-    String query = "CREATE DATABASE IF NOT EXISTS " + database_name;
+    String query = "CREATE DATABASE " + database_name;
 
     return {processQuery(query), HTTPResponse::HTTP_OK};
 }
@@ -67,7 +67,7 @@ std::pair<String, Int32> DatabaseRestRouterHandler::executeDelete(const Poco::JS
     }
 
     const String & database_name = getPathParameter("database");
-    String query = "DROP DATABASE IF EXISTS" + database_name;
+    String query = "DROP DATABASE " + database_name;
 
     return {processQuery(query), HTTPResponse::HTTP_OK};
 }

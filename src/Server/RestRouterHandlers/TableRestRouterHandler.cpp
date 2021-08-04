@@ -191,7 +191,7 @@ std::pair<String, Int32> TableRestRouterHandler::executeDelete(const Poco::JSON:
         setupDistributedQueryParameters({});
     }
 
-    return {processQuery("DROP TABLE IF EXISTS " + database + "." + table), HTTPResponse::HTTP_OK};
+    return {processQuery("DROP TABLE " + database + "." + table), HTTPResponse::HTTP_OK};
 }
 
 void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, const ASTColumns * columns_list) const
@@ -321,7 +321,7 @@ String TableRestRouterHandler::getCreationSQL(const Poco::JSON::Object::Ptr & pa
 {
     const auto & time_col = getStringValueFrom(payload, "_time_column", "_time");
     std::vector<String> create_segments;
-    create_segments.push_back("CREATE TABLE IF NOT EXISTS " + database + "." + payload->get("name").toString());
+    create_segments.push_back("CREATE TABLE " + database + "." + payload->get("name").toString());
     create_segments.push_back("(");
     create_segments.push_back(getColumnsDefinition(payload));
     create_segments.push_back(")");

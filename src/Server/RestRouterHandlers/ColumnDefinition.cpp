@@ -64,13 +64,13 @@ String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, const 
     std::vector<String> update_segments;
     if (payload->has("name"))
     {
-        update_segments.push_back(" RENAME COLUMN IF EXISTS " + column + " TO " + payload->get("name").toString());
+        update_segments.push_back(" RENAME COLUMN " + column + " TO " + payload->get("name").toString());
         column = payload->get("name").toString();
     }
 
     if (payload->has("type"))
     {
-        update_segments.push_back(" MODIFY COLUMN IF EXISTS " + column + " " + payload->get("type").toString());
+        update_segments.push_back(" MODIFY COLUMN " + column + " " + payload->get("type").toString());
     }
 
     if (payload->has("default"))
@@ -85,26 +85,26 @@ String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, const 
             default_str = "'" + default_str + "'";
         }
 
-        update_segments.push_back(" MODIFY COLUMN IF EXISTS " + column + " DEFAULT " + default_str);
+        update_segments.push_back(" MODIFY COLUMN " + column + " DEFAULT " + default_str);
     }
 
     if (payload->has("comment"))
     {
-        update_segments.push_back(" COMMENT COLUMN IF EXISTS " + column + "'" + payload->get("comment").toString() + "'");
+        update_segments.push_back(" COMMENT COLUMN " + column + "'" + payload->get("comment").toString() + "'");
     }
     else if (payload->has("alias"))
     {
-        update_segments.push_back(" MODIFY COLUMN " + column_name + " ALIAS " + payload->get("alias").toString());
+        update_segments.push_back(" MODIFY COLUMN " + column + " ALIAS " + payload->get("alias").toString());
     }
 
     if (payload->has("ttl_expression"))
     {
-        update_segments.push_back(" MODIFY COLUMN IF EXISTS " + column + " TTL " + payload->get("ttl_expression").toString());
+        update_segments.push_back(" MODIFY COLUMN " + column + " TTL " + payload->get("ttl_expression").toString());
     }
 
     if (payload->has("compression_codec"))
     {
-        update_segments.push_back(" MODIFY COLUMN IF EXISTS" + column + " CODEC(" + payload->get("compression_codec").toString() + ")");
+        update_segments.push_back(" MODIFY COLUMN " + column + " CODEC(" + payload->get("compression_codec").toString() + ")");
     }
 
     return boost::algorithm::join(update_segments, ",");
