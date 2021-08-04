@@ -254,9 +254,8 @@ struct StorageInMemoryCreateQuery
     String query_uuid;  /// if show_table_uuid_in_table_create_query_if_not_nil = 1
     String engine_full;
 
-    StorageInMemoryCreateQuery() = default;
-    StorageInMemoryCreateQuery(const StorageInMemoryMetadata & other);
-    StorageInMemoryCreateQuery & operator=(const StorageInMemoryMetadata & other);
+    StorageInMemoryCreateQuery(String query_, String query_uuid_, String engine_full_)
+        : query(std::move(query_)), query_uuid(std::move(query_uuid_)), engine_full(std::move(engine_full_)) {}
 
     void setQuery(const String & query_) { query = query_; }
     void setQueryUUID(const String & query_uuid_) { query_uuid = query_uuid_; }

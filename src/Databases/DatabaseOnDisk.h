@@ -1,7 +1,5 @@
 #pragma once
 
-#include <filesystem>
-#include <mutex>
 #include <Common/escapeForFileName.h>
 #include <Common/quoteString.h>
 #include <Databases/DatabasesCommon.h>

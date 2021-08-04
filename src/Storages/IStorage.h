@@ -218,7 +218,9 @@ private:
     /// without locks.
     MultiVersionStorageMetadataPtr metadata;
 
+    /// Daisy: starts.
     MultiVersionStorageCreateQueryPtr create_query;
+    /// Daisy: ends.
 
     RWLockImpl::LockHolder tryLockTimed(
         const RWLock & rwlock, RWLockImpl::Type type, const String & query_id, const std::chrono::milliseconds & acquire_timeout) const;

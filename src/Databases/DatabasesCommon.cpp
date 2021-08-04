@@ -176,58 +176,56 @@ StorageInMemoryCreateQuery parseCreateQueryFromAST(const ASTPtr & query, const S
 
 StorageInMemoryCreateQuery parseCreateQueryFromAST(const IAST * query, const String & database_, const String & table_)
 {
-    StorageInMemoryCreateQuery parsed_create_query;
-    if (query)
+    assert (query != nullptr);
+    ASTPtr query_clone = query->clone();
+    auto * create = query_clone->as<ASTCreateQuery>();
+
+    if (!create)
     {
-        ASTPtr query_clone = query->clone();
-        auto * create = query_clone->as<ASTCreateQuery>();
-
-        if (!create)
-        {
-            WriteBufferFromOwnString query_buf;
-            formatAST(*query, query_buf, true);
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "Query '{}' is not CREATE query", query_buf.str());
-        }
-
-        create->attach = false;
-        create->database = database_;
-        create->table = table_;
-
-        /// We remove everything that is not needed for ATTACH from the query.
-        assert(!create->temporary);
-        create->as_database.clear();
-        create->as_table.clear();
-        create->if_not_exists = false;
-        create->is_populate = false;
-        create->replace_view = false;
-        create->replace_table = false;
-        create->create_or_replace = false;
-
-        /// For views it is necessary to save the SELECT query itself, for the rest - on the contrary
-        if (!create->isView())
-            create->select = nullptr;
-
-        create->format = nullptr;
-        create->out_file = nullptr;
-
-        /// parse 'query_uuid'
-        parsed_create_query.query_uuid = queryToString(*create);
-
-        /// parse 'query'
-        create->uuid = UUIDHelpers::Nil;
-        create->to_inner_uuid = UUIDHelpers::Nil;
-        parsed_create_query.query = queryToString(*create);
-
-        /// parse 'engine_full'
-        if (create->storage)
-        {
-            parsed_create_query.engine_full = queryToString(*(create->storage));
-            static const char * const extra_head = " ENGINE = ";
-            if (startsWith(parsed_create_query.engine_full, extra_head))
-                parsed_create_query.engine_full = parsed_create_query.engine_full.substr(strlen(extra_head));
-        }
+        WriteBufferFromOwnString query_buf;
+        formatAST(*query, query_buf, true);
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Query '{}' is not CREATE query", query_buf.str());
     }
-    return parsed_create_query;
+
+    create->attach = false;
+    create->database = database_;
+    create->table = table_;
+
+    /// We remove everything that is not needed for ATTACH from the query.
+    assert(!create->temporary);
+    create->as_database.clear();
+    create->as_table.clear();
+    create->if_not_exists = false;
+    create->is_populate = false;
+    create->replace_view = false;
+    create->replace_table = false;
+    create->create_or_replace = false;
+
+    /// For views it is necessary to save the SELECT query itself, for the rest - on the contrary
+    if (!create->isView())
+        create->select = nullptr;
+
+    create->format = nullptr;
+    create->out_file = nullptr;
+
+    /// parse 'query_uuid'
+    String query_uuid_str = queryToString(*create);
+
+    /// parse 'query'
+    create->uuid = UUIDHelpers::Nil;
+    create->to_inner_uuid = UUIDHelpers::Nil;
+    String query_str = queryToString(*create);
+
+    /// parse 'engine_full'
+    String engine_full_str;
+    if (create->storage)
+    {
+        engine_full_str = queryToString(*(create->storage));
+        const char * const extra_head = " ENGINE = ";
+        if (startsWith(engine_full_str, extra_head))
+            engine_full_str = engine_full_str.substr(strlen(extra_head));
+    }
+    return {query_str, query_uuid_str, engine_full_str};
 }
 /// Daisy: starts.
 }
