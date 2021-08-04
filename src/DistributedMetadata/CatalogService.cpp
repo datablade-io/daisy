@@ -31,6 +31,7 @@ std::pair<String, StoragePtr> createTableFromAST(
 namespace ErrorCodes
 {
     extern const int OK;
+    extern const int NO_SUCH_COLUMN_IN_TABLE;
 }
 
 namespace
@@ -386,19 +387,16 @@ String CatalogService::getColumnType(const String & database, const String & tab
     const auto & create = query_ptr->as<const ASTCreateQuery &>();
     const auto & columns_ast = create.columns_list->columns;
 
-    String type;
     for (auto ast_it = columns_ast->children.begin(); ast_it != columns_ast->children.end(); ++ast_it)
     {
         const auto & col_decl = (*ast_it)->as<ASTColumnDeclaration &>();
         if (col_decl.name == column)
         {
-            type = queryToString(col_decl.type);
-            break;
+            return queryToString(col_decl.type);
         }
     }
-    assert(!type.empty());
 
-    return type;
+    throw Exception("Could found the column : " + column + " int table : " + table, ErrorCodes::NO_SUCH_COLUMN_IN_TABLE);
 }
 
 void CatalogService::deleteCatalogForNode(const NodePtr & node)
