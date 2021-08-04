@@ -48,7 +48,8 @@ protected:
 
 /// Daisy: start.
 struct StorageInMemoryCreateQuery;
-StorageInMemoryCreateQuery parseCreateQueryFromAST(const IAST * query, const String & database_, const String & table_);
-StorageInMemoryCreateQuery parseCreateQueryFromAST(const ASTPtr & query, const String & database_, const String & table_);
+using StorageInMemoryCreateQueryPtr = std::shared_ptr<const StorageInMemoryCreateQuery>;
+StorageInMemoryCreateQueryPtr parseCreateQueryFromAST(const IAST * query, const String & database_, const String & table_);
+StorageInMemoryCreateQueryPtr parseCreateQueryFromAST(const ASTPtr & query, const String & database_, const String & table_);
 /// Daisy: ends.
 }

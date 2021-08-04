@@ -169,22 +169,17 @@ public:
     }
 
     /// Daisy: start.
-    /// Get mutable version (snapshot) of storage CreateQuery. CreateQuery object is
-    /// multiversion, so it can be concurrently changed, but returned copy can be
-    /// used without any locks.
-    StorageInMemoryCreateQuery getInMemoryCreateQuery() const { return *create_query.get(); }
-
     /// Get immutable version (snapshot) of storage CreateQuery. CreateQuery object is
     /// multiversion, so it can be concurrently changed, but returned copy can be
     /// used without any locks.
-    StorageInMemoryCreateQueryPtr getInMemoryCreateQueryPtr() const { return create_query.get(); }
+    StorageInMemoryCreateQueryPtr getInMemoryCreateQuery() const { return create_query.get(); }
 
     /// Update storage CreateQuery. Used in ALTER or initialization of Storage.
     /// CreateQuery object is multiversion, so this method can be called without
     /// any locks.
-    void setInMemoryCreateQuery(const StorageInMemoryCreateQuery & create_query_)
+    void setInMemoryCreateQuery(StorageInMemoryCreateQueryPtr create_query_)
     {
-        create_query.set(std::make_unique<StorageInMemoryCreateQuery>(create_query_));
+        create_query.set(std::make_unique<StorageInMemoryCreateQuery>(*create_query_));
     }
     /// Daisy: ends.
 

@@ -169,12 +169,12 @@ StoragePtr DatabaseWithOwnTablesBase::getTableUnlocked(const String & table_name
 }
 
 /// Daisy: starts.
-StorageInMemoryCreateQuery parseCreateQueryFromAST(const ASTPtr & query, const String & database_, const String & table_)
+StorageInMemoryCreateQueryPtr parseCreateQueryFromAST(const ASTPtr & query, const String & database_, const String & table_)
 {
     return parseCreateQueryFromAST(query.get(), database_, table_);
 }
 
-StorageInMemoryCreateQuery parseCreateQueryFromAST(const IAST * query, const String & database_, const String & table_)
+StorageInMemoryCreateQueryPtr parseCreateQueryFromAST(const IAST * query, const String & database_, const String & table_)
 {
     assert (query != nullptr);
     ASTPtr query_clone = query->clone();
@@ -225,7 +225,7 @@ StorageInMemoryCreateQuery parseCreateQueryFromAST(const IAST * query, const Str
         if (startsWith(engine_full_str, extra_head))
             engine_full_str = engine_full_str.substr(strlen(extra_head));
     }
-    return {query_str, query_uuid_str, engine_full_str};
+    return std::make_shared<StorageInMemoryCreateQuery>(query_str, query_uuid_str, engine_full_str);
 }
 /// Daisy: starts.
 }

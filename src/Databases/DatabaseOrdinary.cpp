@@ -281,11 +281,10 @@ void DatabaseOrdinary::alterTable(ContextPtr local_context, const StorageID & ta
     commitAlterTable(table_id, table_metadata_tmp_path, table_metadata_path, statement, local_context);
 
     /// Daisy: starts.
-    StoragePtr table;
-    {
-        std::unique_lock lock{mutex};
-        table = getTableUnlocked(table_id.table_name, lock);
-    }
+    StoragePtr table = tryGetTable(table_name, local_context);
+    if (!table)
+        throw Exception(ErrorCodes::UNKNOWN_TABLE, "Table {}.{} doesn't exist",
+                    backQuote(database_name), backQuote(table_name));
     const auto & new_create_query = parseCreateQueryFromAST(ast, database_name, table_id.table_name);
     table->setInMemoryCreateQuery(new_create_query);
     /// Daisy: ends.

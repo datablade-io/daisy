@@ -360,7 +360,7 @@ protected:
                     /// Daisy: starts.
                     StorageInMemoryCreateQueryPtr create_query_snapshot;
                     if (table)
-                        create_query_snapshot = table->getInMemoryCreateQueryPtr();
+                        create_query_snapshot = table->getInMemoryCreateQuery();
 
                     if (columns_mask[src_index++])
                     {
