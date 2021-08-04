@@ -221,17 +221,20 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
 
         if (col_decl.default_expression)
         {
-            String default_str = queryToString(col_decl.default_expression);
-            if (type == "String")
+            if (col_decl.default_specifier == "DEFAULT")
             {
-                default_str = default_str.substr(1, default_str.length() - 2);
-            }
+                String default_str = queryToString(col_decl.default_expression);
+                if (type == "String")
+                {
+                    default_str = default_str.substr(1, default_str.length() - 2);
+                }
 
-            cloumn_mapping_json.set("default", default_str);
-        }
-        else if (col_decl.default_specifier == "ALIAS")
-        {
-            cloumn_mapping_json.set("alias", queryToString(col_decl.default_expression));
+                cloumn_mapping_json.set("default", default_str);
+            }
+            else if (col_decl.default_specifier == "ALIAS")
+            {
+                cloumn_mapping_json.set("alias", queryToString(col_decl.default_expression));
+            }
         }
 
         if (col_decl.comment)
