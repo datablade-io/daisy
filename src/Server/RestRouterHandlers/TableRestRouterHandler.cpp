@@ -229,13 +229,9 @@ void TableRestRouterHandler::buildColumnsJSON(Poco::JSON::Object & resp_table, c
 
             cloumn_mapping_json.set("default", default_str);
         }
-        else
+        else if (col_decl.default_specifier == "ALIAS")
         {
-            String alias = col_decl.tryGetAlias();
-            if (!alias.empty())
-            {
-                cloumn_mapping_json.set("alias", queryToString(col_decl.default_expression));
-            }
+            cloumn_mapping_json.set("alias", queryToString(col_decl.default_expression));
         }
 
         if (col_decl.comment)
