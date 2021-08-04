@@ -357,37 +357,24 @@ protected:
 
                 if (columns_mask[src_index] || columns_mask[src_index + 1])
                 {
-                    ASTPtr ast = database->tryGetCreateTableQuery(table_name, context);
+                    /// Daisy: starts.
+                    StorageInMemoryCreateQueryPtr create_query_snapshot;
+                    if (table)
+                        create_query_snapshot = table->getInMemoryCreateQuery();
 
-                    if (ast && !context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil)
+                    if (columns_mask[src_index++])
                     {
-                        auto & create = ast->as<ASTCreateQuery &>();
-                        create.uuid = UUIDHelpers::Nil;
-                        create.to_inner_uuid = UUIDHelpers::Nil;
+                        const auto & query = create_query_snapshot ?
+                                (context->getSettingsRef().show_table_uuid_in_table_create_query_if_not_nil
+                                    ? create_query_snapshot->getQueryUUID() : create_query_snapshot->getQuery()) : "";
+                        res_columns[res_index++]->insert(query);
                     }
-
-                    if (columns_mask[src_index++])
-                        res_columns[res_index++]->insert(ast ? queryToString(ast) : "");
-
                     if (columns_mask[src_index++])
                     {
-                        String engine_full;
-
-                        if (ast)
-                        {
-                            const auto & ast_create = ast->as<ASTCreateQuery &>();
-                            if (ast_create.storage)
-                            {
-                                engine_full = queryToString(*ast_create.storage);
-
-                                static const char * const extra_head = " ENGINE = ";
-                                if (startsWith(engine_full, extra_head))
-                                    engine_full = engine_full.substr(strlen(extra_head));
-                            }
-                        }
-
+                        const auto & engine_full = create_query_snapshot ? create_query_snapshot->getEngineFull() : "";
                         res_columns[res_index++]->insert(engine_full);
                     }
+                    /// Daisy: ends.
                 }
                 else
                     src_index += 2;

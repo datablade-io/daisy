@@ -14,6 +14,7 @@
 #include <Common/escapeForFileName.h>
 #include <Poco/DirectoryIterator.h>
 #include <Poco/File.h>
+#include <Databases/DatabasesCommon.h>
 #include <Databases/PostgreSQL/fetchPostgreSQLTableStructure.h>
 #include <Common/quoteString.h>
 
@@ -243,6 +244,11 @@ void DatabasePostgreSQL::createTable(ContextPtr, const String & table_name, cons
         throw Exception("PostgreSQL database engine does not support create table", ErrorCodes::NOT_IMPLEMENTED);
 
     attachTable(table_name, storage, {});
+
+    /// Daisy: starts.
+    const auto & new_create_query = parseCreateQueryFromAST(create_query, database_name, table_name);
+    storage->setInMemoryCreateQuery(new_create_query);
+    /// Daisy: ends.
 }
 
 

@@ -239,6 +239,11 @@ void DatabaseOnDisk::createTable(
         /// Metadata already exists, table was detached
         removeDetachedPermanentlyFlag(local_context, table_name, table_metadata_path, true);
         attachTable(table_name, table, getTableDataPath(create));
+
+        /// Daisy: starts.
+        const auto & new_create_query = parseCreateQueryFromAST(query, database_name, table_name);
+        table->setInMemoryCreateQuery(new_create_query);
+        /// Daisy: ends.
         return;
     }
 
@@ -277,6 +282,11 @@ void DatabaseOnDisk::createTable(
     commitCreateTable(create, table, table_metadata_tmp_path, table_metadata_path, local_context);
 
     removeDetachedPermanentlyFlag(local_context, table_name, table_metadata_path, false);
+
+    /// Daisy: starts.
+    const auto & new_create_query = parseCreateQueryFromAST(query, database_name, table_name);
+    table->setInMemoryCreateQuery(new_create_query);
+    /// Daisy: ends.
 }
 
 /// If the table was detached permanently we will have a flag file with
