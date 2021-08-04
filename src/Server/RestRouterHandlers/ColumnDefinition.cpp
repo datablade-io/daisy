@@ -6,6 +6,7 @@
 
 namespace DB
 {
+
 String getCreateColumnDefination(const Poco::JSON::Object::Ptr & column)
 {
     std::vector<String> column_definition;

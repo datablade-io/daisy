@@ -160,7 +160,7 @@ std::pair<String, Int32> TableRestRouterHandler::executePatch(const Poco::JSON::
             HTTPResponse::HTTP_BAD_REQUEST};
     }
 
-    LOG_INFO(log, "Updating table  {}.{}", database, table);
+    LOG_INFO(log, "Updating table {}.{}", database, table);
     std::vector<String> create_segments;
     create_segments.push_back("ALTER TABLE " + database + "." + table);
     create_segments.push_back(" MODIFY TTL " + payload->get("ttl_expression").toString());
