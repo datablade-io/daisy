@@ -402,6 +402,11 @@ void TaskStatusService::findByUserInTable(const String & user, std::vector<TaskS
 
 void TaskStatusService::schedulePersistentTask()
 {
+    if (node_roles.find("task") == String::npos)
+    {
+        return;
+    }
+
     if (!tableExists())
     {
         for (int i = 0; i < RETRY_TIMES; ++i)
