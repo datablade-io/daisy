@@ -299,6 +299,7 @@ void DDLService::createTable(DWAL::RecordPtr record)
         {
             LOG_ERROR(log, "Failed to create topic for table payload={} exception={}", payload, e.message());
             failDDL(query_id, user, payload, e.message());
+            return;
         }
 
         const String & hosts_val = record->headers.at("hosts");
