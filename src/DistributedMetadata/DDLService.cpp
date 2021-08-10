@@ -291,7 +291,15 @@ void DDLService::createTable(DWAL::RecordPtr record)
             url_parameters = &record->headers.at("url_parameters");
         }
         /// Create a DWAL for this table.
-        createDWAL(database, table, shards, replication_factor, url_parameters);
+        try
+        {
+            createDWAL(database, table, shards, replication_factor, url_parameters);
+        }
+        catch (Exception e)
+        {
+            LOG_ERROR(log, "Failed to create topic for table payload={} exception={}", payload, e.message());
+            failDDL(query_id, user, payload, e.message());
+        }
 
         const String & hosts_val = record->headers.at("hosts");
         std::vector<String> hosts;
