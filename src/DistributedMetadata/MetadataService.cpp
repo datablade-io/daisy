@@ -15,6 +15,8 @@ namespace ErrorCodes
 {
     extern const int OK;
     extern const int RESOURCE_ALREADY_EXISTS;
+    extern const int UNKNOWN_EXCEPTION;
+    extern const int DWAL_FATAL_ERROR;
     extern const int RESOURCE_NOT_FOUND;
     extern const int MSG_SIZE_TOO_LARGE;
 }
@@ -31,6 +33,7 @@ namespace
     const String COMPRESSION_KEY = "client_side_compression";
 
     const String THIS_HOST = getFQDNOrHostName();
+    constexpr Int32 DWAL_MAX_RETRIES = 3;
 }
 
 MetadataService::MetadataService(const ContextPtr & global_context_, const String & service_name)
@@ -97,8 +100,8 @@ void MetadataService::initPorts()
 
 void MetadataService::doDeleteDWal(const DWAL::KafkaWALContext & ctx) const
 {
-    int retries = 3;
-    while (retries--)
+    int retries = 0;
+    while (retries++ < DWAL_MAX_RETRIES)
     {
         auto err = dwal->remove(ctx.topic, ctx);
         if (err == ErrorCodes::OK)
@@ -141,29 +144,38 @@ void MetadataService::doCreateDWal(const DWAL::KafkaWALContext & ctx) const
 {
     if (dwal->describe(ctx.topic, ctx).err == ErrorCodes::OK)
     {
-        LOG_INFO(log, "Found topic={} already exists", ctx.topic);
-        return;
+        throw Exception("Found topic= " + ctx.topic + " already exists", ErrorCodes::RESOURCE_ALREADY_EXISTS);
     }
 
     LOG_INFO(log, "Didn't find topic={}, create one with settings={}", ctx.topic, ctx.string());
 
+    int retries = 0;
     while (!stopped.test())
     {
         auto err = dwal->create(ctx.topic, ctx);
         if (err == ErrorCodes::OK)
         {
-            /// FIXME, if the error is fatal. throws
             LOG_INFO(log, "Successfully created topic={}", ctx.topic);
             break;
         }
         else if (err == ErrorCodes::RESOURCE_ALREADY_EXISTS)
         {
-            LOG_INFO(log, "Topic={} already exists", ctx.topic);
-            break;
+            throw Exception("Topic=" + ctx.topic +" already exists", ErrorCodes::RESOURCE_ALREADY_EXISTS);
+        }
+        else if (err == ErrorCodes::DWAL_FATAL_ERROR)
+        {
+            throw Exception("Topic=" + ctx.topic + "create failed", ErrorCodes::DWAL_FATAL_ERROR);
         }
         else
         {
-            LOG_INFO(log, "Failed to create topic={}, will retry indefinitely ...", ctx.topic);
+            if (retries > DWAL_MAX_RETRIES)
+            {
+                String message = "Topic=" + ctx.topic + "create failed";
+                throw Exception("Topic=" + ctx.topic + "create failed", ErrorCodes::UNKNOWN_EXCEPTION);
+            }
+
+            retries++;
+            LOG_INFO(log, "Failed to create topic={} and will try to create it={} again...", ctx.topic, retries);
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         }
     }
@@ -284,8 +296,15 @@ void MetadataService::startup()
         {
             LOG_INFO(log, "Detects the current log has `{}` role", this_role);
 
-            /// First try to create corresponding dwal
-            doCreateDWal(kctx);
+            try
+            {
+                /// First try to create corresponding dwal
+                doCreateDWal(kctx);
+            }
+            catch(Exception e)
+            {
+                LOG_INFO(log, e.message());
+            }
 
             /// Consumer settings
             kctx.auto_offset_reset = conf.auto_offset_reset;

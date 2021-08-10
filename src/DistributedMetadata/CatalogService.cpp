@@ -52,7 +52,10 @@ Int32 searchIntValueByRegex(const std::regex & pattern, const String & str)
     assert(m);
     (void)m;
 
-    return std::stoi(pattern_match.str(1));
+    if (pattern_match.size() > 0)
+        return std::stoi(pattern_match.str(1));
+
+    return 0;
 }
 }
 
