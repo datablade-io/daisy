@@ -101,7 +101,9 @@ bool ParserAlterCommand::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
 
     ParserKeyword s_remove_ttl("REMOVE TTL");
 
+    /// Daisy : starts
     ParserKeyword s_modify_comment("MODIFY COMMENT");
+    /// Daisy : ends
 
     ParserCompoundIdentifier parser_name;
     ParserStringLiteral parser_string_literal;
@@ -711,12 +713,14 @@ bool ParserAlterCommand::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
                 return false;
             command->type = ASTAlterCommand::MODIFY_QUERY;
         }
+        /// Daisy : starts
         else if (s_modify_comment.ignore(pos, expected))
         {
             if (!parser_string_literal.parse(pos, command->table_comment, expected))
                 return false;
             command->type = ASTAlterCommand::MODIFY_COMMENT;
         }
+        /// Daisy : ends
         else
             return false;
     }
@@ -755,8 +759,10 @@ bool ParserAlterCommand::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
         command->children.push_back(command->select);
     if (command->rename_to)
         command->children.push_back(command->rename_to);
+    /// Daisy : starts
     if (command->table_comment)
         command->children.push_back(command->table_comment);
+    /// Daisy : ends
 
     return true;
 }

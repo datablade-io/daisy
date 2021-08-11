@@ -41,12 +41,14 @@ void StorageNull::checkAlterIsPossible(const AlterCommands & commands, ContextPt
     auto name_deps = getDependentViewsByColumn(context);
     for (const auto & command : commands)
     {
+        /// Daisy : starts
         if (command.type != AlterCommand::Type::ADD_COLUMN && command.type != AlterCommand::Type::MODIFY_COLUMN
             && command.type != AlterCommand::Type::DROP_COLUMN && command.type != AlterCommand::Type::COMMENT_COLUMN
             && command.type != AlterCommand::Type::MODIFY_COMMENT)
             throw Exception(
                 "Alter of type '" + alterTypeToString(command.type) + "' is not supported by storage " + getName(),
                 ErrorCodes::NOT_IMPLEMENTED);
+        /// Daisy : ends
         if (command.type == AlterCommand::DROP_COLUMN && !command.clear)
         {
             const auto & deps_mv = name_deps[command.column_name];

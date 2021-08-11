@@ -1009,8 +1009,10 @@ void StorageReplicatedMergeTree::setTableStructure(
                 new_metadata.table_ttl = TTLTableDescription{};
             }
         }
+        /// Daisy : starts
         if (metadata_diff.table_comment_changed)
             new_metadata.comment = metadata_diff.new_table_comment;
+        /// Daisy : ends
     }
 
     /// Changes in columns may affect following metadata fields
@@ -4822,9 +4824,11 @@ void StorageReplicatedMergeTree::alter(
         if (new_constraints_str != current_metadata->constraints.toString())
             future_metadata_in_zk.constraints = new_constraints_str;
 
+        /// Daisy : starts
         String new_table_comment_str = future_metadata.comment;
         if (new_table_comment_str != current_metadata->comment)
             future_metadata_in_zk.table_comment = new_table_comment_str;
+        /// Daisy : ends
 
         Coordination::Requests ops;
         size_t alter_path_idx = std::numeric_limits<size_t>::max();

@@ -62,11 +62,13 @@ ASTPtr ASTAlterCommand::clone() const
         res->rename_to = rename_to->clone();
         res->children.push_back(res->rename_to);
     }
+    /// Daisy : starts
     if (table_comment)
     {
         res->table_comment = table_comment->clone();
         res->children.push_back(res->table_comment);
     }
+    /// Daisy : ends
 
     return res;
 }
@@ -401,11 +403,13 @@ void ASTAlterCommand::formatImpl(
         settings.ostr << (settings.hilite ? hilite_keyword : "") << " TO ";
         rename_to->formatImpl(settings, state, frame);
     }
+    /// Daisy : starts
     else if (type == ASTAlterCommand::MODIFY_COMMENT)
     {
         settings.ostr << (settings.hilite ? hilite_keyword : "") << indent_str << "MODIFY COMMENT " << (settings.hilite ? hilite_none : "");
         table_comment->formatImpl(settings, state, frame);
     }
+    /// Daisy : ends
     else
         throw Exception("Unexpected type of ALTER", ErrorCodes::UNEXPECTED_AST_STRUCTURE);
 }

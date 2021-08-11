@@ -58,8 +58,7 @@ std::pair<String, StoragePtr> createTableFromAST(
         ColumnsDescription columns;
         if (ast_create_query.columns_list && ast_create_query.columns_list->columns)
             columns = InterpreterCreateQuery::getColumnsDescription(*ast_create_query.columns_list->columns, context, true);
-        StoragePtr storage
-            = table_function->execute(ast_create_query.as_table_function, context, ast_create_query.table, std::move(columns));
+        StoragePtr storage = table_function->execute(ast_create_query.as_table_function, context, ast_create_query.table, std::move(columns));
         storage->renameInMemory(ast_create_query);
         return {ast_create_query.table, storage};
     }
@@ -79,7 +78,8 @@ std::pair<String, StoragePtr> createTableFromAST(
         constraints = InterpreterCreateQuery::getConstraintsDescription(ast_create_query.columns_list->constraints);
     }
 
-    return {
+    return
+    {
         ast_create_query.table,
         StorageFactory::instance().get(
             ast_create_query,
@@ -88,7 +88,8 @@ std::pair<String, StoragePtr> createTableFromAST(
             context->getGlobalContext(),
             columns,
             constraints,
-            has_force_restore_data_flag)};
+            has_force_restore_data_flag)
+    };
 }
 
 
@@ -164,9 +165,10 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
     {
         ASTStorage & storage_ast = *ast_create_query.storage;
 
-        bool is_extended_storage_def
-            = storage_ast.partition_by || storage_ast.primary_key || storage_ast.order_by || storage_ast.sample_by || storage_ast.settings
-            || storage_ast.comment;
+        /// Daisy : starts
+        bool is_extended_storage_def = storage_ast.partition_by || storage_ast.primary_key || storage_ast.order_by || storage_ast.sample_by
+            || storage_ast.settings || storage_ast.comment;
+        /// Daisy : ends
 
         if (is_extended_storage_def)
         {
@@ -187,7 +189,7 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
             if (metadata.settings_changes)
                 storage_ast.set(storage_ast.settings, metadata.settings_changes);
 
-            /// Daisy : start.
+            /// Daisy : starts
             if (!metadata.comment.empty())
             {
                 if (!storage_ast.comment)
