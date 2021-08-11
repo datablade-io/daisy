@@ -336,6 +336,10 @@ std::optional<AlterCommand> AlterCommand::parse(const ASTAlterCommand * command_
         command.ast = command_ast->clone();
         command.type = AlterCommand::MODIFY_COMMENT;
         command.table_comment = command_ast->table_comment->as<ASTLiteral &>().value.get<String>();
+        if (command.table_comment.empty())
+        {
+            command.table_comment = " ";
+        }
         return command;
     }
     /// Daisy : ends

@@ -137,7 +137,7 @@ struct AlterCommand
     String rename_to;
 
     /// Daisy : starts
-    /// For Modify Table Comment
+    /// For modify table comment
     String table_comment;
     /// Daisy : ends
 

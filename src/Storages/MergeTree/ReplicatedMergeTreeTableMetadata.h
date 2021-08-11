@@ -32,7 +32,7 @@ struct ReplicatedMergeTreeTableMetadata
     String ttl_table;
     UInt64 index_granularity_bytes;
     /// Daisy : starts
-    /// For Table Comment
+    /// For table comment
     String table_comment;
     /// Daisy : ends
 
