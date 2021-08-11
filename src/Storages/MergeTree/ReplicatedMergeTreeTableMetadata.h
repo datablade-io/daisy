@@ -31,6 +31,8 @@ struct ReplicatedMergeTreeTableMetadata
     String constraints;
     String ttl_table;
     UInt64 index_granularity_bytes;
+    ///For Table Comment
+    String table_comment;
 
     ReplicatedMergeTreeTableMetadata() = default;
     explicit ReplicatedMergeTreeTableMetadata(const MergeTreeData & data, const StorageMetadataPtr & metadata_snapshot);
@@ -61,10 +63,13 @@ struct ReplicatedMergeTreeTableMetadata
         bool ttl_table_changed = false;
         String new_ttl_table;
 
+        bool table_comment_changed = false;
+        String new_table_comment;
+
         bool empty() const
         {
             return !sorting_key_changed && !sampling_expression_changed && !skip_indices_changed && !projections_changed
-                && !ttl_table_changed && !constraints_changed;
+                && !ttl_table_changed && !constraints_changed && !table_comment_changed;
         }
     };
 

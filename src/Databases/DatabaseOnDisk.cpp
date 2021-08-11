@@ -166,7 +166,8 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
         ASTStorage & storage_ast = *ast_create_query.storage;
 
         bool is_extended_storage_def
-            = storage_ast.partition_by || storage_ast.primary_key || storage_ast.order_by || storage_ast.sample_by || storage_ast.settings;
+            = storage_ast.partition_by || storage_ast.primary_key || storage_ast.order_by || storage_ast.sample_by || storage_ast.settings
+            || storage_ast.comment;
 
         if (is_extended_storage_def)
         {
@@ -186,6 +187,18 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
 
             if (metadata.settings_changes)
                 storage_ast.set(storage_ast.settings, metadata.settings_changes);
+
+            if (!metadata.comment.empty())
+            {
+                if (!storage_ast.comment)
+                {
+                    auto literal = std::make_shared<ASTLiteral>(metadata.comment);
+                    ASTPtr comment_expression = literal;
+                    storage_ast.set(storage_ast.comment,comment_expression);
+                }
+                else
+                    storage_ast.comment->as<ASTLiteral &>().value = metadata.comment;
+            }
         }
     }
 }

@@ -67,6 +67,8 @@ public:
         NO_TYPE,
 
         LIVE_VIEW_REFRESH,
+
+        MODIFY_COMMENT,
     };
 
     Type type = NO_TYPE;
@@ -143,6 +145,9 @@ public:
 
     /// For MODIFY_QUERY
     ASTPtr select;
+
+    ///For MODIFY_COMMENT
+    ASTPtr table_comment;
 
     /** In ALTER CHANNEL, ADD, DROP, SUSPEND, RESUME, REFRESH, MODIFY queries, the list of live views is stored here
      */

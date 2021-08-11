@@ -329,6 +329,14 @@ std::optional<AlterCommand> AlterCommand::parse(const ASTAlterCommand * command_
         command.if_exists = command_ast->if_exists;
         return command;
     }
+    else if (command_ast->type == ASTAlterCommand::MODIFY_COMMENT)
+    {
+        AlterCommand command;
+        command.ast = command_ast->clone();
+        command.type = AlterCommand::MODIFY_COMMENT;
+        command.table_comment = command_ast->table_comment->as<ASTLiteral &>().value.get<String>();
+        return command;
+    }
     else
         return {};
 }
@@ -606,6 +614,10 @@ void AlterCommand::apply(StorageInMemoryMetadata & metadata, ContextPtr context)
         for (auto & index : metadata.secondary_indices)
             rename_visitor.visit(index.definition_ast);
     }
+    else if (type == MODIFY_COMMENT)
+    {
+        metadata.setComment(table_comment);
+    }
     else
         throw Exception("Wrong parameter type in ALTER query", ErrorCodes::LOGICAL_ERROR);
 }
@@ -717,6 +729,10 @@ bool AlterCommand::isCommentAlter() const
             && data_type == nullptr
             && default_expression == nullptr
             && ttl == nullptr;
+    }
+    else if (type == MODIFY_COMMENT)
+    {
+        return true;
     }
     return false;
 }

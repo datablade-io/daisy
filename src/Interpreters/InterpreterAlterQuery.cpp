@@ -454,6 +454,11 @@ AccessRightsElements InterpreterAlterQuery::getRequiredAccessForCommand(const AS
             required_access.emplace_back(AccessType::ALTER_RENAME_COLUMN, database, table, column_name());
             break;
         }
+        case ASTAlterCommand::MODIFY_COMMENT:
+        {
+            required_access.emplace_back(AccessType::ALERT_COMMENT_TABLE, database, table);
+            break;
+        }
         case ASTAlterCommand::NO_TYPE: break;
     }
 
