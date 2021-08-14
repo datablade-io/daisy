@@ -106,8 +106,7 @@ void ReplicatedMergeTreeTableMetadata::write(WriteBuffer & out) const
         out << "constraints: " << constraints << "\n";
 
     /// Daisy : starts
-    if (!table_comment.empty())
-        out << "a table comment: " << table_comment << "\n";
+    out << "a table comment: " << table_comment << "\n";
     /// Daisy : ends
 }
 
