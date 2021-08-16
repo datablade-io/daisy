@@ -166,13 +166,13 @@ void MetadataService::doCreateDWal(const DWAL::KafkaWALContext & ctx) const
         }
         else if (err == ErrorCodes::DWAL_FATAL_ERROR)
         {
-            throw Exception("Topic=" + ctx.topic + "create failed", ErrorCodes::DWAL_FATAL_ERROR);
+            throw Exception("Topic " + ctx.topic + " create failed", ErrorCodes::DWAL_FATAL_ERROR);
         }
         else
         {
-            if (retries > DWAL_MAX_RETRIES)
+            if (retries >= DWAL_MAX_RETRIES)
             {
-                throw Exception("Topic=" + ctx.topic + "create failed", ErrorCodes::UNKNOWN_EXCEPTION);
+                throw Exception("Topic " + ctx.topic + " create failed", ErrorCodes::UNKNOWN_EXCEPTION);
             }
 
             retries++;
