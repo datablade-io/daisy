@@ -172,7 +172,6 @@ void MetadataService::doCreateDWal(const DWAL::KafkaWALContext & ctx) const
         {
             if (retries > DWAL_MAX_RETRIES)
             {
-                String message = "Topic=" + ctx.topic + "create failed";
                 throw Exception("Topic=" + ctx.topic + "create failed", ErrorCodes::UNKNOWN_EXCEPTION);
             }
 
