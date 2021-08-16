@@ -144,7 +144,8 @@ void MetadataService::doCreateDWal(const DWAL::KafkaWALContext & ctx) const
 {
     if (dwal->describe(ctx.topic, ctx).err == ErrorCodes::OK)
     {
-        throw Exception("Found topic= " + ctx.topic + " already exists", ErrorCodes::RESOURCE_ALREADY_EXISTS);
+        LOG_INFO(log, "Found topic={} already exists", ctx.topic);
+        return;
     }
 
     LOG_INFO(log, "Didn't find topic={}, create one with settings={}", ctx.topic, ctx.string());
@@ -160,7 +161,8 @@ void MetadataService::doCreateDWal(const DWAL::KafkaWALContext & ctx) const
         }
         else if (err == ErrorCodes::RESOURCE_ALREADY_EXISTS)
         {
-            throw Exception("Topic=" + ctx.topic +" already exists", ErrorCodes::RESOURCE_ALREADY_EXISTS);
+            LOG_INFO(log, "Topic={} already exists", ctx.topic);
+            break;
         }
         else if (err == ErrorCodes::DWAL_FATAL_ERROR)
         {
@@ -205,7 +207,7 @@ void MetadataService::doTailingRecords()
 
     setThreadName(thr_name.c_str());
 
-    auto [ batch, timeout ] = batchSizeAndTimeout();
+    auto [batch, timeout] = batchSizeAndTimeout();
 
     LOG_INFO(log, "Starting tailing records");
 
@@ -256,7 +258,7 @@ void MetadataService::startup()
     /// For example, every node can call produce node metrics via PlacementService
     const auto & conf = configSettings();
 
-    String topic = config.getString(conf.key_prefix + NAME_KEY , conf.default_name);
+    String topic = config.getString(conf.key_prefix + NAME_KEY, conf.default_name);
     auto replication_factor = config.getInt(conf.key_prefix + REPLICATION_FACTOR_KEY, 1);
 
     DWAL::KafkaWALContext kctx{topic, 1, replication_factor, cleanupPolicy()};
@@ -281,7 +283,7 @@ void MetadataService::startup()
     kctx.request_required_acks = conf.request_required_acks;
     kctx.request_timeout_ms = conf.request_timeout_ms;
     /// Compression settings
-    kctx.client_side_compression = config.getBool(conf.key_prefix + COMPRESSION_KEY , false);
+    kctx.client_side_compression = config.getBool(conf.key_prefix + COMPRESSION_KEY, false);
 
     const String & this_role = role();
     for (const auto & key : role_keys)
@@ -301,7 +303,7 @@ void MetadataService::startup()
                 /// First try to create corresponding dwal
                 doCreateDWal(kctx);
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 LOG_INFO(log, e.message());
             }

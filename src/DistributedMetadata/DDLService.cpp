@@ -9,6 +9,7 @@
 #include <DistributedWriteAheadLog/KafkaWAL.h>
 #include <DistributedWriteAheadLog/KafkaWALCommon.h>
 #include <Interpreters/Context.h>
+#include <Common/escapeForFileName.h>
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
@@ -97,11 +98,11 @@ namespace
         }
         else if (method == Poco::Net::HTTPRequest::HTTP_PATCH)
         {
-            return fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, getTableCategory(headers), table);
+            return fmt::format(DDL_TABLE_PATCH_API_PATH_FMT, getTableCategory(headers), escapeForFileName(table));
         }
         else if (method == Poco::Net::HTTPRequest::HTTP_DELETE)
         {
-            return fmt::format(DDL_TABLE_DELETE_API_PATH_FMT, getTableCategory(headers), table);
+            return fmt::format(DDL_TABLE_DELETE_API_PATH_FMT, getTableCategory(headers), escapeForFileName(table));
         }
         else
         {
@@ -114,15 +115,15 @@ namespace
     {
         if (method == Poco::Net::HTTPRequest::HTTP_POST)
         {
-            return fmt::format(DDL_COLUMN_POST_API_PATH_FMT, table);
+            return fmt::format(DDL_COLUMN_POST_API_PATH_FMT, escapeForFileName(table));
         }
         else if (method == Poco::Net::HTTPRequest::HTTP_PATCH)
         {
-            return fmt::format(DDL_COLUMN_PATCH_API_PATH_FMT, table, headers.at("column"));
+            return fmt::format(DDL_COLUMN_PATCH_API_PATH_FMT, escapeForFileName(table), escapeForFileName(headers.at("column")));
         }
         else if (method == Poco::Net::HTTPRequest::HTTP_DELETE)
         {
-            return fmt::format(DDL_COLUMN_DELETE_API_PATH_FMT, table, headers.at("column"));
+            return fmt::format(DDL_COLUMN_DELETE_API_PATH_FMT, escapeForFileName(table), escapeForFileName(headers.at("column")));
         }
         else
         {
@@ -596,11 +597,10 @@ void DDLService::processRecords(const DWAL::RecordPtrs & records)
     /// FIXME, update DDL task status after committing offset / local offset checkpoint ...
 }
 
-std::vector<Poco::URI> DDLService::getTargetURIs(
-    DWAL::RecordPtr record, const String & database, const String & table, const String & method) const
+std::vector<Poco::URI>
+DDLService::getTargetURIs(DWAL::RecordPtr record, const String & database, const String & table, const String & method) const
 {
-    if (record->op_code == DWAL::OpCode::CREATE_COLUMN
-        || record->op_code == DWAL::OpCode::ALTER_COLUMN
+    if (record->op_code == DWAL::OpCode::CREATE_COLUMN || record->op_code == DWAL::OpCode::ALTER_COLUMN
         || record->op_code == DWAL::OpCode::DELETE_COLUMN)
     {
         /// Column DDL request
@@ -625,7 +625,7 @@ void DDLService::createDWAL(
     /// streaming_storage_flush_ms
     if (url_parameters != nullptr)
     {
-        Poco::URI  uri;
+        Poco::URI uri;
         uri.setRawQuery(*url_parameters);
         auto params = uri.getQueryParameters();
 

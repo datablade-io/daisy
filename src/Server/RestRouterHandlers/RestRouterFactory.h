@@ -16,6 +16,7 @@
 #include "TaskRestRouterHandler.h"
 
 #include <re2/re2.h>
+#include <Common/escapeForFileName.h>
 
 #include <unordered_map>
 
@@ -77,7 +78,7 @@ public:
             });
 
         factory.registerRouterHandler(
-            "/dae/v1/ddl/tables/(?P<table>\\w+)(\\?[\\w\\-=&#]+){0,1}",
+            "/dae/v1/ddl/tables/(?P<table>[%\\w]+)(\\?[\\w\\-=&#]+){0,1}",
             "PATCH/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<TabularTableRestRouterHandler>(query_context);
@@ -186,7 +187,8 @@ public:
                         if (capturing_value.data())
                         {
                             /// Put path parameters into handler map<string name, string value>
-                            handler->setPathParameter(capturing_name, String(capturing_value.data(), capturing_value.size()));
+                            const auto & parameter_value = unescapeForFileName(String(capturing_value.data(), capturing_value.size()));
+                            handler->setPathParameter(capturing_name, parameter_value);
                         }
                     }
 
