@@ -20,30 +20,36 @@ namespace ErrorCodes
     extern const int MSG_SIZE_TOO_LARGE;
     extern const int INTERNAL_INGEST_BUFFER_FULL;
 }
-}
 
-namespace DWAL
+/// Allowed chars are ASCII alphanumerics, '.', '_' and '-'. '_' is used as escaped char in the form '_xx' where xx
+/// is the hexadecimal value of the byte(s) needed to represent an illegal char in utf8.
+std::string escapeName(const std::string & s)
 {
-std::string escapeDWalName(const std::string & namespace_, const std::string & name_)
-{
-    /// Allowed chars are ASCII alphanumerics, '.', '_' and '-'. '_' is used as escaped char in the form '_xx' where xx
-    /// is the hexadecimal value of the byte(s) needed to represent an illegal char in utf8.
-    std::string dwal_name = "";
-    for (const auto & b : namespace_ + "." + name_)
+    std::string escaped;
+    escaped.reserve(s.size());
+
+    for (const auto & b : s)
     {
         if ((b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || (b == '.' || b == '-'))
         {
-            dwal_name += b;
+            escaped += b;
         }
         else
         {
             char out[3] = "_";
             writeHexByteUppercase(b, out + 1);
-            dwal_name += out;
+            escaped += out;
         }
     }
+    return escaped;
+}
+}
 
-    return dwal_name;
+namespace DWAL
+{
+std::string escapeDWalName(const std::string & name_space, const std::string & name)
+{
+    return DB::escapeName(name_space) + "." + DB::escapeName(name);
 }
 
 int32_t mapErrorCode(rd_kafka_resp_err_t err, bool retriable)
