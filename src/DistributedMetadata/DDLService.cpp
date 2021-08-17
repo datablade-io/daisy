@@ -266,6 +266,31 @@ Int32 DDLService::doDDL(
     return err;
 }
 
+void DDLService::doDDLOnHosts(const std::vector<Poco::URI> & target_hosts, const String & payload,
+                              const String & method, const String & query_id, const String & user) const
+{
+    std::vector<String> failed_hosts;
+    /// FIXME : Parallelize doDDL on the uris
+    for (auto uri : target_hosts)
+    {
+        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
+        const auto err = doDDL(payload, uri, method, query_id, user);
+        if (err != ErrorCodes::OK)
+        {
+            failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
+        }
+    }
+
+    if (failed_hosts.empty())
+    {
+        succeedDDL(query_id, user, payload);
+    }
+    else
+    {
+        failDDL(query_id, user, payload, "Failed to do DDL on hosts: " + boost::algorithm::join(failed_hosts, ","));
+    }
+}
+
 void DDLService::createTable(DWAL::RecordPtr record)
 {
     const Block & block = record->block;
@@ -320,7 +345,7 @@ void DDLService::createTable(DWAL::RecordPtr record)
                 uri.addQueryParameter("distributed_ddl", "false");
                 uri.addQueryParameter("shard", std::to_string(j));
 
-                auto err = doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_POST, query_id, user);
+                const auto err = doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_POST, query_id, user);
                 if (err != ErrorCodes::OK)
                 {
                     failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
@@ -427,25 +452,7 @@ void DDLService::mutateTable(DWAL::RecordPtr record, const String & method) cons
         return;
     }
 
-    std::vector<String> failed_hosts;
-    for (auto & uri : target_hosts)
-    {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        auto err = doDDL(payload, uri, method, query_id, user);
-        if (err != ErrorCodes::OK)
-        {
-            failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
-        }
-    }
-
-    if (failed_hosts.empty())
-    {
-        succeedDDL(query_id, user, payload);
-    }
-    else
-    {
-        failDDL(query_id, user, payload,  "Failed to do DDL on hosts: " + boost::algorithm::join(failed_hosts, ","));
-    }
+    doDDLOnHosts(target_hosts, payload, method, query_id, user);
 }
 
 void DDLService::mutateDatabase(DWAL::RecordPtr record, const String & method) const
@@ -504,28 +511,7 @@ void DDLService::mutateDatabase(DWAL::RecordPtr record, const String & method) c
 
     std::vector<Poco::URI> target_hosts{toURIs(hosts, fmt::format(*api_path_fmt, database))};
 
-    std::vector<String> failed_hosts;
-    /// FIXME : Parallelize doDDL on the uris
-    for (auto & uri : target_hosts)
-    {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        auto err = doDDL(payload, uri, method, query_id, user);
-        if (err != ErrorCodes::OK)
-        {
-            failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
-        }
-    }
-
-    if (failed_hosts.empty())
-    {
-        succeedDDL(query_id, user, payload);
-    }
-    else
-    {
-        failDDL(query_id, user, payload,  "Failed to do DDL on hosts: " + boost::algorithm::join(failed_hosts, ","));
-    }
-
-    succeedDDL(query_id, user, payload);
+    doDDLOnHosts(target_hosts, payload, method, query_id, user);
 }
 
 void DDLService::commit(Int64 last_sn)
