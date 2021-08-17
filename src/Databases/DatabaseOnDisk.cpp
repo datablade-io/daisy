@@ -189,17 +189,13 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
         }
 
         /// Daisy : starts
-        if (!storage_ast.comment)
+        if (!metadata.comment.empty())
         {
-            auto literal = std::make_shared<ASTLiteral>(metadata.comment);
-            ASTPtr comment_expression = literal;
+            ASTPtr comment_expression = std::make_shared<ASTLiteral>(Field(metadata.comment));
             storage_ast.set(storage_ast.comment, comment_expression);
         }
-        else
-        {
-            if (storage_ast.comment->as<ASTLiteral &>().value.get<String>() != metadata.comment)
-                storage_ast.comment->as<ASTLiteral &>().value = metadata.comment;
-        }
+        else if (storage_ast.comment != nullptr)
+            storage_ast.comment = nullptr;
         /// Daisy : ends
     }
 }
