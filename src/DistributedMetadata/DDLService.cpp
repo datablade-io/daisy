@@ -245,8 +245,14 @@ Int32 DDLService::doDDL(
         auto [response, http_code] = sendRequest(uri, method, query_id, user, password, payload, log);
 
         err = toErrorCode(http_code, response);
-        if (err == ErrorCodes::OK || err == ErrorCodes::UNRETRIABLE_ERROR)
+        if (err == ErrorCodes::OK)
         {
+            return err;
+        }
+
+        if (err == ErrorCodes::UNRETRIABLE_ERROR)
+        {
+            LOG_ERROR(log, "Failed to request uri={} due to unrecoverable failure, error_code={}", uri.toString(), err);
             return err;
         }
 
@@ -300,6 +306,7 @@ void DDLService::createTable(DWAL::RecordPtr record)
 
         std::vector<Poco::URI> target_hosts{toURIs(hosts, getTableApiPath(record->headers, table, Poco::Net::HTTPRequest::HTTP_POST))};
 
+        std::vector<String> failed_hosts;
         /// Create table on each target host according to placement
         for (Int32 i = 0; i < replication_factor; ++i)
         {
@@ -313,16 +320,23 @@ void DDLService::createTable(DWAL::RecordPtr record)
                 uri.addQueryParameter("distributed_ddl", "false");
                 uri.addQueryParameter("shard", std::to_string(j));
 
-                auto err = doDDL(payload, target_hosts[i * shards + j], Poco::Net::HTTPRequest::HTTP_POST, query_id, user);
-                if (err == ErrorCodes::UNRETRIABLE_ERROR)
+                auto err = doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_POST, query_id, user);
+                if (err != ErrorCodes::OK)
                 {
-                    failDDL(query_id, user, payload, "Unable to fulfill the request due to unrecoverable failure");
-                    return;
+                    failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
                 }
             }
         }
 
-        succeedDDL(query_id, user, payload);
+        if (failed_hosts.empty())
+        {
+            succeedDDL(query_id, user, payload);
+        }
+        else
+        {
+            failDDL(query_id, user, payload,
+                    "Failed to creat table on hosts: " + boost::algorithm::join(failed_hosts, ","));
+        }
     }
     else
     {
@@ -413,13 +427,25 @@ void DDLService::mutateTable(DWAL::RecordPtr record, const String & method) cons
         return;
     }
 
+    std::vector<String> failed_hosts;
     for (auto & uri : target_hosts)
     {
         uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        doDDL(payload, uri, method, query_id, user);
+        auto err = doDDL(payload, uri, method, query_id, user);
+        if (err != ErrorCodes::OK)
+        {
+            failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
+        }
     }
 
-    succeedDDL(query_id, user, payload);
+    if (failed_hosts.empty())
+    {
+        succeedDDL(query_id, user, payload);
+    }
+    else
+    {
+        failDDL(query_id, user, payload,  "Failed to do DDL on hosts: " + boost::algorithm::join(failed_hosts, ","));
+    }
 }
 
 void DDLService::mutateDatabase(DWAL::RecordPtr record, const String & method) const
@@ -478,11 +504,25 @@ void DDLService::mutateDatabase(DWAL::RecordPtr record, const String & method) c
 
     std::vector<Poco::URI> target_hosts{toURIs(hosts, fmt::format(*api_path_fmt, database))};
 
+    std::vector<String> failed_hosts;
     /// FIXME : Parallelize doDDL on the uris
     for (auto & uri : target_hosts)
     {
         uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        doDDL(payload, uri, method, query_id, user);
+        auto err = doDDL(payload, uri, method, query_id, user);
+        if (err != ErrorCodes::OK)
+        {
+            failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
+        }
+    }
+
+    if (failed_hosts.empty())
+    {
+        succeedDDL(query_id, user, payload);
+    }
+    else
+    {
+        failDDL(query_id, user, payload,  "Failed to do DDL on hosts: " + boost::algorithm::join(failed_hosts, ","));
     }
 
     succeedDDL(query_id, user, payload);
