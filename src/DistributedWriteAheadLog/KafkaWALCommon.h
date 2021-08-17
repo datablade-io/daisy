@@ -16,7 +16,7 @@ struct KafkaWALStats;
 int32_t mapErrorCode(rd_kafka_resp_err_t err, bool retriable = false);
 
 /// Escape `namespace_` and `name_` to restrict char set
-std::string escapeDWalName(const std::string & namespace_, const std::string & name_);
+std::string escapeDWalName(const std::string & name_space, const std::string & name);
 
 using KConfPtr = std::unique_ptr<rd_kafka_conf_t, decltype(rd_kafka_conf_destroy) *>;
 using KTopicConfPtr = std::unique_ptr<rd_kafka_topic_conf_t, decltype(rd_kafka_topic_conf_destroy) *>;

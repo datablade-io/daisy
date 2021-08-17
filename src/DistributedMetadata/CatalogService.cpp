@@ -47,10 +47,7 @@ std::regex PARSE_REPLICATION_REGEX{"DistributedMergeTree\\(\\s*(\\d+),\\s*\\d+\\
 Int32 searchIntValueByRegex(const std::regex & pattern, const String & str)
 {
     std::smatch pattern_match;
-
-    auto m = std::regex_search(str, pattern_match, pattern);
-    assert(m);
-    (void)m;
+    std::regex_search(str, pattern_match, pattern);
 
     if (pattern_match.size() > 0)
         return std::stoi(pattern_match.str(1));
