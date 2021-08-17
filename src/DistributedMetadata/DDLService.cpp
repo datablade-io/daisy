@@ -273,8 +273,8 @@ void DDLService::doDDLOnHosts(const std::vector<Poco::URI> & target_hosts, const
     /// FIXME : Parallelize doDDL on the uris
     for (auto uri : target_hosts)
     {
-        uri.setQueryParameters(Poco::URI::QueryParameters{{"distributed_ddl", "false"}});
-        const auto err = doDDL(payload, uri, method, query_id, user);
+        uri.addQueryParameter("distributed_ddl", "false");
+        const auto & err = doDDL(payload, uri, method, query_id, user);
         if (err != ErrorCodes::OK)
         {
             failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
@@ -331,8 +331,7 @@ void DDLService::createTable(DWAL::RecordPtr record)
 
         std::vector<Poco::URI> target_hosts{toURIs(hosts, getTableApiPath(record->headers, table, Poco::Net::HTTPRequest::HTTP_POST))};
 
-        std::vector<String> failed_hosts;
-        /// Create table on each target host according to placement
+        /// Set the parameters in uris
         for (Int32 i = 0; i < replication_factor; ++i)
         {
             for (Int32 j = 0; j < shards; ++j)
@@ -342,26 +341,11 @@ void DDLService::createTable(DWAL::RecordPtr record)
                 {
                     uri.setRawQuery(*url_parameters);
                 }
-                uri.addQueryParameter("distributed_ddl", "false");
                 uri.addQueryParameter("shard", std::to_string(j));
-
-                const auto err = doDDL(payload, uri, Poco::Net::HTTPRequest::HTTP_POST, query_id, user);
-                if (err != ErrorCodes::OK)
-                {
-                    failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
-                }
             }
         }
-
-        if (failed_hosts.empty())
-        {
-            succeedDDL(query_id, user, payload);
-        }
-        else
-        {
-            failDDL(query_id, user, payload,
-                    "Failed to creat table on hosts: " + boost::algorithm::join(failed_hosts, ","));
-        }
+        /// Create table on each target host according to placement
+        doDDLOnHosts(target_hosts, payload, Poco::Net::HTTPRequest::HTTP_POST, query_id, user);
     }
     else
     {
