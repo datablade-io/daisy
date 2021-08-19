@@ -83,10 +83,12 @@ bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payloa
 
     if (isDistributedDDL())
     {
-        const auto brokers = query_context->getConfigRef().getString("cluster_settings.streaming_storage.kafka.brokers");
+        const auto & brokers = query_context->getConfigRef().getString(
+                "cluster_settings.streaming_storage.kafka.brokers");
         std::vector<std::string> brokers_list;
         boost::split(brokers_list, brokers, boost::is_any_of(","));
         int broker_size = brokers_list.size();
+
         if (replication_factor > broker_size)
         {
             error_msg = fmt::format(
