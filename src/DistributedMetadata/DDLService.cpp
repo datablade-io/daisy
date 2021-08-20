@@ -266,15 +266,15 @@ Int32 DDLService::doDDL(
     return err;
 }
 
-void DDLService::doDDLOnHosts(const std::vector<Poco::URI> & target_hosts, const String & payload,
+void DDLService::doDDLOnHosts(std::vector<Poco::URI> & target_hosts, const String & payload,
                               const String & method, const String & query_id, const String & user) const
 {
     std::vector<String> failed_hosts;
     /// FIXME : Parallelize doDDL on the uris
-    for (auto uri : target_hosts)
+    for (auto & uri : target_hosts)
     {
         uri.addQueryParameter("distributed_ddl", "false");
-        const auto & err = doDDL(payload, uri, method, query_id, user);
+        auto err = doDDL(payload, uri, method, query_id, user);
         if (err != ErrorCodes::OK)
         {
             failed_hosts.push_back(uri.getHost() + ":" + toString(uri.getPort()));
