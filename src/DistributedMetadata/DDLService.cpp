@@ -555,7 +555,7 @@ void DDLService::processRecords(const DWAL::RecordPtrs & records)
                 /// Delete DWAL
                 String database = record->block.getByName("database").column->getDataAt(0).toString();
                 String table = record->block.getByName("table").column->getDataAt(0).toString();
-                DWAL::KafkaWALContext ctx{DWAL::escapeDWalName(database, table)};
+                DWAL::KafkaWALContext ctx{DWAL::escapeDWALName(database, table)};
                 doDeleteDWal(ctx);
                 break;
             }
@@ -616,7 +616,7 @@ DDLService::getTargetURIs(DWAL::RecordPtr record, const String & database, const
 void DDLService::createDWAL(
     const String & database, const String & table, Int32 shards, Int32 replication_factor, const String * url_parameters) const
 {
-    DWAL::KafkaWALContext ctx{DWAL::escapeDWalName(database, table), shards, replication_factor, "delete"};
+    DWAL::KafkaWALContext ctx{DWAL::escapeDWALName(database, table), shards, replication_factor, "delete"};
 
     /// Parse these settings from url parameters
     /// streaming_storage_retention_bytes,

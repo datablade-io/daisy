@@ -47,9 +47,9 @@ std::string escapeName(const std::string & s)
 
 namespace DWAL
 {
-std::string escapeDWalName(const std::string & name_space, const std::string & name)
+std::string escapeDWALName(const std::string & ns, const std::string & name)
 {
-    return DB::escapeName(name_space) + "." + DB::escapeName(name);
+    return DB::escapeName(ns) + "." + DB::escapeName(name);
 }
 
 int32_t mapErrorCode(rd_kafka_resp_err_t err, bool retriable)
