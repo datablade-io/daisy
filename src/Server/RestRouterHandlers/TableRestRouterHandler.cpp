@@ -9,7 +9,6 @@
 #include <Parsers/queryToString.h>
 #include <common/string.h>
 
-#include <Poco/Util/Application.h>
 #include <boost/algorithm/string/join.hpp>
 
 #include <vector>
