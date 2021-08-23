@@ -124,7 +124,7 @@ void UnnestSubqueryVisitorData::rewriteColumn(
     {
         for (auto & child : ast->children)
         {
-            rewriteColumn(child, subquery_selects_map, true);
+            rewriteColumn(child, subquery_selects_map);
         }
     }
 }
