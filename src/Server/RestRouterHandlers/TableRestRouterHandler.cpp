@@ -79,29 +79,11 @@ bool TableRestRouterHandler::validatePost(const Poco::JSON::Object::Ptr & payloa
         }
     }
 
-    int replication_factor = payload->has("replication_factor") ? payload->get("replication_factor").convert<Int32>() : 1;
-
-    if (isDistributedDDL())
-    {
-        const auto & brokers = query_context->getConfigRef().getString(
-                "cluster_settings.streaming_storage.kafka.brokers");
-        std::vector<std::string> brokers_list;
-        boost::split(brokers_list, brokers, boost::is_any_of(","));
-        int broker_size = brokers_list.size();
-
-        if (replication_factor > broker_size)
-        {
-            error_msg = fmt::format(
-                    "Invalid replication_factor={}, replication factor should not exceed the total Kafka brokers {}.",
-                    replication_factor, broker_size);
-            return false;
-        }
-    }
-
     /// For non-distributed env or user force to create a `local` MergeTree table
     if (!query_context->isDistributed() || getQueryParameterBool("distributed", false))
     {
         int shards = payload->has("shards") ? payload->get("shards").convert<Int32>() : 1;
+        int replication_factor = payload->has("replication_factor") ? payload->get("replication_factor").convert<Int32>() : 1;
 
         if (shards != 1 || replication_factor != 1)
         {
