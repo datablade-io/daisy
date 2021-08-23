@@ -172,7 +172,7 @@ void MetadataService::doCreateDWal(const DWAL::KafkaWALContext & ctx) const
         else if (err == ErrorCodes::INVALID_REPLICATION_FACTOR)
         {
             throw Exception("Topic " + ctx.topic + " create failed due to invalid replication factor.",
-                            ErrorCodes::DWAL_FATAL_ERROR);
+                            ErrorCodes::INVALID_REPLICATION_FACTOR);
         }
         else
         {
