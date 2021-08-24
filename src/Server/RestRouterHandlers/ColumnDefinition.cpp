@@ -34,7 +34,7 @@ String getCreateColumnDefination(const Poco::JSON::Object::Ptr & column)
     }
     else if (column->has("alias"))
     {
-        column_definition.push_back(" ALIAS " + column->get("alias").toString());
+        column_definition.push_back(" ALIAS `" + column->get("alias").toString() + "`");
     }
 
     if (column->has("comment"))
@@ -65,7 +65,7 @@ String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, const 
     std::vector<String> update_segments;
     if (payload->has("name"))
     {
-        update_segments.push_back(" RENAME COLUMN `" + column + "` TO " + payload->get("name").toString());
+        update_segments.push_back(" RENAME COLUMN `" + column + "` TO `" + payload->get("name").toString() + "`");
         column = payload->get("name").toString();
     }
 
@@ -90,7 +90,7 @@ String getUpdateColumnDefination(const Poco::JSON::Object::Ptr & payload, const 
     }
     else if (payload->has("alias"))
     {
-        update_segments.push_back(" MODIFY COLUMN `" + column + "` ALIAS " + payload->get("alias").toString());
+        update_segments.push_back(" MODIFY COLUMN `" + column + "` ALIAS `" + payload->get("alias").toString() + "`");
     }
 
     if (payload->has("comment"))
