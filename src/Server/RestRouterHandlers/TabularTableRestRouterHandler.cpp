@@ -57,7 +57,7 @@ void TabularTableRestRouterHandler::buildTablesJSON(Poco::JSON::Object & resp, c
         if (table_names.contains(table->name))
             continue;
 
-        if (table->engine_full.find("subtype = 'tabular'") == String::npos)
+        if (table->engine_full.find("subtype = 'rawstore'") != String::npos)
         {
             continue;
         }
