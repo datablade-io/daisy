@@ -6,12 +6,11 @@
 
 namespace DB
 {
-
 String getCreateColumnDefination(const Poco::JSON::Object::Ptr & column)
 {
     std::vector<String> column_definition;
 
-    column_definition.push_back("`" + column->get("name").toString() +  "`");
+    column_definition.push_back("`" + column->get("name").toString() + "`");
     if (column->has("nullable") && column->get("nullable"))
     {
         column_definition.push_back(" Nullable(" + column->get("type").toString() + ")");
