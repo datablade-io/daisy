@@ -1,4 +1,3 @@
-#include <Interpreters/IdentifierSemantic.h>
 #include <Interpreters/UnnestSubqueryVisitor.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/ParserQuery.h>
