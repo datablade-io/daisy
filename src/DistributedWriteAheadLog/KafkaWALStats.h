@@ -102,4 +102,25 @@ private:
 };
 
 using KafkaWALStatsPtr = std::unique_ptr<KafkaWALStats>;
+
+/* *
+* TopicPartitionStats
+*   Indicates that stats snapshot of the specified topic + paritation to Kafka handler.
+* */
+struct TopicPartitionStats {
+    std::string topic;              /* topic name */
+    int32_t partition = -1;         /* partition id */
+
+    /// Offset
+    int64_t app_offset = -1;        /* Last offset delivered to application + 1. */
+    int64_t committed_offset = -1;  /* Last committed offset */
+    int64_t end_offset = -1;        /* here maybe ls_offset / hi_offset according to isolation_level:RD_KAFKA_READ_COMMITTED */
+
+    /// Consumer Group
+    std::string group_id;           /* current consumer group id */
+    std::string member_id;          /* current consumer group member id */
+};
+
+using TopicPartitionStatsPtr = std::shared_ptr<TopicPartitionStats>;
+
 }

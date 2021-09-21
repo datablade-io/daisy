@@ -1502,4 +1502,26 @@ void StorageDistributedMergeTree::initWal()
     dwal_append_ctx.request_timeout_ms = dwal_request_timeout_ms;
     dwal->initProducerTopicHandle(dwal_append_ctx);
 }
+
+MergeTreeData::DataParts StorageDistributedMergeTree::getDataParts(const MergeTreeData::DataPartStates & affordable_states) const
+{
+    assert(storage);
+    return storage->getDataParts(affordable_states);
+}
+
+DWAL::TopicPartitionStatsPtr StorageDistributedMergeTree::getTopicPartitionStats() const
+{
+    /// multiplexer used by SETTINGS streaming_storage_subscription_mode == "shared".
+    if (multiplexer)
+        return multiplexer->getTopicPartitionStats({/* topic */ topic, /* partition */ shard, /* offset: no use */ -1});
+    else
+        return dwal->getTopicPartitionStats(dwal_consume_ctx);
+}
+
+std::pair<Int64, Int64> StorageDistributedMergeTree::maxPartsCommittedSN() const
+{
+    assert(storage);
+    return {storage->maxCommittedSN(), storage->maxPartsCommittedSN()};
+}
+
 }

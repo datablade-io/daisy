@@ -1697,5 +1697,33 @@ void StorageMergeTree::populateCommittedSNFromParts()
         LOG_DEBUG(log, "Loading idempotent key={}", *keys_iter->second);
     }
 }
+
+Int64 StorageMergeTree::maxPartsCommittedSN() const
+{
+    auto data_parts = getDataPartsVector();
+    auto committed = committedSN();
+
+    SequenceRanges sequence_ranges;
+
+    for (const auto & part : data_parts)
+    {
+        if (!part->seq_info)
+        {
+            continue;
+        }
+
+        for (const auto & seq_range : part->seq_info->sequence_ranges)
+        {
+            if (seq_range.end_sn > committed)
+            {
+                sequence_ranges.push_back(seq_range);
+            }
+        }
+    }
+
+    auto [missing_ranges, next_expecting_sn, max_expecting_sn] = DB::missingSequenceRanges(sequence_ranges, committed, /* no log */ nullptr);
+    return max_expecting_sn - 1;
+}
+
 /// Daisy : ends
 }

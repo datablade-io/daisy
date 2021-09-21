@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<!--
+  NOTE: User and query level settings are set up in "users.xml" file.
+  If you have accidentally specified user-level settings here, server won't start.
+  You can either move the settings to the right place inside "users.xml" file
+   or add <skip_check_for_incorrect_settings>1</skip_check_for_incorrect_settings> here.
+-->
+<yandex>
+    <!-- Multiple clusters of streaming storage are supported -->
+    <cluster_settings>
+        <streaming_storage>
+            <kafka>
+                <default>true</default>
+                <cluster_name>default-sys-kafka-cluster-name</cluster_name>
+                <cluster_id>default-sys-kafka-cluster-id</cluster_id>
+                <security_protocol>PLAINTEXT</security_protocol>
+                <!-- kafka nodes -->
+                <brokers>kafka1:9092</brokers>
+                <replication_factor>1</replication_factor>
+
+                <topic_metadata_refresh_interval_ms>300000</topic_metadata_refresh_interval_ms>
+                <message_max_bytes>1000000</message_max_bytes>
+                <statistic_internal_ms>30000</statistic_internal_ms>
+                <debug></debug>
+
+                <enable_idempotence>true</enable_idempotence>
+                <queue_buffering_max_messages>100000</queue_buffering_max_messages>
+                <queue_buffering_max_kbytes>1048576</queue_buffering_max_kbytes>
+                <queue_buffering_max_ms>50</queue_buffering_max_ms>
+                <message_send_max_retries>2</message_send_max_retries>
+                <retry_backoff_ms>100</retry_backoff_ms>
+                <compression_codec>snappy</compression_codec>
+
+                <message_timeout_ms>40000</message_timeout_ms>
+                <message_delivery_async_poll_ms>100</message_delivery_async_poll_ms>
+                <message_delivery_sync_poll_ms>10</message_delivery_sync_poll_ms>
+
+                <group_id>daisy</group_id>
+                <check_crcs>false</check_crcs>
+                <auto_commit_interval_ms>5000</auto_commit_interval_ms>
+                <fetch_message_max_bytes>1048576</fetch_message_max_bytes>
+                <fetch_wait_max_ms>500</fetch_wait_max_ms>
+
+                <queued_min_messages>1000000</queued_min_messages>
+                <queued_max_messages_kbytes>65536</queued_max_messages_kbytes>
+
+                <session_timeout_ms>10000</session_timeout_ms>
+                <max_poll_interval_ms>30000</max_poll_interval_ms>
+
+                <dedicated_subscription_pool_size>2</dedicated_subscription_pool_size>
+                <shared_subscription_pool_max_size>10</shared_subscription_pool_max_size>
+                <shared_subscription_flush_threshold_count>10000</shared_subscription_flush_threshold_count>
+                <shared_subscription_flush_threshold_size>10485760</shared_subscription_flush_threshold_size>
+                <shared_subscription_flush_threshold_ms>1000</shared_subscription_flush_threshold_ms>
+            </kafka>
+        </streaming_storage>
+
+        <system_ddls>
+            <name>__system_ddls</name>
+            <replication_factor>1</replication_factor>
+            <data_retention>168</data_retention>
+        </system_ddls>
+
+        <system_catalogs>
+            <name>__system_catalogs</name>
+            <replication_factor>1</replication_factor>
+            <log_roll_size>100</log_roll_size>
+            <log_roll_period>7200</log_roll_period>
+            <client_side_compression>false</client_side_compression>
+        </system_catalogs>
+
+        <system_node_metrics>
+            <name>__system_node_metrics</name>
+            <replication_factor>1</replication_factor>
+            <log_roll_size>100</log_roll_size>
+            <log_roll_period>7200</log_roll_period>
+        </system_node_metrics>
+
+        <system_tasks>
+            <name>__system_tasks</name>
+            <replication_factor>1</replication_factor>
+            <data_retention>24</data_retention>
+        </system_tasks>
+
+        <node_identity>master_node1</node_identity>
+
+        <node_roles>
+            <role>placement</role>
+            <role>ddl</role>
+            <role>task</role>
+            <role>catalog</role>
+        </node_roles>
+
+        <schedule_intervals>
+            <node_metrics>5000</node_metrics>
+        </schedule_intervals>
+    </cluster_settings>
+
+</yandex>

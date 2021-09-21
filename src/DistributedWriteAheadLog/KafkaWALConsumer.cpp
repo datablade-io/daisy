@@ -264,4 +264,13 @@ int32_t KafkaWALConsumer::commit(const TopicPartitionOffsets & tpos)
 
     return DB::ErrorCodes::OK;
 }
+
+TopicPartitionStatsPtr KafkaWALConsumer::getTopicPartitionStats(const TopicPartitionOffset & tpo) const
+{
+    assert(consumer_handle);
+    auto tpo_stats = rdkafkaTopicPartitionStats(consumer_handle.get(), tpo.topic, tpo.partition);
+    tpo_stats->group_id = settings->group_id;
+    return tpo_stats;
+}
+
 }

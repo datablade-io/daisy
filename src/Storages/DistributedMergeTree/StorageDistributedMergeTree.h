@@ -163,6 +163,18 @@ public:
 
     DWAL::RecordSN lastSN() const;
 
+    /* *
+    * pair <startup_max_committed_sn, current_max_committed_sn> 
+    *
+    * [recovering records] < startup_max_committed_sn < [committing records]
+    *
+    * */ 
+    std::pair<Int64, Int64> maxPartsCommittedSN() const;
+    
+    MergeTreeData::DataParts getDataParts(const MergeTreeData::DataPartStates & affordable_states) const;
+ 
+    DWAL::TopicPartitionStatsPtr getTopicPartitionStats() const; 
+
     friend struct DistributedMergeTreeCallbackData;
     friend class DistributedMergeTreeBlockOutputStream;
     friend class MergeTreeData;
