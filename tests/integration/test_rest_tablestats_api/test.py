@@ -36,58 +36,30 @@ def prepare_data():
                    )
 
     ### create and ingest DistributedMergeTree table
-    # create 3 shard 1 replica
-    while b'0\n' != instance1.http_request('?query=SELECT count(*) from test_table_3_1', method='GET').content:
-        print("create table test_table_3_1 ...")
-        instance1.http_request(method="POST", url="dae/v1/ddl/tables", data="""\
-        {\
-            "name": "test_table_3_1",\
-            "shards": 3,\
-            "replication_factor": 1,\
-            "shard_by_expression": "rand()",\
-            "columns": [\
-                {\
-                    "name": "col_1",\
-                    "type": "Int32",\
-                    "nullable": false\
-                },\
-                {\
-                    "name": "col_2",\
-                    "type": "Int32",\
-                    "nullable": false\
-                }\
-            ],\
-            "order_by_expression": "col_1",\
-            "partition_by_granularity": "D"\
-        }\
-        """)
-        time.sleep(1)
+    instances = [instance1, instance2, instance3, instance4]
     # create 4 shard 1 replica
-    while '0\n' != instance1.http_request('?query=SELECT count(*) from test_table_4_1', method='GET').content:
-        print("create table test_table_4_1 ...")
-        instance1.http_request(method="POST", url="dae/v1/ddl/tables", data="""\
-        {\
-            "name": "test_table_4_1",\
-            "shards": 4,\
-            "replication_factor": 1,\
-            "shard_by_expression": "rand()",\
-            "columns": [\
-                {\
-                    "name": "col_1",\
-                    "type": "Int32",\
-                    "nullable": false\
-                },\
-                {\
-                    "name": "col_2",\
-                    "type": "Int32",\
-                    "nullable": false\
-                }\
-            ],\
-            "order_by_expression": "col_1",\
-            "partition_by_granularity": "D"\
-        }\
+    for i in range(0, 4):
+        instances[i].query(f"""
+        CREATE TABLE default.test_table_4_1 (
+            `col_1` Int32,
+            `_time` DateTime64(3) DEFAULT now64(3)
+        ) ENGINE = DistributedMergeTree(1, 4, rand())
+        PARTITION BY toYYYYMMDD(_time)
+        ORDER BY (toYYYYMMDD(_time), col_1)
+        SETTINGS subtype='tabular', shard={i}
         """)
-        time.sleep(1)
+    # create 3 shard 1 replica
+    for i in range(0, 3):
+        instances[i].query(f"""
+        CREATE TABLE default.test_table_3_1 (
+            `col_1` Int32,
+            `_time` DateTime64(3) DEFAULT now64(3)
+        ) ENGINE = DistributedMergeTree(1, 3, rand())
+        PARTITION BY toYYYYMMDD(_time)
+        ORDER BY (toYYYYMMDD(_time), col_1)
+        SETTINGS subtype='tabular', shard={i}
+        """)
+    time.sleep(2)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -192,7 +164,6 @@ def test_tablestats_api_url_format(code, url_path, url_parameter):
     ])
 def test_tablestats_api_error(err_status, local, table):
     resp = instance1.http_request(method="GET", url=f"dae/v1/tablestats/{table}?local={local}")
-    print(resp)
     if err_status == 2: # ONLY ONE NODE ERROR
         err_count = 0 if 200 == resp.status_code else 1
         err_count += 0 if 200 == instance2.http_request(method="GET", url=f"dae/v1/tablestats/{table}?local={local}").status_code else 1
