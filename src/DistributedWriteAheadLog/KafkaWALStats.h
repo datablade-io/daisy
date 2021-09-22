@@ -118,7 +118,6 @@ struct TopicPartitionStats {
 
     /// Consumer Group
     std::string group_id;           /* current consumer group id */
-    std::string member_id;          /* current consumer group member id */
 };
 
 using TopicPartitionStatsPtr = std::shared_ptr<TopicPartitionStats>;

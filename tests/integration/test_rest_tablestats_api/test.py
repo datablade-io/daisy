@@ -2,6 +2,7 @@ import json
 
 import pytest
 from helpers.cluster import ClickHouseCluster
+import time
 
 cluster = ClickHouseCluster(__file__)
 instance1 = cluster.add_instance('node1',
@@ -33,89 +34,60 @@ def prepare_data():
     ENGINE = MergeTree() ORDER BY _time
     """
                    )
-    instance2.query("""
-    CREATE TABLE local_table2(
-        _time DateTime64,
-        n UInt64
-        )
-    ENGINE = MergeTree() ORDER BY _time
-    """
-                   )
-    instance3.query("""
-    CREATE TABLE local_table3(
-        _time DateTime64,
-        n UInt64
-        )
-    ENGINE = MergeTree() ORDER BY _time
-    """
-                   )
-    instance4.query("""
-    CREATE TABLE local_table4(
-        _time DateTime64,
-        n UInt64
-        )
-    ENGINE = MergeTree() ORDER BY _time
-    """
-                   )
-    for d in range(0, 10):
-        for i in range(10):
-            instance1.query("""
-            INSERT INTO local_table1(_time, n) VALUES('2021-01-2{date}', 123)
-            """.format(date=d))
-    for d in range(0, 10):
-        for i in range(10):
-            instance2.query("""
-            INSERT INTO local_table2(_time, n) VALUES('2021-01-2{date}', 123)
-            """.format(date=d))
-    for d in range(0, 10):
-        for i in range(10):
-            instance3.query("""
-            INSERT INTO local_table3(_time, n) VALUES('2021-01-2{date}', 123)
-            """.format(date=d))
-    for d in range(0, 10):
-        for i in range(10):
-            instance4.query("""
-            INSERT INTO local_table4(_time, n) VALUES('2021-01-2{date}', 123)
-            """.format(date=d))
 
     ### create and ingest DistributedMergeTree table
-    instance1.http_request(method="POST", url="dae/v1/ddl/tables", data=json.dumps("""
-    {
-        "name": "test_table_2_2",
-        "shards": 2,
-        "replication_factor": 2,
-        "shard_by_expression": "rand()",
-        "columns": [
-            {
-                "name": "col_1",
-                "type": "Int32",
-                "nullable": false
-            },
-            {
-                "name": "col_2",
-                "type": "Int32",
-                "nullable": false
-            }
-        ],
-        "order_by_expression": "col_1",
-        "partition_by_granularity": "D"
-    }
-    """))
-    instance1.http_request(method="POST", url="dae/v1/ingest/tables/test_table_2_2", data=json.dumps("""
-    {
-        "columns": [
-            "_time",
-            "col_1",
-            "col_2"
-        ],
-        "data":
-        [
-            ["2021-08-01", 1, 2],
-            ["2021-08-02", 3, 2]
-        ]
-    }
-    """))
-
+    # create 3 shard 1 replica
+    while b'0\n' != instance1.http_request('?query=SELECT count(*) from test_table_3_1', method='GET').content:
+        print("create table test_table_3_1 ...")
+        instance1.http_request(method="POST", url="dae/v1/ddl/tables", data="""\
+        {\
+            "name": "test_table_3_1",\
+            "shards": 3,\
+            "replication_factor": 1,\
+            "shard_by_expression": "rand()",\
+            "columns": [\
+                {\
+                    "name": "col_1",\
+                    "type": "Int32",\
+                    "nullable": false\
+                },\
+                {\
+                    "name": "col_2",\
+                    "type": "Int32",\
+                    "nullable": false\
+                }\
+            ],\
+            "order_by_expression": "col_1",\
+            "partition_by_granularity": "D"\
+        }\
+        """)
+        time.sleep(1)
+    # create 4 shard 1 replica
+    while '0\n' != instance1.http_request('?query=SELECT count(*) from test_table_4_1', method='GET').content:
+        print("create table test_table_4_1 ...")
+        instance1.http_request(method="POST", url="dae/v1/ddl/tables", data="""\
+        {\
+            "name": "test_table_4_1",\
+            "shards": 4,\
+            "replication_factor": 1,\
+            "shard_by_expression": "rand()",\
+            "columns": [\
+                {\
+                    "name": "col_1",\
+                    "type": "Int32",\
+                    "nullable": false\
+                },\
+                {\
+                    "name": "col_2",\
+                    "type": "Int32",\
+                    "nullable": false\
+                }\
+            ],\
+            "order_by_expression": "col_1",\
+            "partition_by_granularity": "D"\
+        }\
+        """)
+        time.sleep(1)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -143,7 +115,6 @@ def setup_nodes():
                     "end_offset",
                     "consumer_groups",
                         "group_id",
-                        "member_id",
                         "offset",
                         "committed_offset",
             "local",
@@ -171,7 +142,6 @@ def setup_nodes():
                 "committed_offset",
                 "end_offset",
                 "group_id",
-                "member_id",
             "local",
                 "total_rows",
                 "total_bytes",
@@ -184,22 +154,52 @@ def setup_nodes():
     ])
 ])
 def test_tablestats_api_main(local, keys):
-    res = instance1.http_request(method="GET", url=f"dae/v1/tablestats/test_table_2_2?local={local}")
-    print(res.text)
+    resp = instance1.http_request(method="GET", url=f"dae/v1/tablestats/test_table_4_1?local={local}")
+    assert 200 == resp.status_code
     for key in keys:
-        assert key in res.text
-    
+        assert key in resp.text
 
-# ### API URL FORMAT TEST
-# @pytest.mark.parametrize("url_path", ['dae/v1/tablestats', 'dae/v1/tablestats/', 'dae/v1/tablestats/test_table_2_2'])
-# @pytest.mark.parametrize("url_parameter", ['?local=true', '?local=false', '?local=abc', '?', ''])
-# def test_tablestats_api_url_format(url_path, url_parameter):
-#     res = instance1.http_request(method="GET", url=f"{url_path}{url_parameter}")
-#     print(res)
 
-# ### API ERROR TEST
-# @pytest.mark.parametrize("table", ['local_table1', 'local_table2', 'local_table3', 'local_table4', 'abc'])
-# @pytest.mark.parametrize("local", ['true', 'false'])
-# def test_tablestats_api_error(table, local):
-#     res = instance1.http_request(method="GET", url=f"dae/v1/tablestats/{table}?local={local}")
-#     print(res)
+### API URL FORMAT TEST
+@pytest.mark.parametrize("code, url_path", [
+        (400, 'dae/v1/tablestats'),
+        (400, 'dae/v1/tablestats/'),
+        (404, 'dae/v1/tablestats/test_table_4_1/'),
+        (200, 'dae/v1/tablestats/test_table_4_1')
+    ])
+@pytest.mark.parametrize("url_parameter", [
+        '?local=true',  # means !0
+        '?local=1',     # means !0
+        '?local=abc',   # means !0
+        '?local=false', # means 0
+        '?local=0',     # means 0
+        ''
+    ])
+def test_tablestats_api_url_format(code, url_path, url_parameter):
+    resp = instance1.http_request(method="GET", url=f"{url_path}{url_parameter}")
+    assert code == resp.status_code
+
+
+### API ERROR TEST
+# err_status:  0-SUCCESS  2-ERROR  2-ONLY ONE NODE ERROR
+@pytest.mark.parametrize("err_status, local, table", [
+        (1, 'true', 'local_table1'),    # MergeTree no support
+        (1, 'false', 'local_table1'),
+        (1, 'true', 'abc'),             # Table not exist
+        (1, 'false', 'abc'),
+        (2, 'true', 'test_table_3_1'),  # in one node, has not a local table
+        (0, 'false', 'test_table_3_1')
+    ])
+def test_tablestats_api_error(err_status, local, table):
+    resp = instance1.http_request(method="GET", url=f"dae/v1/tablestats/{table}?local={local}")
+    print(resp)
+    if err_status == 2: # ONLY ONE NODE ERROR
+        err_count = 0 if 200 == resp.status_code else 1
+        err_count += 0 if 200 == instance2.http_request(method="GET", url=f"dae/v1/tablestats/{table}?local={local}").status_code else 1
+        err_count += 0 if 200 == instance3.http_request(method="GET", url=f"dae/v1/tablestats/{table}?local={local}").status_code else 1
+        err_count += 0 if 200 == instance4.http_request(method="GET", url=f"dae/v1/tablestats/{table}?local={local}").status_code else 1
+        assert err_count == 1
+    elif err_status == 1:
+        assert 400 == resp.status_code
+    elif err_status == 0:
+        assert 200 == resp.status_code

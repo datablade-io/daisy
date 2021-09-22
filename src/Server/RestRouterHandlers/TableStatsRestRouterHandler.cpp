@@ -106,7 +106,6 @@ std::pair<String, Int32> TableStatsRestRouterHandler::executeGet(const Poco::JSO
 *   - committed_offset
 *   - end_offset
 *   - group_id
-*   - member_id
 * <local>
 *   - total_rows
 *   - toal_bytes
@@ -158,7 +157,6 @@ int TableStatsRestRouterHandler::buildLocalTableStatsJSON(Poco::JSON::Object & r
     streaming_obj.set("committed_offset", toppar_stats->committed_offset);
     streaming_obj.set("end_offset", toppar_stats->end_offset);
     streaming_obj.set("group_id", toppar_stats->group_id);
-    streaming_obj.set("member_id", toppar_stats->member_id);
     resp_data.set("streaming", streaming_obj);
 
     /* set local */
@@ -242,7 +240,6 @@ String TableStatsRestRouterHandler::mergeLocalTableStatsToString(const TableResp
         /* streaming.partitions.partition.consumer_groups.consumer_group */
         auto & cgrp_dict = dict(partition_dict, "consumer_groups", resp_streaming["group_id"].extract<String>());
         cgrp_dict["group_id"] = resp_streaming["group_id"];
-        cgrp_dict["member_id"] = resp_streaming["member_id"];
         cgrp_dict["offset"] = resp_streaming["app_offset"];
         cgrp_dict["committed_offset"] = resp_streaming["committed_offset"];
 

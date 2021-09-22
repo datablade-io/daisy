@@ -242,7 +242,6 @@ rdkafkaTopicPartitionStats(rd_kafka_t * rd_kafka, const String & topic, int32_t 
         if (err)
             break;
         toppar_stats->end_offset = high;
-        toppar_stats->member_id = rd_kafka_memberid(rd_kafka);
     } while (false);
 
     if (err)
