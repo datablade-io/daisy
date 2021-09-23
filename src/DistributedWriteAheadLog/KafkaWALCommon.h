@@ -30,4 +30,10 @@ std::shared_ptr<rd_kafka_topic_t>
 initRdKafkaTopicHandle(const std::string & topic, KConfParams & params, rd_kafka_t * rd_kafka, KafkaWALStats * stats);
 
 RecordPtr kafkaMsgToRecord(rd_kafka_message_t * msg, bool copy_topic = false);
+
+struct TopicPartitionStats;
+using TopicPartitionsListPtr = std::unique_ptr<rd_kafka_topic_partition_list_t, decltype(&rd_kafka_topic_partition_list_destroy)>;
+
+std::shared_ptr<TopicPartitionStats>
+rdkafkaTopicPartitionStats(rd_kafka_t * rd_kafka, const String & topic, int32_t partition, int timeout = 2000 /* ms */);
 }

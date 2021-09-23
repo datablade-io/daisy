@@ -243,6 +243,7 @@ private:
     const SequenceRanges & missingSequenceRanges() const { return missing_sequence_ranges; }
     const std::deque<std::shared_ptr<String>> & lastIdempotentKeys() const { return last_idempotent_keys; }
     Int64 maxCommittedSN() const { return max_committed_sn; }
+    Int64 maxPartsCommittedSN() const;
 
 private:
     void locateSNFile();

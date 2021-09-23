@@ -53,6 +53,8 @@ public:
 
     void initTopicHandle(KafkaWALContext & ctx) const;
 
+    TopicPartitionStatsPtr getTopicPartitionStats(const KafkaWALContext & ctx) const;
+
 private:
     /// Poll consume errors
     void backgroundPoll() const;

@@ -753,4 +753,11 @@ KafkaWALClusterPtr KafkaWAL::cluster(const KafkaWALContext & ctx) const
 
     return result;
 }
+
+TopicPartitionStatsPtr KafkaWAL::getTopicPartitionStats(const KafkaWALContext & ctx) const
+{
+    assert(consumer);
+    return consumer->getTopicPartitionStats(ctx);
+}
+
 }

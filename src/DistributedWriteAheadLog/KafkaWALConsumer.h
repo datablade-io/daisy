@@ -49,6 +49,8 @@ public:
     /// Commit offset for a partition of a topic
     int32_t commit(const TopicPartitionOffsets & tpos);
 
+    TopicPartitionStatsPtr getTopicPartitionStats(const TopicPartitionOffset & topic_partition_offset) const;
+
 private:
     void initHandle();
 

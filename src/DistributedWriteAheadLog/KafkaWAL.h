@@ -95,6 +95,8 @@ public:
 
     KafkaWALClusterPtr cluster(const KafkaWALContext & ctx) const;
 
+    TopicPartitionStatsPtr getTopicPartitionStats(const KafkaWALContext & ctx) const;
+
 private:
     using FreeRdKafka = void (*)(struct rd_kafka_s *);
     using RdKafkaHandlePtr = std::unique_ptr<struct rd_kafka_s, FreeRdKafka>;
