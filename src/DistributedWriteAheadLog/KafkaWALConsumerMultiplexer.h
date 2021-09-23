@@ -97,7 +97,7 @@ public:
 
     int32_t commit(const TopicPartitionOffset & tpo);
 
-    TopicPartitionStatsPtr getTopicPartitionStats(const TopicPartitionOffset & tpo) const;
+    TopicPartitionStatsPtr getTopicPartitionStats(const TopicPartitionOffset & topic_partition_offset) const;
 
 private:
     void backgroundPoll();

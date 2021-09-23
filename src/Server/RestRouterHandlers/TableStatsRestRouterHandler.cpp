@@ -17,16 +17,16 @@ namespace ErrorCodes
 
 namespace
 {
-const String TABLE_STATS_URL = "http://{}:{}/dae/v1/tablestats/{}?local={}";
+    const String TABLE_STATS_URL = "http://{}:{}/dae/v1/tablestats/{}?local={}";
 
-String buildResponse(const String & query_id, Poco::JSON::Object & resp)
-{
-    resp.set("request_id", query_id);
-    std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    resp.stringify(resp_str_stream, 0);
+    String buildResponse(const String & query_id, Poco::JSON::Object & resp)
+    {
+        resp.set("request_id", query_id);
+        std::stringstream resp_str_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+        resp.stringify(resp_str_stream, 0);
 
-    return resp_str_stream.str();
-}
+        return resp_str_stream.str();
+    }
 }
 
 std::pair<String, Int32> TableStatsRestRouterHandler::executeGet(const Poco::JSON::Object::Ptr & /* payload */) const
@@ -39,13 +39,16 @@ std::pair<String, Int32> TableStatsRestRouterHandler::executeGet(const Poco::JSO
     const auto & catalog_service = CatalogService::instance(query_context);
     const auto & table_ptrs = catalog_service.findTableByName(database, table);
     if (table_ptrs.empty())
-        return {jsonErrorResponse(fmt::format("TABLE '{}.{}' does not exist.", database, table), ErrorCodes::UNKNOWN_TABLE),
-                HTTPResponse::HTTP_BAD_REQUEST};
+        return {
+            jsonErrorResponse(fmt::format("TABLE '{}.{}' does not exist.", database, table), ErrorCodes::UNKNOWN_TABLE),
+            HTTPResponse::HTTP_BAD_REQUEST};
 
     assert(table_ptrs[0]);
     if (table_ptrs[0]->engine != "DistributedMergeTree")
-        return {jsonErrorResponse(fmt::format("No support TABLE '{}.{}' Engine {}.", database, table, table_ptrs[0]->engine), ErrorCodes::TYPE_MISMATCH),
-                HTTPResponse::HTTP_BAD_REQUEST};
+        return {
+            jsonErrorResponse(
+                fmt::format("No support TABLE '{}.{}' Engine {}.", database, table, table_ptrs[0]->engine), ErrorCodes::TYPE_MISMATCH),
+            HTTPResponse::HTTP_BAD_REQUEST};
 
     try
     {
@@ -62,37 +65,30 @@ std::pair<String, Int32> TableStatsRestRouterHandler::executeGet(const Poco::JSO
         }
 
         /// Forward all nodes where the table is shard/replica to get local table stats.
-        std::multimap<int, CatalogService::TablePtr> shard_tables;
-        for (auto tptr : table_ptrs)
-            shard_tables.emplace(tptr->shard, tptr);
-
         TableResponses responses;
         /// TODO: parallel
-        for (auto it = shard_tables.begin(); it != shard_tables.end(); it = shard_tables.upper_bound(it->first))
+        for (auto table_ptr : table_ptrs)
         {
-            auto range = shard_tables.equal_range(it->first);
-            while (range.first != range.second)
-            {
-                const auto & table_ptr = range.first++->second;
-                auto node = catalog_service.nodeByIdentity(table_ptr->node_identity);
-                Poco::URI uri{fmt::format(TABLE_STATS_URL, node->host, node->http_port, table, /* local=true */ "true")};
-                auto [response, http_status] = sendRequest(
-                        uri,
-                        Poco::Net::HTTPRequest::HTTP_GET,
-                        query_context->getCurrentQueryId(),
-                        query_context->getUserName(),
-                        query_context->getPasswordByUserName(query_context->getUserName()),
-                        "",
-                        log);
-                responses.emplace_back(table_ptr->host, table_ptr->shard, response, http_status);
-            }
+            auto node = catalog_service.nodeByIdentity(table_ptr->node_identity);
+            Poco::URI uri{fmt::format(TABLE_STATS_URL, node->host, node->http_port, table, /* local=true */ "true")};
+            auto [response, http_status] = sendRequest(
+                uri,
+                Poco::Net::HTTPRequest::HTTP_GET,
+                query_context->getCurrentQueryId(),
+                query_context->getUserName(),
+                query_context->getPasswordByUserName(query_context->getUserName()),
+                "",
+                log);
+            responses.emplace_back(table_ptr->host, table_ptr->shard, response, http_status);
         }
         return {mergeLocalTableStatsToString(responses), HTTPResponse::HTTP_OK};
     }
     catch (std::exception & e)
     {
-        return {jsonErrorResponse(fmt::format("Failed to get table '{}.{}' stats: {}", database, table, e.what()), ErrorCodes::UNKNOWN_EXCEPTION),
-                HTTPResponse::HTTP_BAD_REQUEST};
+        return {
+            jsonErrorResponse(
+                fmt::format("Failed to get table '{}.{}' stats: {}", database, table, e.what()), ErrorCodes::UNKNOWN_EXCEPTION),
+            HTTPResponse::HTTP_BAD_REQUEST};
     }
 }
 
@@ -150,13 +146,13 @@ int TableStatsRestRouterHandler::buildLocalTableStatsJSON(Poco::JSON::Object & r
 
     /* set streaming */
     Poco::JSON::Object streaming_obj;
-    auto toppar_stats = dstorage->getTopicPartitionStats();
-    streaming_obj.set("topic", toppar_stats->topic);
-    streaming_obj.set("partition", toppar_stats->partition);
-    streaming_obj.set("app_offset", toppar_stats->app_offset);
-    streaming_obj.set("committed_offset", toppar_stats->committed_offset);
-    streaming_obj.set("end_offset", toppar_stats->end_offset);
-    streaming_obj.set("group_id", toppar_stats->group_id);
+    auto topic_partition_stats = dstorage->getTopicPartitionStats();
+    streaming_obj.set("topic", topic_partition_stats->topic);
+    streaming_obj.set("partition", topic_partition_stats->partition);
+    streaming_obj.set("app_offset", topic_partition_stats->app_offset);
+    streaming_obj.set("committed_offset", topic_partition_stats->committed_offset);
+    streaming_obj.set("end_offset", topic_partition_stats->end_offset);
+    streaming_obj.set("group_id", topic_partition_stats->group_id);
     resp_data.set("streaming", streaming_obj);
 
     /* set local */
@@ -170,11 +166,16 @@ int TableStatsRestRouterHandler::buildLocalTableStatsJSON(Poco::JSON::Object & r
 
     Poco::JSON::Object sub_parts_obj;
     sub_parts_obj.set("active_count", dstorage->getDataParts({MergeTreeData::DataPartState::Committed}).size());
-    sub_parts_obj.set("inactive_count", dstorage->getDataParts({MergeTreeData::DataPartState::Temporary,
-                                                                MergeTreeData::DataPartState::PreCommitted,
-                                                                MergeTreeData::DataPartState::Outdated,
-                                                                MergeTreeData::DataPartState::Deleting,
-                                                                MergeTreeData::DataPartState::DeleteOnDestroy}).size());
+    sub_parts_obj.set(
+        "inactive_count",
+        dstorage
+            ->getDataParts(
+                {MergeTreeData::DataPartState::Temporary,
+                 MergeTreeData::DataPartState::PreCommitted,
+                 MergeTreeData::DataPartState::Outdated,
+                 MergeTreeData::DataPartState::Deleting,
+                 MergeTreeData::DataPartState::DeleteOnDestroy})
+            .size());
     local_obj.set("parts", sub_parts_obj);
     resp_data.set("local", local_obj);
 
@@ -192,7 +193,7 @@ String TableStatsRestRouterHandler::mergeLocalTableStatsToString(const TableResp
     ds["request_id"] = query_context->getCurrentQueryId();
 
     /// [FUNC] get or create nest dict ref
-    auto dict = [](Var & root, auto ...nest_keys) -> Var & {
+    auto dict = [](Var & root, auto... nest_keys) -> Var & {
         Var * curr = &root;
         for (const auto & key : std::vector<String>{nest_keys...})
         {
@@ -211,7 +212,7 @@ String TableStatsRestRouterHandler::mergeLocalTableStatsToString(const TableResp
         /* local.shards.shard */
         auto & shard_dict = dict(data_dict, "local", "shards", std::to_string(shard));
         shard_dict["shard"] = shard;
-        
+
         /* local.shards.shard.replicas.host */
         auto & node_dict = dict(shard_dict, "replicas", host);
 

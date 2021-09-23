@@ -25,7 +25,7 @@ instance4 = cluster.add_instance('node4',
 def prepare_data():
     print("prepare data")
 
-    ### create and insert local MergeTree table for 4 nodes
+    ### create local MergeTree table
     instance1.query("""
     CREATE TABLE local_table1(
         _time DateTime64,
@@ -35,7 +35,7 @@ def prepare_data():
     """
                    )
 
-    ### create and ingest DistributedMergeTree table
+    ### create DistributedMergeTree table
     instances = [instance1, instance2, instance3, instance4]
     # create 4 shard 1 replica
     for i in range(0, 4):
@@ -153,7 +153,7 @@ def test_tablestats_api_url_format(code, url_path, url_parameter):
 
 
 ### API ERROR TEST
-# err_status:  0-SUCCESS  2-ERROR  2-ONLY ONE NODE ERROR
+# err_status:  0-SUCCESS  1-ERROR  2-ONLY ONE NODE ERROR
 @pytest.mark.parametrize("err_status, local, table", [
         (1, 'true', 'local_table1'),    # MergeTree no support
         (1, 'false', 'local_table1'),

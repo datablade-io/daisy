@@ -232,10 +232,10 @@ int32_t KafkaWALConsumerMultiplexer::commit(const TopicPartitionOffset & tpo)
     return consumer->commit({tpo});
 }
 
-TopicPartitionStatsPtr KafkaWALConsumerMultiplexer::getTopicPartitionStats(const TopicPartitionOffset & tpo) const
+TopicPartitionStatsPtr KafkaWALConsumerMultiplexer::getTopicPartitionStats(const TopicPartitionOffset & topic_partition_offset) const
 {
     assert(consumer);
-    return consumer->getTopicPartitionStats(tpo);
+    return consumer->getTopicPartitionStats(topic_partition_offset);
 }
 
 }

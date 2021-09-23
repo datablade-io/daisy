@@ -96,7 +96,7 @@ void KafkaWALConsumer::initHandle()
         /// ensuring no on-the-wire or on-disk corruption to the messages occurred
         std::make_pair("check.crcs", std::to_string(settings->check_crcs)),
         std::make_pair("statistics.interval.ms", std::to_string(settings->statistic_internal_ms)),
-        std::make_pair("security.protocol", settings->security_protocol.c_str()), 
+        std::make_pair("security.protocol", settings->security_protocol.c_str())
     };
 
     if (!settings->debug.empty())
@@ -265,12 +265,13 @@ int32_t KafkaWALConsumer::commit(const TopicPartitionOffsets & tpos)
     return DB::ErrorCodes::OK;
 }
 
-TopicPartitionStatsPtr KafkaWALConsumer::getTopicPartitionStats(const TopicPartitionOffset & tpo) const
+TopicPartitionStatsPtr KafkaWALConsumer::getTopicPartitionStats(const TopicPartitionOffset & topic_partition_offset) const
 {
     assert(consumer_handle);
-    auto tpo_stats = rdkafkaTopicPartitionStats(consumer_handle.get(), tpo.topic, tpo.partition);
-    tpo_stats->group_id = settings->group_id;
-    return tpo_stats;
+    auto topic_partition_stats
+        = rdkafkaTopicPartitionStats(consumer_handle.get(), topic_partition_offset.topic, topic_partition_offset.partition);
+    topic_partition_stats->group_id = settings->group_id;
+    return topic_partition_stats;
 }
 
 }

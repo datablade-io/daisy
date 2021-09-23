@@ -422,9 +422,9 @@ int32_t KafkaWALSimpleConsumer::commit(int64_t offset, const KafkaWALContext & c
 TopicPartitionStatsPtr KafkaWALSimpleConsumer::getTopicPartitionStats(const KafkaWALContext & ctx) const
 {
     assert(consumer_handle);
-    auto tpo_stats = rdkafkaTopicPartitionStats(consumer_handle.get(), ctx.topic, ctx.partition);
-    tpo_stats->group_id = settings->group_id;
-    return tpo_stats;
+    auto topic_partition_stats = rdkafkaTopicPartitionStats(consumer_handle.get(), ctx.topic, ctx.partition);
+    topic_partition_stats->group_id = settings->group_id;
+    return topic_partition_stats;
 }
 
 }

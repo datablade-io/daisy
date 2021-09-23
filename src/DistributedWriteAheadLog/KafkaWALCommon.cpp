@@ -213,41 +213,40 @@ RecordPtr kafkaMsgToRecord(rd_kafka_message_t * msg, bool copy_topic)
     return record;
 }
 
-TopicPartitionStatsPtr
-rdkafkaTopicPartitionStats(rd_kafka_t * rd_kafka, const String & topic, int32_t partition, int timeout_ms)
+TopicPartitionStatsPtr rdkafkaTopicPartitionStats(rd_kafka_t * rd_kafka, const String & topic, int32_t partition, int timeout_ms)
 {
     assert(rd_kafka != nullptr);
-    TopicPartitionStatsPtr toppar_stats = std::make_shared<TopicPartitionStats>();
+    TopicPartitionStatsPtr topic_partition_stats = std::make_shared<TopicPartitionStats>();
     rd_kafka_resp_err_t err;
     do
     {
-        toppar_stats->topic = topic;
-        toppar_stats->partition = partition;
+        topic_partition_stats->topic = topic;
+        topic_partition_stats->partition = partition;
 
-        auto tpo_list = std::unique_ptr<rd_kafka_topic_partition_list_t, decltype(rd_kafka_topic_partition_list_destroy) *>(
-                rd_kafka_topic_partition_list_new(1), rd_kafka_topic_partition_list_destroy);
-        auto tpo = rd_kafka_topic_partition_list_add(tpo_list.get(), topic.c_str(), partition);
-        err = rd_kafka_position(rd_kafka, tpo_list.get());
-        if (err || (err = tpo->err))
+        auto topic_partition_list = std::unique_ptr<rd_kafka_topic_partition_list_t, decltype(rd_kafka_topic_partition_list_destroy) *>(
+            rd_kafka_topic_partition_list_new(1), rd_kafka_topic_partition_list_destroy);
+        auto topic_partition = rd_kafka_topic_partition_list_add(topic_partition_list.get(), topic.c_str(), partition);
+        err = rd_kafka_position(rd_kafka, topic_partition_list.get());
+        if (err || (err = topic_partition->err))
             break;
-        toppar_stats->app_offset = tpo->offset;
+        topic_partition_stats->app_offset = topic_partition->offset;
 
-        err = rd_kafka_committed(rd_kafka, tpo_list.get(), timeout_ms);
-        if (err || (err = tpo->err))
+        err = rd_kafka_committed(rd_kafka, topic_partition_list.get(), timeout_ms);
+        if (err || (err = topic_partition->err))
             break;
-        toppar_stats->committed_offset = tpo->offset;
+        topic_partition_stats->committed_offset = topic_partition->offset;
 
         int64_t low, high;
         err = rd_kafka_get_watermark_offsets(rd_kafka, topic.c_str(), partition, &low, &high);
         if (err)
             break;
-        toppar_stats->end_offset = high;
+        topic_partition_stats->end_offset = high;
     } while (false);
 
     if (err)
         throw DB::Exception(rd_kafka_err2str(err), mapErrorCode(err));
-    
-    return toppar_stats;
+
+    return topic_partition_stats;
 }
 
 }
