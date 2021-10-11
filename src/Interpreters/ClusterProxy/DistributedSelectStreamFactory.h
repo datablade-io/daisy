@@ -23,7 +23,7 @@ public:
         StorageID main_table_,
         const Scalars & scalars_,
         const Tables & external_tables);
-
+    /*
     void createForShard(
         const Cluster::ShardInfo & shard_info,
         const ASTPtr & query_ast,
@@ -34,7 +34,20 @@ public:
         Pipes & remote_pipes,
         Pipes & delayed_pipes,
         Poco::Logger * log) override;
+    */
+    using Shard = IStreamFactory::Shard;
+    using Shards = std::vector<Shard>;
 
+    virtual void createForShard(
+        const Cluster::ShardInfo & shard_info,
+        const ASTPtr & query_ast,
+        const StorageID & main_table,
+        const ASTPtr & table_func_ptr,
+        ContextPtr context,
+        std::vector<QueryPlanPtr> & local_plans,
+        Shards & remote_shards,
+        UInt32 shard_count) override;
+        
 private:
     const Block header;
     QueryProcessingStage::Enum processed_stage;

@@ -16,14 +16,14 @@
 
 namespace DB
 {
-bool AddTimeVisitorMatcher::containTimeField(ASTPtr & node, ContextPtr & context)
+bool AddTimeVisitorMatcher::containTimeField(ASTPtr & node, ContextMutablePtr & context)
 {
-    if (!node->as<ASTIdentifier>())
+    if (!node->as<ASTTableIdentifier>())
     {
         return false;
     }
 
-    ASTIdentifier * table_identifier_node = node->as<ASTIdentifier>();
+    ASTTableIdentifier * table_identifier_node = node->as<ASTTableIdentifier>();
     auto storage_id(*table_identifier_node);
     auto table_id = context->resolveStorageID(storage_id);
     auto db = DatabaseCatalog::instance().getDatabase(table_id.database_name);
@@ -39,7 +39,7 @@ bool AddTimeVisitorMatcher::containTimeField(ASTPtr & node, ContextPtr & context
     return col_desc.has("_time") && col_desc.get("_time").type->getTypeId() == TypeIndex::DateTime64;
 }
 
-void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr & ast, ContextPtr & context)
+void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr & ast, ContextMutablePtr & context)
 {
     if (!ast->as<ASTSelectQuery>())
     {
@@ -81,7 +81,7 @@ void AddTimeVisitorMatcher::visitSelectQuery(ASTPtr & ast, ContextPtr & context)
     }
 }
 
-void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr & table_name, ContextPtr & context)
+void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr & table_name, ContextMutablePtr & context)
 {
     ParserExpressionWithOptionalAlias elem_parser(false);
     if (!containTimeField(table_name, context))
@@ -118,7 +118,7 @@ void AddTimeVisitorMatcher::insertTimeParamTime(ASTSelectQuery * select, ASTPtr 
     select->setExpression(ASTSelectQuery::Expression::WHERE, std::move(where_statement));
 }
 
-void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr & ast, ContextPtr & context)
+void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr & ast, ContextMutablePtr & context)
 {
     if (!ast->as<ASTSelectWithUnionQuery>())
     {
@@ -140,7 +140,7 @@ void AddTimeVisitorMatcher::visitSelectWithUnionQuery(ASTPtr & ast, ContextPtr &
     }
 }
 
-void AddTimeVisitorMatcher::visit(ASTPtr & ast, ContextPtr context)
+void AddTimeVisitorMatcher::visit(ASTPtr & ast, ContextMutablePtr context)
 {
     if (ast->as<ASTSelectQuery>())
     {

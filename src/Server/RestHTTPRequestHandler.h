@@ -5,6 +5,7 @@
 #include <Server/HTTP/HTTPRequestHandler.h>
 #include <Server/HTTP/HTMLForm.h>
 #include <common/types.h>
+#include <Interpreters/Session.h>
 
 namespace Poco
 {
@@ -13,6 +14,7 @@ class Logger;
 
 namespace DB
 {
+
 class Credentials;
 class RestHTTPRequestHandler final : public HTTPRequestHandler
 {
@@ -27,7 +29,10 @@ private:
 
     // The request_context and the request_credentials instances may outlive a single request/response loop.
     // This happens only when the authentication mechanism requires more than a single request/response exchange (e.g., SPNEGO).
-    ContextPtr request_context;
+    ContextMutablePtr request_context;
+
+    // session is reset at the end of each request/response.
+    std::unique_ptr<Session> session;
     std::unique_ptr<Credentials> request_credentials;
 
     // Returns true when the user successfully authenticated,
@@ -36,7 +41,7 @@ private:
     //  the request_context and request_credentials instances are preserved.
     // Throws an exception if authentication failed.
     bool authenticateUser(
-        ContextPtr context,
+        ContextMutablePtr context,
         HTTPServerRequest & request,
         HTMLForm & params,
         HTTPServerResponse & response);

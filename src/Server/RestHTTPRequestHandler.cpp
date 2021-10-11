@@ -141,7 +141,7 @@ namespace
 }
 
 bool RestHTTPRequestHandler::authenticateUser(
-    ContextPtr context, HTTPServerRequest & request, HTMLForm & params, HTTPServerResponse & response)
+    ContextMutablePtr context, HTTPServerRequest & request, HTMLForm & params, HTTPServerResponse & response)
 {
     using namespace Poco::Net;
 
@@ -251,7 +251,7 @@ bool RestHTTPRequestHandler::authenticateUser(
 
     /// Set client info. It will be used for quota accounting parameters in 'setUser' method.
 
-    ClientInfo & client_info = context->getClientInfo();
+    ClientInfo & client_info = session->getClientInfo();
     client_info.query_kind = ClientInfo::QueryKind::INITIAL_QUERY;
     client_info.interface = ClientInfo::Interface::HTTP;
 
@@ -272,7 +272,7 @@ bool RestHTTPRequestHandler::authenticateUser(
 
     try
     {
-        context->setUser(*request_credentials, request.clientAddress());
+        session->authenticate(*request_credentials, request.clientAddress());
     }
     catch (const Authentication::Require<BasicCredentials> & required_credentials)
     {
@@ -333,7 +333,10 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
         request_credentials.reset();
     }
 
-    HTMLForm params(request);
+    session = std::make_unique<Session>(request_context, ClientInfo::Interface::HTTP);
+    SCOPE_EXIT({ session.reset(); });
+
+    HTMLForm params(request_context->getSettingsRef(), request);
     LOG_TRACE(log, "Request uri: {}", request.getURI());
 
     /// Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.

@@ -98,16 +98,26 @@ DistributedSelectStreamFactory::DistributedSelectStreamFactory(
 {
 }
 
-void DistributedSelectStreamFactory::createForShard(
+// void DistributedSelectStreamFactory::createForShard(
+//     const Cluster::ShardInfo & shard_info,
+//     const ASTPtr & query_ast,
+//     ContextPtr context,
+//     const ThrottlerPtr & throttler,
+//     const SelectQueryInfo &,
+//     std::vector<QueryPlanPtr> & plans,
+//     Pipes & remote_pipes,
+//     Pipes & /* delayed_pipes */,
+//     Poco::Logger * log)
+
+void createForShard(
     const Cluster::ShardInfo & shard_info,
     const ASTPtr & query_ast,
+    const StorageID & main_table,
+    const ASTPtr & table_func_ptr,
     ContextPtr context,
-    const ThrottlerPtr & throttler,
-    const SelectQueryInfo &,
-    std::vector<QueryPlanPtr> & plans,
-    Pipes & remote_pipes,
-    Pipes & /* delayed_pipes */,
-    Poco::Logger * log)
+    std::vector<QueryPlanPtr> & local_plans,
+    Shards & remote_shards,
+    UInt32 shard_count)
 {
     bool add_agg_info = processed_stage == QueryProcessingStage::WithMergeableState;
     bool add_totals = false;
@@ -122,10 +132,11 @@ void DistributedSelectStreamFactory::createForShard(
 
     auto emplace_local_stream = [&]() { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
         /// HACKY : Setup query_kind to break infinit query forwarding loop
-        auto & client_info = context->getClientInfo();
+        auto new_context = Context::createCopy(context);
+        auto & client_info = new_context->getClientInfo();
         client_info.query_kind = ClientInfo::QueryKind::SECONDARY_QUERY;
 
-        plans.emplace_back(createLocalPlan(query_ast, header, context, processed_stage));
+        plans.emplace_back(createLocalPlan(query_ast, header, new_context, processed_stage));
         addConvertingActions(*plans.back(), header);
     };
 

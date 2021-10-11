@@ -621,6 +621,9 @@ void markTupleLiteralsAsLegacy(ASTPtr & query)
     MarkTupleLiteralsAsLegacyVisitor::Data data;
     MarkTupleLiteralsAsLegacyVisitor(data).visit(query);
 }
+
+}
+
 /// Daisy : starts
 void collectRequiredColumns(ConstStoragePtr & storage, const NameSet & required, ContextPtr context)
 {
@@ -979,7 +982,7 @@ TreeRewriterResultPtr TreeRewriter::analyzeSelect(
 
     result.aggregates = getAggregates(query, *select_query);
     result.window_function_asts = getWindowFunctions(query, *select_query);
-    result.collectUsedColumns(query, true);
+    result.collectUsedColumns(query, true, getContext());
     result.required_source_columns_before_expanding_alias_columns = result.required_source_columns.getNames();
 
     /// rewrite filters for select query, must go after getArrayJoinedColumns
@@ -1002,7 +1005,7 @@ TreeRewriterResultPtr TreeRewriter::analyzeSelect(
         {
             result.aggregates = getAggregates(query, *select_query);
             result.window_function_asts = getWindowFunctions(query, *select_query);
-            result.collectUsedColumns(query, true);
+            result.collectUsedColumns(query, true, getContext());
         }
     }
 

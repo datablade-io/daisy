@@ -1,6 +1,6 @@
 #pragma once
 
-#include <DataStreams/IBlockOutputStream.h>
+#include <Processors/Sinks/SinkToStorage.h>
 #include <DistributedWriteAheadLog/Results.h>
 #include <Storages/StorageInMemoryMetadata.h>
 
@@ -21,16 +21,30 @@ struct BlockWithShard
 
 using BlocksWithShard = std::vector<BlockWithShard>;
 
-class DistributedMergeTreeBlockOutputStream final : public IBlockOutputStream
+class DistributedMergeTreeSink final : public SinkToStorage
 {
 public:
-    DistributedMergeTreeBlockOutputStream(
-        StorageDistributedMergeTree & storage_, const StorageMetadataPtr metadata_snapshot_, ContextPtr query_context_);
-    ~DistributedMergeTreeBlockOutputStream() override;
+    // DistributedMergeTreeSink(
+    //     StorageDistributedMergeTree & storage_,
+    //     const StorageMetadataPtr metadata_snapshot_,
+    //     /*size_t max_parts_per_block_,*/
+    //     ContextPtr query_context_)
+    //     : SinkToStorage(metadata_snapshot_->getSampleBlock())
+    //     , storage(storage_)
+    //     , metadata_snapshot(metadata_snapshot_)
+    //     /*, max_parts_per_block(max_parts_per_block_) */
+    //     , query_context(query_context_) {}
+    
+    DistributedMergeTreeSink(
+        StorageDistributedMergeTree & storage_, 
+        const StorageMetadataPtr metadata_snapshot_, 
+        ContextPtr query_context_);
+   
+    ~DistributedMergeTreeSink() override;
 
-    Block getHeader() const override;
-    void write(const Block & block) override;
-    void flush() override;
+    String getName() const override { return "MergeTreeSink"; }
+    void consume(Chunk chunk) override;
+    void onStart() override;
 
 private:
     BlocksWithShard shardBlock(const Block & block) const;
@@ -46,6 +60,8 @@ private:
     StorageDistributedMergeTree & storage;
     StorageMetadataPtr metadata_snapshot;
     ContextPtr query_context;
+
+    /* size_t max_parts_per_block; */
 
     /// For writeCallback
     std::atomic_uint32_t committed = 0;

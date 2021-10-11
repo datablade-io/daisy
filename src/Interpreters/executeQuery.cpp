@@ -95,7 +95,7 @@ namespace
 /// Daisy : starts
 /// If there are any table definition changes locally on the node
 /// broadcast the table definitions to notify all CatalogService
-void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextPtr & context)
+void broadcastCatalogIfNecessary(const ASTPtr & ast, ContextMutablePtr & context)
 {
     if (!context->isDistributed() || context->isDistributedDDLOperation())
     {
@@ -446,24 +446,6 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
     String query_table;
     try
     {
-#if !defined(ARCADIA_BUILD)
-        if (settings.use_antlr_parser)
-        {
-            ast = parseQuery(begin, end, max_query_size, settings.max_parser_depth, context->getCurrentDatabase());
-        }
-        else
-        {
-            ParserQuery parser(end);
-
-            /// TODO: parser should fail early when max_query_size limit is reached.
-            /// Daisy : starts
-            if (settings.enable_query_pipe)
-                ast = parseQueryPipe(parser, begin, end, max_query_size, settings.max_parser_depth);
-            else
-                ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
-            /// Daisy : ends
-        }
-#else
         ParserQuery parser(end);
 
         /// TODO: parser should fail early when max_query_size limit is reached.
@@ -473,7 +455,6 @@ static std::tuple<ASTPtr, BlockIO> executeQueryImpl(
         else
             ast = parseQuery(parser, begin, end, "", max_query_size, settings.max_parser_depth);
         /// Daisy : ends
-#endif
 
         /// Interpret SETTINGS clauses as early as possible (before invoking the corresponding interpreter),
         /// to allow settings to take effect.
@@ -1348,20 +1329,8 @@ ASTPtr parseQuery(const String & query, ContextPtr query_context)
 
     ASTPtr ast;
 
-#if !defined(ARCADIA_BUILD)
-    if (query_context->getSettingsRef().use_antlr_parser)
-    {
-        ast = parseQuery(begin, end, max_query_size, max_parser_depth, query_context->getCurrentDatabase());
-    }
-    else
-    {
-        ParserQuery parser(end);
-        ast = parseQuery(parser, begin, end, "", max_query_size, max_parser_depth);
-    }
-#else
     ParserQuery parser(end);
     ast = parseQuery(parser, begin, end, "", max_query_size, max_parser_depth);
-#endif
 
     return ast;
 }

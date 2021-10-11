@@ -143,7 +143,7 @@ struct Settings;
     M(UInt64, replicated_max_parallel_sends, 0, "Obsolete setting, does nothing.", 0) \
     M(UInt64, replicated_max_parallel_sends_for_table, 0, "Obsolete setting, does nothing.", 0) \
     M(UInt64, replicated_max_parallel_fetches, 0, "Obsolete setting, does nothing.", 0) \
-    M(UInt64, replicated_max_parallel_fetches_for_table, 0, "Obsolete setting, does nothing.", 0)
+    M(UInt64, replicated_max_parallel_fetches_for_table, 0, "Obsolete setting, does nothing.", 0) \
     /** Settings for DistributedMergeTree */ \
     M(Int64, shard, -1, "Current shard number", 0) \
     M(String, subtype, "tabular", "Engine subtype", 0) \

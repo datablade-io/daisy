@@ -8,6 +8,7 @@
 #include <IO/WriteBufferFromString.h>
 #include <Interpreters/BlockUtils.h>
 #include <Interpreters/Context.h>
+#include <Interpreters/Session.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/executeSelectQuery.h>
 #include <common/ClockUtils.h>
@@ -334,7 +335,7 @@ TaskStatusService::TaskStatusPtr TaskStatusService::findByIdInTable(const String
 
     std::vector<TaskStatusService::TaskStatusPtr> res;
 
-    ContextPtr query_context = Context::createCopy(global_context);
+    ContextMutablePtr query_context = Context::createCopy(global_context);
     CurrentThread::QueryScope query_scope{query_context};
 
     executeSelectQuery(query, query_context, [this, &res](Block && block) { this->buildTaskStatusFromBlock(block, res); });
@@ -394,7 +395,7 @@ void TaskStatusService::findByUserInTable(const String & user, std::vector<TaskS
                           "ORDER BY last_modified DESC";
     auto query = fmt::format(query_template, user);
 
-    ContextPtr query_context = Context::createCopy(global_context);
+    ContextMutablePtr query_context = Context::createCopy(global_context);
     CurrentThread::QueryScope query_scope{query_context};
 
     executeSelectQuery(query, query_context, [this, &res](Block && block) { this->buildTaskStatusFromBlock(block, res); });
@@ -571,10 +572,11 @@ bool TaskStatusService::createTaskTable()
         }
     )d";
 
-    ContextPtr context = Context::createCopy(global_context);
+    ContextMutablePtr context = Context::createCopy(global_context);
     context->setCurrentQueryId("");
     context->setQueryParameter("_payload", query_payload);
-    context->setUser("system", context->getPasswordByUserName("system"), Poco::Net::SocketAddress("127.0.0.1", 0));
+    auto session = std::make_unique<Session>(context, ClientInfo::Interface::HTTP);
+    session->authenticate("system", context->getPasswordByUserName("system"), Poco::Net::SocketAddress("127.0.0.1", 0));
     context->setDistributedDDLOperation(true);
     CurrentThread::QueryScope query_scope{context};
 
@@ -599,7 +601,7 @@ bool TaskStatusService::persistentTaskStatuses(const std::vector<TaskStatusPtr> 
                     (id, status, progress, reason, user, context, created, last_modified) \
                     VALUES ";
 
-    ContextPtr context = Context::createCopy(global_context);
+    ContextMutablePtr context = Context::createCopy(global_context);
     context->setCurrentQueryId("");
     CurrentThread::QueryScope query_scope{context};
 

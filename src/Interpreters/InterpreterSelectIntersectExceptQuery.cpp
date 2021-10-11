@@ -77,6 +77,18 @@ InterpreterSelectIntersectExceptQuery::InterpreterSelectIntersectExceptQuery(
     result_header = getCommonHeader(headers);
 }
 
+/// Daisy : starts
+bool InterpreterSelectIntersectExceptQuery::hasAggregation() const
+{
+    for (auto & interpreter : nested_interpreters)
+    {
+        if (interpreter->hasAggregation())
+            return true;
+    }
+    return false;
+}
+/// Daisy : ends
+
 std::unique_ptr<IInterpreterUnionOrSelectQuery>
 InterpreterSelectIntersectExceptQuery::buildCurrentChildInterpreter(const ASTPtr & ast_ptr_)
 {

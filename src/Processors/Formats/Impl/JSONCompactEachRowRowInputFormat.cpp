@@ -161,30 +161,30 @@ bool JSONCompactEachRowRowInputFormat::readRow(DB::MutableColumns &columns, DB::
     assertChar('[', *in);
 
     /// Daisy : starts
-    if (*in.position() == '[')
+    if (*in->position() == '[')
     {
-        ++in.position();
-        skipWhitespaceIfAny(in);
-        if (*in.position() == '[' && !with_bracket)
+        ++in->position();
+        skipWhitespaceIfAny(*in);
+        if (*in->position() == '[' && !with_bracket)
         {
             with_bracket = true;
-            ++in.position();
-            skipWhitespaceIfAny(in);
+            ++in->position();
+            skipWhitespaceIfAny(*in);
         }
     }
     else
     {
-        if (*in.position() == ']' && with_bracket)
+        if (*in->position() == ']' && with_bracket)
         {
             return false;
         }
 
         /// Invalid format
         char err[2] = {'[', '\0'};
-        throwAtAssertionFailed(err, in);
+        throwAtAssertionFailed(err, *in);
     }
 
-    if (in.eof())
+    if (in->eof())
         return false;
     /// Daisy : ends
 

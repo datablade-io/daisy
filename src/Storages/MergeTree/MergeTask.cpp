@@ -36,6 +36,10 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
+/// Daisy : starts
+/// Merge sequence info of parts in a partition
+static SequenceInfoPtr mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, MergeTreeData & data, ContextPtr context);
+/// Daisy : ends
 
 /// PK columns are sorted and merged, ordinary columns are gathered using info from merge step
 static void extractMergingAndGatheringColumns(
@@ -588,7 +592,7 @@ bool MergeTask::MergeProjectionsStage::finalizeProjectionsAndWholeMerge() const
     }
 
     /// Daisy : starts
-    global_ctx->new_data_part->seq_info = mergeSequenceInfo(global_ctx->future_part->parts, global_ctx->context);
+    global_ctx->new_data_part->seq_info = mergeSequenceInfo(global_ctx->future_part->parts, *global_ctx->data, global_ctx->context);
     /// Daisy : ends
 
     if (global_ctx->chosen_merge_algorithm != MergeAlgorithm::Vertical)
@@ -860,7 +864,7 @@ MergeAlgorithm MergeTask::ExecuteAndFinalizeHorizontalPart::chooseMergeAlgorithm
 
 /// Daisy : starts
 /// Merge sequence info from parts in a partition to new part
-SequenceInfoPtr MergeTreeDataMergerMutator::mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, ContextPtr context)
+static SequenceInfoPtr mergeSequenceInfo(const MergeTreeData::DataPartsVector & parts, MergeTreeData & data, ContextPtr context)
 {
     std::vector<SequenceInfoPtr> sequences;
 

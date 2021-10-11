@@ -15,16 +15,16 @@ class ASTSelectQuery;
 class AddTimeVisitorMatcher
 {
 public:
-    using Data = ContextPtr;
+    using Data = ContextMutablePtr;
 
-    static void visit(ASTPtr & ast, ContextPtr context);
+    static void visit(ASTPtr & ast, ContextMutablePtr context);
     static bool needChildVisit(ASTPtr &, ASTPtr &) { return false; }
 
 private:
-    static void visitSelectQuery(ASTPtr & ast, ContextPtr & context);
-    static void visitSelectWithUnionQuery(ASTPtr & ast, ContextPtr & context);
-    static void insertTimeParamTime(ASTSelectQuery * select, ASTPtr & table_name, ContextPtr & context);
-    static bool containTimeField(ASTPtr & table_identifier_node, ContextPtr & context);
+    static void visitSelectQuery(ASTPtr & ast, ContextMutablePtr & context);
+    static void visitSelectWithUnionQuery(ASTPtr & ast, ContextMutablePtr & context);
+    static void insertTimeParamTime(ASTSelectQuery * select, ASTPtr & table_name, ContextMutablePtr & context);
+    static bool containTimeField(ASTPtr & table_identifier_node, ContextMutablePtr & context);
 };
 
 using AddTimeParamVisitor = InDepthNodeVisitor<AddTimeVisitorMatcher, false>;

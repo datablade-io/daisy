@@ -1,5 +1,5 @@
 #include "StorageDistributedMergeTree.h"
-#include "DistributedMergeTreeBlockOutputStream.h"
+#include "DistributedMergeTreeSink.h"
 
 #include <DistributedMetadata/CatalogService.h>
 #include <DistributedWriteAheadLog/KafkaWALCommon.h>
@@ -469,10 +469,11 @@ std::optional<UInt64> StorageDistributedMergeTree::totalBytes(const Settings & s
     return storage->totalBytes(settings);
 }
 
-BlockOutputStreamPtr
-StorageDistributedMergeTree::write(const ASTPtr & /*query*/, const StorageMetadataPtr & metadata_snapshot, ContextPtr context_)
+//BlockOutputStreamPtr
+//StorageDistributedMergeTree::write(const ASTPtr & /*query*/, const StorageMetadataPtr & metadata_snapshot, ContextPtr context_)
+SinkToStoragePtr StorageDistributedMergeTree::write(const ASTPtr & query, const StorageMetadataPtr & /*metadata_snapshot*/, ContextPtr context) override;
 {
-    return std::make_shared<DistributedMergeTreeBlockOutputStream>(*this, metadata_snapshot, context_);
+    return std::make_shared<DistributedMergeTreeSink>(*this, metadata_snapshot, context_);
 }
 
 void StorageDistributedMergeTree::checkTableCanBeDropped() const
@@ -553,10 +554,11 @@ CheckResults StorageDistributedMergeTree::checkData(const ASTPtr & query, Contex
     return storage->checkData(query, context_);
 }
 
-std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
+//std::optional<JobAndPool> StorageDistributedMergeTree::getDataProcessingJob()
+bool StorageDistributedMergeTree::scheduleDataProcessingJob(BackgroundJobsAssignee & assignee)
 {
     assert(storage);
-    return storage->getDataProcessingJob();
+    return storage->scheduleDataProcessingJob(assignee);
 }
 
 QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStage(
@@ -572,10 +574,28 @@ QueryProcessingStage::Enum StorageDistributedMergeTree::getQueryProcessingStage(
     }
 }
 
-void StorageDistributedMergeTree::dropPartition(const ASTPtr & partition, bool detach, bool drop_part, ContextPtr context_, bool throw_if_noop)
+// void StorageDistributedMergeTree::dropPartition(const ASTPtr & partition, bool detach, bool drop_part, ContextPtr context_, bool throw_if_noop)
+// {
+//     assert(storage);
+//     storage->dropPartition(partition, detach, drop_part, context_, throw_if_noop);
+// }
+
+void StorageDistributedMergeTree::dropPartNoWaitNoThrow(const String & part_name)
 {
     assert(storage);
-    storage->dropPartition(partition, detach, drop_part, context_, throw_if_noop);
+    storage->dropPartNoWaitNoThrow(part_name);
+}
+
+void StorageDistributedMergeTree::dropPart(const String & part_name, bool detach, ContextPtr context)
+{
+    assert(storage);
+    storage->dropPart(part_name, detach, context);
+}
+
+void StorageDistributedMergeTree::dropPartition(const ASTPtr & partition, bool detach, ContextPtr context)
+{
+    assert(storage);
+    storage->dropPartition(partition, detach, context);
 }
 
 PartitionCommandsResultInfo StorageDistributedMergeTree::attachPartition(
@@ -614,6 +634,11 @@ MutationCommands StorageDistributedMergeTree::getFirstAlterMutationCommandsForPa
 {
     assert(storage);
     return storage->getFirstAlterMutationCommandsForPart(part);
+}
+
+std::unique_ptr<MergeTreeSettings> StorageDistributedMergeTree::getDefaultSettings() const
+{
+    return std::make_unique<MergeTreeSettings>(getContext()->getMergeTreeSettings());
 }
 
 void StorageDistributedMergeTree::startBackgroundMovesIfNeeded()
@@ -1115,7 +1140,7 @@ void StorageDistributedMergeTree::doCommit(
                 auto output_stream = storage->write(nullptr, storage->getInMemoryMetadataPtr(), getContext());
 
                 /// Setup sequence numbers to persistent them to file system
-                auto merge_tree_output = static_cast<MergeTreeBlockOutputStream *>(output_stream.get());
+                auto merge_tree_output = static_cast<SinkToStorage *>(output_stream.get());
                 merge_tree_output->setSequenceInfo(std::make_shared<SequenceInfo>(moved_seq.first, moved_seq.second, moved_keys));
                 merge_tree_output->setMissingSequenceRanges(std::move(moved_sequence_ranges));
 

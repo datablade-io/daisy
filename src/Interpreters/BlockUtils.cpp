@@ -25,7 +25,7 @@ Block buildBlock(
     Block block;
     const DataTypeFactory & data_type_factory = DataTypeFactory::instance();
 
-    auto string_type = data_type_factory.get(getTypeName(TypeIndex::String));
+    auto string_type = data_type_factory.get(TypeName<String>);
     for (const auto & p : string_cols)
     {
         auto col = string_type->createColumn();
@@ -34,7 +34,7 @@ Block buildBlock(
         block.insert(col_with_type);
     }
 
-    auto int32_type = data_type_factory.get(getTypeName(TypeIndex::Int32));
+    auto int32_type = data_type_factory.get(TypeName<Int32>);
     for (const auto & p : int32_cols)
     {
         auto col = int32_type->createColumn();
@@ -44,7 +44,7 @@ Block buildBlock(
         block.insert(col_with_type);
     }
 
-    auto uint64_type = data_type_factory.get(getTypeName(TypeIndex::UInt64));
+    auto uint64_type = data_type_factory.get(TypeName<UInt64>);
     for (const auto & p : uint64_cols)
     {
         auto col = uint64_type->createColumn();
@@ -64,7 +64,7 @@ Block buildBlock(
     Block block;
     const DataTypeFactory & data_type_factory = DataTypeFactory::instance();
 
-    auto string_type = data_type_factory.get(getTypeName(TypeIndex::String));
+    auto string_type = data_type_factory.get(TypeName<String>);
     for (const auto & p : string_cols)
     {
         auto col = string_type->createColumn();
@@ -77,7 +77,7 @@ Block buildBlock(
         block.insert(col_with_type);
     }
 
-    auto int64_type = data_type_factory.get(getTypeName(TypeIndex::Int64));
+    auto int64_type = data_type_factory.get(TypeName<Int64>);
     for (const auto & p : int64_cols)
     {
         auto col = int64_type->createColumn();

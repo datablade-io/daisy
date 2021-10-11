@@ -1,4 +1,4 @@
-#include "DistributedMergeTreeBlockOutputStream.h"
+#include "DistributedMergeTreeSink.h"
 #include "StorageDistributedMergeTree.h"
 
 #include <DistributedWriteAheadLog/KafkaWAL.h>
@@ -17,13 +17,13 @@ namespace ErrorCodes
     extern const int UNSUPPORTED_PARAMETER;
 }
 
-DistributedMergeTreeBlockOutputStream::DistributedMergeTreeBlockOutputStream(
+DistributedMergeTreeSink::DistributedMergeTreeSink(
     StorageDistributedMergeTree & storage_, const StorageMetadataPtr metadata_snapshot_, ContextPtr query_context_)
     : storage(storage_), metadata_snapshot(metadata_snapshot_), query_context(query_context_)
 {
 }
 
-DistributedMergeTreeBlockOutputStream::~DistributedMergeTreeBlockOutputStream()
+DistributedMergeTreeSink::~DistributedMergeTreeSink()
 {
     /// We need wait for all outstanding ingesting block committed
     /// before dtor itself. Otherwise the if the registered callback is invoked
@@ -31,12 +31,12 @@ DistributedMergeTreeBlockOutputStream::~DistributedMergeTreeBlockOutputStream()
     flush();
 }
 
-Block DistributedMergeTreeBlockOutputStream::getHeader() const
+Block DistributedMergeTreeSink::getHeader() const
 {
     return metadata_snapshot->getSampleBlock();
 }
 
-BlocksWithShard DistributedMergeTreeBlockOutputStream::doShardBlock(const Block & block) const
+BlocksWithShard DistributedMergeTreeSink::doShardBlock(const Block & block) const
 {
     auto selector = storage.createSelector(block);
 
@@ -68,7 +68,7 @@ BlocksWithShard DistributedMergeTreeBlockOutputStream::doShardBlock(const Block 
     return blocks_with_shard;
 }
 
-BlocksWithShard DistributedMergeTreeBlockOutputStream::shardBlock(const Block & block) const
+BlocksWithShard DistributedMergeTreeSink::shardBlock(const Block & block) const
 {
     size_t shard = 0;
     if (storage.shards > 1)
@@ -92,7 +92,7 @@ BlocksWithShard DistributedMergeTreeBlockOutputStream::shardBlock(const Block & 
     return {BlockWithShard{Block(block), shard}};
 }
 
-inline String DistributedMergeTreeBlockOutputStream::getIngestMode() const
+inline String DistributedMergeTreeSink::getIngestMode() const
 {
     auto ingest_mode = query_context->getIngestMode();
 
@@ -105,7 +105,7 @@ inline String DistributedMergeTreeBlockOutputStream::getIngestMode() const
     return "async";
 }
 
-void DistributedMergeTreeBlockOutputStream::write(const Block & block)
+void DistributedMergeTreeSink::write(const Block & block)
 {
     if (block.rows() == 0)
     {
@@ -157,7 +157,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
             LOG_TRACE(storage.log,
                     "[sync] write a block={} rows={} shard={} committed={} ...",
                     outstanding, record.block.rows(), current_block.shard, committed);
-            auto ret = storage.dwal->append(record, &DistributedMergeTreeBlockOutputStream::writeCallback, this, storage.dwal_append_ctx);
+            auto ret = storage.dwal->append(record, &DistributedMergeTreeSink::writeCallback, this, storage.dwal_append_ctx);
             if (ret != 0)
             {
                 throw Exception("Failed to insert data sync", ret);
@@ -197,7 +197,7 @@ void DistributedMergeTreeBlockOutputStream::write(const Block & block)
     }
 }
 
-void DistributedMergeTreeBlockOutputStream::writeCallback(const DWAL::AppendResult & result)
+void DistributedMergeTreeSink::writeCallback(const DWAL::AppendResult & result)
 {
     ++committed;
     if (result.err != ErrorCodes::OK)
@@ -207,13 +207,13 @@ void DistributedMergeTreeBlockOutputStream::writeCallback(const DWAL::AppendResu
     LOG_TRACE(storage.log, "[sync] write a block done, and current committed={}, error={}", committed, errcode);
 }
 
-void DistributedMergeTreeBlockOutputStream::writeCallback(const DWAL::AppendResult & result, void * data)
+void DistributedMergeTreeSink::writeCallback(const DWAL::AppendResult & result, void * data)
 {
-    auto stream = static_cast<DistributedMergeTreeBlockOutputStream *>(data);
+    auto stream = static_cast<DistributedMergeTreeSink *>(data);
     stream->writeCallback(result);
 }
 
-void DistributedMergeTreeBlockOutputStream::flush()
+void DistributedMergeTreeSink::flush()
 {
     if (query_context->getIngestMode() != "sync")
     {
