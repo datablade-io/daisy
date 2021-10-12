@@ -1,0 +1,20 @@
+CREATE TABLE default.t_shard1_local\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'MergeTree table\'
+t_shard1_local	MergeTree table
+CREATE TABLE default.t_shard1_all\n(\n    `id` UInt64\n)\nENGINE = Distributed(\'test_cluster_two_shards\', \'default\', \'t_shard1_local\', rand())\nCOMMENT \'Distributed table for MergeTree table\'
+t_shard1_all	Distributed table for MergeTree table
+CREATE TABLE default.t_shard1_local\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'MergeTree table\'
+t_shard1_local	MergeTree table
+CREATE TABLE default.t_shard1_all\n(\n    `id` UInt64\n)\nENGINE = Distributed(\'test_cluster_two_shards\', \'default\', \'t_shard1_local\', rand())\nCOMMENT \'This is Distributed table for MergeTree table\'
+t_shard1_all	This is Distributed table for MergeTree table
+CREATE TABLE default.t_shard1_local\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is MergeTree table\'
+t_shard1_local	This is MergeTree table
+CREATE TABLE default.t_shard1_all\n(\n    `id` UInt64\n)\nENGINE = Distributed(\'test_cluster_two_shards\', \'default\', \'t_shard1_local\', rand())\nCOMMENT \'This is Distributed table for MergeTree table\'
+t_shard1_all	This is Distributed table for MergeTree table
+CREATE TABLE default.t_shard1_local\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192
+t_shard1_local	
+CREATE TABLE default.t_shard1_all\n(\n    `id` UInt64\n)\nENGINE = Distributed(\'test_cluster_two_shards\', \'default\', \'t_shard1_local\', rand())
+t_shard1_all
+CREATE TABLE default.t_shard1_local\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is MergeTree table\'
+t_shard1_local	This is MergeTree table
+CREATE TABLE default.t_shard1_all\n(\n    `id` UInt64\n)\nENGINE = Distributed(\'test_cluster_two_shards\', \'default\', \'t_shard1_local\', rand())\nCOMMENT \'This is Distributed table for MergeTree table\'
+t_shard1_all	This is Distributed table for MergeTree table

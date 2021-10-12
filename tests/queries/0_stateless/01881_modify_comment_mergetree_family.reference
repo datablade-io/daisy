@@ -1,0 +1,36 @@
+CREATE TABLE default.t_mergetree\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'MergeTree table\'
+t_mergetree	MergeTree table
+CREATE TABLE default.t_mergetree_nocomment\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192
+t_mergetree_nocomment	
+CREATE TABLE default.t_replacingmt\n(\n    `id` UInt64\n)\nENGINE = ReplacingMergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'ReplacingMergeTree table\'
+t_replacingmt	ReplacingMergeTree table
+CREATE TABLE default.t_summingmt\n(\n    `id` UInt64\n)\nENGINE = SummingMergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'SummingMergeTree table\'
+t_summingmt	SummingMergeTree table
+CREATE TABLE default.t_aggregatingmt\n(\n    `id` UInt64\n)\nENGINE = AggregatingMergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'AggregatingMergeTree table\'
+t_aggregatingmt	AggregatingMergeTree table
+CREATE TABLE default.t_collapsingmt\n(\n    `id` UInt64,\n    `sign` Int8\n)\nENGINE = CollapsingMergeTree(sign)\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'CollapsingMergeTree table\'
+t_collapsingmt	CollapsingMergeTree table
+CREATE TABLE default.t_versioncollapsingmt\n(\n    `id` UInt64,\n    `sign` Int8,\n    `version` UInt8\n)\nENGINE = VersionedCollapsingMergeTree(sign, version)\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'VersionedCollapsingMergeTree table\'
+t_versioncollapsingmt	VersionedCollapsingMergeTree table
+CREATE TABLE default.t_graphitemt\n(\n    `path` String,\n    `time` DateTime,\n    `value` UInt32,\n    `version` UInt32,\n    `id` UInt32\n)\nENGINE = GraphiteMergeTree(\'graphite_rollup\')\nPARTITION BY time\nORDER BY intHash32(id)\nSAMPLE BY intHash32(id)\nSETTINGS index_granularity = 8192\nCOMMENT \'GraphiteMergeTree table\'
+t_graphitemt	GraphiteMergeTree table
+CREATE TABLE default.t_mergetree\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is MergeTree table\'
+t_mergetree	This is MergeTree table
+CREATE TABLE default.t_mergetree_nocomment\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is no comment MergeTree table\'
+t_mergetree_nocomment	This is no comment MergeTree table
+CREATE TABLE default.t_replacingmt\n(\n    `id` UInt64\n)\nENGINE = ReplacingMergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is ReplacingMergeTree table\'
+t_replacingmt	This is ReplacingMergeTree table
+CREATE TABLE default.t_summingmt\n(\n    `id` UInt64\n)\nENGINE = SummingMergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is SummingMergeTree table\'
+t_summingmt	This is SummingMergeTree table
+CREATE TABLE default.t_aggregatingmt\n(\n    `id` UInt64\n)\nENGINE = AggregatingMergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is AggregatingMergeTree table\'
+t_aggregatingmt	This is AggregatingMergeTree table
+CREATE TABLE default.t_collapsingmt\n(\n    `id` UInt64,\n    `sign` Int8\n)\nENGINE = CollapsingMergeTree(sign)\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is CollapsingMergeTree table\'
+t_collapsingmt	This is CollapsingMergeTree table
+CREATE TABLE default.t_versioncollapsingmt\n(\n    `id` UInt64,\n    `sign` Int8,\n    `version` UInt8\n)\nENGINE = VersionedCollapsingMergeTree(sign, version)\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is VersionedCollapsingMergeTree table\'
+t_versioncollapsingmt	This is VersionedCollapsingMergeTree table
+CREATE TABLE default.t_graphitemt\n(\n    `path` String,\n    `time` DateTime,\n    `value` UInt32,\n    `version` UInt32,\n    `id` UInt32\n)\nENGINE = GraphiteMergeTree(\'graphite_rollup\')\nPARTITION BY time\nORDER BY intHash32(id)\nSAMPLE BY intHash32(id)\nSETTINGS index_granularity = 8192\nCOMMENT \'This is GraphiteMergeTree table\'
+t_graphitemt	This is GraphiteMergeTree table
+CREATE TABLE default.t_mergetree\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192
+t_mergetree	
+CREATE TABLE default.t_mergetree\n(\n    `id` UInt64\n)\nENGINE = MergeTree\nORDER BY id\nSETTINGS index_granularity = 8192\nCOMMENT \'This is MergeTree table\'
+t_mergetree	This is MergeTree table

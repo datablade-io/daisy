@@ -41,6 +41,9 @@ struct AlterCommand
         MODIFY_QUERY,
         RENAME_COLUMN,
         REMOVE_TTL,
+        /// Daisy : starts
+        MODIFY_COMMENT,
+        /// Daisy : ends
     };
 
     /// Which property user wants to remove from column
@@ -132,6 +135,11 @@ struct AlterCommand
 
     /// Target column name
     String rename_to;
+
+    /// Daisy : starts
+    /// For modify table comment
+    String table_comment;
+    /// Daisy : ends
 
     /// What to remove from column (or TTL)
     RemoveProperty to_remove = RemoveProperty::NO_PROPERTY;

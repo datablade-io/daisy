@@ -65,6 +65,10 @@ ReplicatedMergeTreeTableMetadata::ReplicatedMergeTreeTableMetadata(const MergeTr
         index_granularity_bytes = 0;
 
     constraints = metadata_snapshot->getConstraints().toString();
+
+    /// Daisy : starts
+    table_comment = metadata_snapshot->comment;
+    /// Daisy : ends
 }
 
 void ReplicatedMergeTreeTableMetadata::write(WriteBuffer & out) const
@@ -100,6 +104,10 @@ void ReplicatedMergeTreeTableMetadata::write(WriteBuffer & out) const
 
     if (!constraints.empty())
         out << "constraints: " << constraints << "\n";
+
+    /// Daisy : starts
+    out << "a table comment: " << table_comment << "\n";
+    /// Daisy : ends
 }
 
 String ReplicatedMergeTreeTableMetadata::toString() const
@@ -149,6 +157,11 @@ void ReplicatedMergeTreeTableMetadata::read(ReadBuffer & in)
 
     if (checkString("constraints: ", in))
         in >> constraints >> "\n";
+
+    /// Daisy : starts
+    if (checkString("a table comment: ", in))
+        in >> table_comment >> "\n";
+    /// Daisy : ends
 }
 
 ReplicatedMergeTreeTableMetadata ReplicatedMergeTreeTableMetadata::parse(const String & s)
@@ -324,6 +337,14 @@ ReplicatedMergeTreeTableMetadata::checkAndFindDiff(const ReplicatedMergeTreeTabl
         diff.constraints_changed = true;
         diff.new_constraints = from_zk.constraints;
     }
+
+    /// Daisy : starts
+    if (table_comment != from_zk.table_comment)
+    {
+        diff.table_comment_changed = true;
+        diff.new_table_comment = from_zk.table_comment;
+    }
+    /// Daisy : ends
 
     return diff;
 }

@@ -67,6 +67,10 @@ public:
         NO_TYPE,
 
         LIVE_VIEW_REFRESH,
+
+        /// Daisy : starts
+        MODIFY_COMMENT,
+        /// Daisy : ends
     };
 
     Type type = NO_TYPE;
@@ -143,6 +147,11 @@ public:
 
     /// For MODIFY_QUERY
     ASTPtr select;
+
+    /// Daisy : starts
+    /// For MODIFY_COMMENT
+    ASTPtr table_comment;
+    /// Daisy : ends
 
     /** In ALTER CHANNEL, ADD, DROP, SUSPEND, RESUME, REFRESH, MODIFY queries, the list of live views is stored here
      */

@@ -1,0 +1,64 @@
+CREATE TABLE default.t_tinylog\n(\n    `id` UInt64\n)\nENGINE = TinyLog\nCOMMENT \'TinyLog table\'
+t_tinylog	TinyLog table
+CREATE TABLE default.t_stripelog\n(\n    `id` UInt64\n)\nENGINE = StripeLog\nCOMMENT \'StripeLog table\'
+t_stripelog	StripeLog table
+CREATE TABLE default.t_log\n(\n    `id` UInt64\n)\nENGINE = Log\nCOMMENT \'Log table\'
+t_log	Log table
+CREATE TABLE default.t_memory\n(\n    `id` UInt64\n)\nENGINE = Memory\nCOMMENT \'Memory table\'
+t_memory	Memory table
+CREATE TABLE default.t_set\n(\n    `id` UInt64\n)\nENGINE = Set\nCOMMENT \'Set table\'
+t_set	Set table
+CREATE TABLE default.t_join\n(\n    `id` String\n)\nENGINE = Join(ANY, LEFT, id)\nCOMMENT \'Join table\'
+t_join	Join table
+CREATE TABLE default.t_buffer\n(\n    `id` String\n)\nENGINE = Buffer(\'default\', \'t_buffer_log\', 16, 10, 100, 10000, 1000000, 10000000, 100000000)\nCOMMENT \'Buffer table\'
+t_buffer	Buffer table
+CREATE TABLE default.t_merge\n(\n    `id` String\n)\nENGINE = Merge(\'default\', \'^t_merge_\')\nCOMMENT \'Merge table\'
+t_merge	Merge table
+CREATE TABLE default.t_null\n(\n    `id` UInt64\n)\nENGINE = Null\nCOMMENT \'Null table\'
+t_null	Null table
+CREATE TABLE default.t_url\n(\n    `id` UInt64\n)\nENGINE = URL(\'http://127.0.0.1:12345/\', \'CSV\')\nCOMMENT \'URL table\'
+t_url	URL table
+CREATE TABLE default.t_generaterandom\n(\n    `id` UInt64\n)\nENGINE = GenerateRandom(1, 5, 3)\nCOMMENT \'GenerateRandom table\'
+t_generaterandom	GenerateRandom table
+CREATE TABLE default.t_jdbc\n(\n    `id` Int32\n)\nENGINE = JDBC(\'jdbc:mysql://localhost:3306/?user=root&password=root\', \'test\', \'test\')\nCOMMENT \'JDBC table\'
+t_jdbc	JDBC table
+CREATE TABLE default.t_odbc\n(\n    `id` Int32\n)\nENGINE = ODBC(\'DSN=mysqlconn\', \'test\', \'test\')\nCOMMENT \'ODBC table\'
+t_odbc	ODBC table
+CREATE TABLE default.t_mongodb\n(\n    `id` UInt32\n)\nENGINE = MongoDB(\'mongo1:27017\', \'test\', \'simple_table\', \'testuser\', \'clickhouse\')\nCOMMENT \'MongoDB table\'
+t_mongodb	MongoDB table
+CREATE TABLE default.t_postgresql\n(\n    `id` Int32\n)\nENGINE = PostgreSQL(\'localhost:5432\', \'public\', \'test\', \'postges_user\', \'postgres_password\')\nCOMMENT \'PostgreSQL table\'
+t_postgresql	PostgreSQL table
+CREATE TABLE default.t_file\n(\n    `id` UInt32\n)\nENGINE = File(\'CSV\')\nCOMMENT \'File table\'
+t_file	File table
+CREATE TABLE default.t_tinylog\n(\n    `id` UInt64\n)\nENGINE = TinyLog\nCOMMENT \'This is TinyLog table\'
+t_tinylog	This is TinyLog table
+CREATE TABLE default.t_stripelog\n(\n    `id` UInt64\n)\nENGINE = StripeLog\nCOMMENT \'This is StripeLog table\'
+t_stripelog	This is StripeLog table
+CREATE TABLE default.t_log\n(\n    `id` UInt64\n)\nENGINE = Log\nCOMMENT \'This is Log table\'
+t_log	This is Log table
+CREATE TABLE default.t_memory\n(\n    `id` UInt64\n)\nENGINE = Memory\nCOMMENT \'This is Memory table\'
+t_memory	This is Memory table
+CREATE TABLE default.t_set\n(\n    `id` UInt64\n)\nENGINE = Set\nCOMMENT \'This is Set table\'
+t_set	This is Set table
+CREATE TABLE default.t_join\n(\n    `id` String\n)\nENGINE = Join(ANY, LEFT, id)\nCOMMENT \'This is Join table\'
+t_join	This is Join table
+CREATE TABLE default.t_buffer\n(\n    `id` String\n)\nENGINE = Buffer(\'default\', \'t_buffer_log\', 16, 10, 100, 10000, 1000000, 10000000, 100000000)\nCOMMENT \'This is Buffer table\'
+t_buffer	This is Buffer table
+CREATE TABLE default.t_merge\n(\n    `id` String\n)\nENGINE = Merge(\'default\', \'^t_merge_\')\nCOMMENT \'This is Merge table\'
+t_merge	This is Merge table
+CREATE TABLE default.t_null\n(\n    `id` UInt64\n)\nENGINE = Null\nCOMMENT \'This is Null table\'
+t_null	This is Null table
+CREATE TABLE default.t_url\n(\n    `id` UInt64\n)\nENGINE = URL(\'http://127.0.0.1:12345/\', \'CSV\')\nCOMMENT \'This is URL table\'
+t_url	This is URL table
+CREATE TABLE default.t_generaterandom\n(\n    `id` UInt64\n)\nENGINE = GenerateRandom(1, 5, 3)\nCOMMENT \'This is GenerateRandom table\'
+t_generaterandom	This is GenerateRandom table
+CREATE TABLE default.t_jdbc\n(\n    `id` Int32\n)\nENGINE = JDBC(\'jdbc:mysql://localhost:3306/?user=root&password=root\', \'test\', \'test\')\nCOMMENT \'This is JDBC table\'
+t_jdbc	This is JDBC table
+CREATE TABLE default.t_odbc\n(\n    `id` Int32\n)\nENGINE = ODBC(\'DSN=mysqlconn\', \'test\', \'test\')\nCOMMENT \'This is ODBC table\'
+t_odbc	This is ODBC table
+CREATE TABLE default.t_mongodb\n(\n    `id` UInt32\n)\nENGINE = MongoDB(\'mongo1:27017\', \'test\', \'simple_table\', \'testuser\', \'clickhouse\')\nCOMMENT \'This is MongoDB table\'
+t_mongodb	This is MongoDB table
+CREATE TABLE default.t_postgresql\n(\n    `id` Int32\n)\nENGINE = PostgreSQL(\'localhost:5432\', \'public\', \'test\', \'postges_user\', \'postgres_password\')\nCOMMENT \'This is PostgreSQL table\'
+t_postgresql	This is PostgreSQL table
+CREATE TABLE default.t_file\n(\n    `id` UInt32\n)\nENGINE = File(\'CSV\')\nCOMMENT \'This is File table\'
+t_file	This is File table
