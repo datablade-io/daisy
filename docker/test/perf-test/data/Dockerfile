@@ -1,4 +1,6 @@
 # docker build -t daisy/tabs-data:latest .
+# docker build --build-arg VAR_LOG_INTERVAL="60m" --build-arg VAR_TS_END="2016-01-02T00:00:00Z" -t qniu/perf-data:latest .
+
 ARG VAR_SCALE
 ARG VAR_SEED
 ARG VAR_TS_START
