@@ -16,7 +16,7 @@ RUN mkdir /src \
     && cd tsbs \
     && make
 
-FROM yandex/clickhouse-server as ch
+FROM yandex/clickhouse-server:latest as ch
 
 ARG VAR_SCALE
 ARG VAR_SEED
