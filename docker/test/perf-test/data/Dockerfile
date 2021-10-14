@@ -1,4 +1,4 @@
-# docker build -t daisy/tabs-data:iot-1 .
+# docker build -t daisy/tabs-data:latest .
 ARG VAR_SCALE
 ARG VAR_SEED
 ARG VAR_TS_START
@@ -26,7 +26,7 @@ ARG VAR_USE_CASE
 ARG VAR_LOG_INTERVAL
 ARG VAR_MAX_DATA_POINTS
 
-ENV PATH="/tsbs/${PATH}"
+ENV PATH="/tsbs:$PATH"
 ENV SCALE=$VAR_SCALE
 ENV SEED=$VAR_SEED
 ENV TS_START=$VAR_TS_START
@@ -39,16 +39,19 @@ RUN mkdir /tsbs && mkdir /data
 
 COPY --from=tsbs /src/tsbs/bin /tsbs
 COPY --from=tsbs /src/tsbs/scripts /tsbs
+COPY --from=tsbs /src/tsbs/scripts/load /tsbs
 COPY ./export_benchmark_data.sh /tsbs
 
-RUN service clickhouse-server start \
+RUN echo $PATH \
+    && sed -i '/--port=/d' /tsbs/load_clickhouse.sh \
+    && service clickhouse-server start \service clickhouse-server start \
     && sleep 10 \
     && FORMATS=clickhouse generate_data.sh \
     && FORMATS=clickhouse generate_queries.sh \
-    && load/load_clickhouse.sh \
+    && load_clickhouse.sh \
     && export_benchmark_data.sh \
     service clickhouse-server stop
 
 FROM ubuntu:20.04
 
-COPY --from=ch /data / 
+COPY --from=ch /data /data
