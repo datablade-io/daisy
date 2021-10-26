@@ -48,6 +48,11 @@ public:
     bool storesDataOnDisk() const override { return true; }
     Strings getDataPaths() const override { return {rocksdb_dir}; }
 
+    /// Checks if the Mutation can be performed.
+    void checkMutationIsPossible(const MutationCommands & commands, const Settings & settings) const override;
+
+    void mutate(const MutationCommands & commands, ContextPtr context) override;
+
 protected:
     StorageEmbeddedRocksDB(const StorageID & table_id_,
         const String & relative_data_path_,
