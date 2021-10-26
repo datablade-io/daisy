@@ -114,11 +114,16 @@ void CatalogService::doBroadcast()
     /// CurrentThread::attachQueryContext(context);
     auto context = Context::createCopy(global_context);
     context->makeQueryContext();
+    LOG_INFO(log, "Start to execute query and append to kafka. query_id={}", context->getCurrentQueryId());
 
     executeSelectQuery(query, context, [this](Block && block) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+        LOG_INFO(log, "Start to append block to kafka");
         append(std::move(block));
         assert(!block);
+        LOG_INFO(log, "End to append block to kafka");
     });
+
+    LOG_INFO(log, "Finished to execute query and append to kafka. query_id={}", context->getCurrentQueryId());
 }
 
 void CatalogService::append(Block && block)
