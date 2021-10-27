@@ -18,7 +18,7 @@ public:
         const std::string & config_prefix,
         const Poco::Util::AbstractConfiguration & config,
         const CoordinationSettingsPtr & coordination_settings,
-        bool standalone_keeper);
+        bool standalone_metastore);
 
     MetaStateManager(
         int server_id_,

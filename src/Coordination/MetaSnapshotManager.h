@@ -1,7 +1,6 @@
 #pragma once
 #include <libnuraft/nuraft.hxx> // Y_IGNORE
 #include <common/logger_useful.h>
-//#include <Coordination/KeeperStorage.h>
 #include <IO/ReadBuffer.h>
 #include <IO/WriteBuffer.h>
 
@@ -13,45 +12,43 @@ namespace DB
 using SnapshotMetadata = nuraft::snapshot;
 using SnapshotMetadataPtr = std::shared_ptr<SnapshotMetadata>;
 
-enum SnapshotVersion : uint8_t
+enum MetaSnapshotVersion : uint8_t
 {
-    V0 = 0,
+    META_V0 = 0,
 };
 
-struct MetaStorageSnapshot
+struct MetaSnapshot
 {
 public:
-    explicit MetaStorageSnapshot(uint64_t up_to_log_idx_);
+    explicit MetaSnapshot(uint64_t up_to_log_idx_);
 
-    explicit MetaStorageSnapshot(const SnapshotMetadataPtr & snapshot_meta_);
-    ~MetaStorageSnapshot();
+    explicit MetaSnapshot(const SnapshotMetadataPtr & snapshot_meta_);
+    ~MetaSnapshot();
 
-    static void serialize(const MetaStorageSnapshot & snapshot, WriteBuffer & out);
+    static void serialize(const MetaSnapshot & snapshot, WriteBuffer & out);
 
-    static std::shared_ptr<MetaStorageSnapshot> deserialize(ReadBuffer & in);
+    static std::shared_ptr<MetaSnapshot> deserialize(ReadBuffer & in);
 
-    //    KeeperStorage * storage;
-
-    SnapshotVersion version = SnapshotVersion::V0;
+    MetaSnapshotVersion version = MetaSnapshotVersion::META_V0;
     SnapshotMetadataPtr snapshot_meta;
     rocksdb::BackupInfo backup_info;
     std::map<uint64_t, std::string> files;
 };
 
-using MetaStorageSnapshotPtr = std::shared_ptr<MetaStorageSnapshot>;
-using CreateSnapshotCallback = std::function<void(MetaStorageSnapshotPtr &&)>;
+using MetaSnapshotPtr = std::shared_ptr<MetaSnapshot>;
+using CreateMetaSnapshotCallback = std::function<void(MetaSnapshotPtr &&)>;
 
 class MetaSnapshotManager
 {
 public:
     MetaSnapshotManager(const std::string & snapshots_path_, size_t snapshots_to_keep_);
 
-    static nuraft::ptr<nuraft::buffer> serializeSnapshotToBuffer(const MetaStorageSnapshot & snapshot);
+    static nuraft::ptr<nuraft::buffer> serializeSnapshotToBuffer(const MetaSnapshot & snapshot);
 
-    nuraft::ptr<nuraft::buffer> serializeSnapshotBufferToDisk(rocksdb::DB * storage, MetaStorageSnapshot & meta);
+    nuraft::ptr<nuraft::buffer> serializeSnapshotBufferToDisk(rocksdb::DB * storage, MetaSnapshot & meta);
 
 
-    static MetaStorageSnapshotPtr deserializeSnapshotFromBuffer(nuraft::ptr<nuraft::buffer> buffer);
+    static MetaSnapshotPtr deserializeSnapshotFromBuffer(nuraft::ptr<nuraft::buffer> buffer);
 
     nuraft::ptr<nuraft::buffer> deserializeSnapshotBufferFromDisk(uint64_t up_to_log_idx) const;
 
@@ -59,9 +56,9 @@ public:
 
     void restoreFromSnapshot(const std::string & rocksdb_dir, uint64_t up_to_log_idx) const;
 
-    void saveBackupFileOfSnapshot(const MetaStorageSnapshot & snapshot, uint64_t obj_id, nuraft::buffer & buffer);
+    void saveBackupFileOfSnapshot(const MetaSnapshot & snapshot, uint64_t obj_id, nuraft::buffer & buffer);
 
-    nuraft::ptr<nuraft::buffer> loadBackupFileOfSnapshot(const MetaStorageSnapshot & snapshot, uint64_t obj_id) const;
+    nuraft::ptr<nuraft::buffer> loadBackupFileOfSnapshot(const MetaSnapshot & snapshot, uint64_t obj_id) const;
 
     void finalizeSnapshot(uint64_t up_to_log_idx);
 
@@ -85,10 +82,10 @@ private:
     Poco::Logger * log;
 };
 
-struct CreateSnapshotTask
+struct CreateMetaSnapshotTask
 {
-    MetaStorageSnapshotPtr snapshot;
-    CreateSnapshotCallback create_snapshot;
+    MetaSnapshotPtr snapshot;
+    CreateMetaSnapshotCallback create_snapshot;
 };
 
 }

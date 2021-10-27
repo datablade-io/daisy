@@ -107,6 +107,10 @@ struct PartUUIDs;
 using PartUUIDsPtr = std::shared_ptr<PartUUIDs>;
 class KeeperStorageDispatcher;
 
+/// Daisy: start.
+class MetaStoreDispatcher;
+/// Daisy: end.
+
 class IOutputFormat;
 using OutputFormatPtr = std::shared_ptr<IOutputFormat>;
 class IVolume;
@@ -673,6 +677,14 @@ public:
     void initializeKeeperStorageDispatcher() const;
     void shutdownKeeperStorageDispatcher() const;
 
+/// Daisy: start.
+#if USE_NURAFT
+    std::shared_ptr<MetaStoreDispatcher> & getMetaStoreDispatcher() const;
+#endif
+    void initializeMetaStoreDispatcher() const;
+    void shutdownMetaStoreDispatcher() const;
+/// Daisy: end.
+
     /// Set auxiliary zookeepers configuration at server starting or configuration reloading.
     void reloadAuxiliaryZooKeepersConfigIfChanged(const ConfigurationPtr & config);
     /// Has ready or expired ZooKeeper
@@ -796,6 +808,10 @@ public:
         CLIENT,         /// clickhouse-client
         LOCAL,          /// clickhouse-local
         KEEPER,         /// clickhouse-keeper (also daemon)
+
+        /// Daisy: start.
+        METASTORE,      /// clickhouse-metastore (also daemon)
+        /// Daisy: end.
     };
 
     ApplicationType getApplicationType() const;

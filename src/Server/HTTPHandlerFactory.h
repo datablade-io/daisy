@@ -136,4 +136,8 @@ createPrometheusHandlerFactory(IServer & server, AsynchronousMetrics & async_met
 
 HTTPRequestHandlerFactoryPtr createHandlerFactory(IServer & server, AsynchronousMetrics & async_metrics, const std::string & name);
 HTTPRequestHandlerFactoryPtr createSQLAnalyzeHandlerFactory(IServer & server, const std::string & config_prefix);
+
+/// Daisy: start.
+HTTPRequestHandlerFactoryPtr createMetaStoreHandlerFactory(IServer & server, const std::string & name);
+/// Daisy: end.
 }

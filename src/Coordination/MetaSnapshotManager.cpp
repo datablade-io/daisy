@@ -114,7 +114,7 @@ namespace
     }
 }
 
-void MetaStorageSnapshot::serialize(const MetaStorageSnapshot & snapshot, WriteBuffer & out)
+void MetaSnapshot::serialize(const MetaSnapshot & snapshot, WriteBuffer & out)
 {
     writeBinary(static_cast<uint8_t>(snapshot.version), out);
     serializeSnapshotMetadata(snapshot.snapshot_meta, out);
@@ -122,35 +122,35 @@ void MetaStorageSnapshot::serialize(const MetaStorageSnapshot & snapshot, WriteB
     serializeFileList(snapshot.files, out);
 }
 
-MetaStorageSnapshotPtr MetaStorageSnapshot::deserialize(ReadBuffer & in)
+MetaSnapshotPtr MetaSnapshot::deserialize(ReadBuffer & in)
 {
     uint8_t ver;
     readBinary(ver, in);
-    if (static_cast<SnapshotVersion>(ver) > SnapshotVersion::V0)
+    if (static_cast<MetaSnapshotVersion>(ver) > MetaSnapshotVersion::META_V0)
         throw Exception(ErrorCodes::UNKNOWN_FORMAT_VERSION, "Unsupported snapshot version {}", ver);
 
     SnapshotMetadataPtr result = deserializeSnapshotMetadata(in);
-    MetaStorageSnapshotPtr meta_ptr = std::make_shared<MetaStorageSnapshot>(result);
+    MetaSnapshotPtr meta_ptr = std::make_shared<MetaSnapshot>(result);
 
-    meta_ptr->version = static_cast<SnapshotVersion>(ver);
+    meta_ptr->version = static_cast<MetaSnapshotVersion>(ver);
     meta_ptr->backup_info = deserializeBackupInfo(in);
     meta_ptr->files = deserializeFileList(in);
 
     return meta_ptr;
 }
 
-MetaStorageSnapshot::MetaStorageSnapshot(uint64_t up_to_log_idx_)
+MetaSnapshot::MetaSnapshot(uint64_t up_to_log_idx_)
     : snapshot_meta(std::make_shared<SnapshotMetadata>(up_to_log_idx_, 0, std::make_shared<nuraft::cluster_config>()))
 {
     //    storage->enableSnapshotMode();
     //    snapshot_container_size = storage->container.snapshotSize();
 }
 
-MetaStorageSnapshot::MetaStorageSnapshot(const SnapshotMetadataPtr & snapshot_meta_) : snapshot_meta(snapshot_meta_)
+MetaSnapshot::MetaSnapshot(const SnapshotMetadataPtr & snapshot_meta_) : snapshot_meta(snapshot_meta_)
 {
 }
 
-MetaStorageSnapshot::~MetaStorageSnapshot() = default;
+MetaSnapshot::~MetaSnapshot() = default;
 
 MetaSnapshotManager::MetaSnapshotManager(const std::string & snapshots_path_, size_t snapshots_to_keep_)
     : snapshots_path(snapshots_path_), snapshots_to_keep(snapshots_to_keep_), log(&Poco::Logger::get("MetaSnapshotManager"))
@@ -178,7 +178,7 @@ MetaSnapshotManager::MetaSnapshotManager(const std::string & snapshots_path_, si
     removeOutdatedSnapshotsIfNeeded();
 }
 
-nuraft::ptr<nuraft::buffer> MetaSnapshotManager::serializeSnapshotBufferToDisk(rocksdb::DB * storage, MetaStorageSnapshot & meta)
+nuraft::ptr<nuraft::buffer> MetaSnapshotManager::serializeSnapshotBufferToDisk(rocksdb::DB * storage, MetaSnapshot & meta)
 {
     uint64_t up_to_log_idx = meta.snapshot_meta->get_last_log_idx();
     auto snapshot_dir_name = getSnapshotDirName(up_to_log_idx);
@@ -292,24 +292,24 @@ void MetaSnapshotManager::restoreFromSnapshot(const std::string & rocksdb_dir, u
     delete backup_engine;
 }
 
-nuraft::ptr<nuraft::buffer> MetaSnapshotManager::serializeSnapshotToBuffer(const MetaStorageSnapshot & snapshot)
+nuraft::ptr<nuraft::buffer> MetaSnapshotManager::serializeSnapshotToBuffer(const MetaSnapshot & snapshot)
 {
     WriteBufferFromNuraftBuffer writer;
     CompressedWriteBuffer compressed_writer(writer);
 
-    MetaStorageSnapshot::serialize(snapshot, compressed_writer);
+    MetaSnapshot::serialize(snapshot, compressed_writer);
     compressed_writer.finalize();
     return writer.getBuffer();
 }
 
-MetaStorageSnapshotPtr MetaSnapshotManager::deserializeSnapshotFromBuffer(nuraft::ptr<nuraft::buffer> buffer)
+MetaSnapshotPtr MetaSnapshotManager::deserializeSnapshotFromBuffer(nuraft::ptr<nuraft::buffer> buffer)
 {
     ReadBufferFromNuraftBuffer reader(buffer);
     CompressedReadBuffer compressed_reader(reader);
-    return MetaStorageSnapshot::deserialize(compressed_reader);
+    return MetaSnapshot::deserialize(compressed_reader);
 }
 
-void MetaSnapshotManager::saveBackupFileOfSnapshot(const MetaStorageSnapshot & snapshot, uint64_t obj_id, nuraft::buffer & buffer)
+void MetaSnapshotManager::saveBackupFileOfSnapshot(const MetaSnapshot & snapshot, uint64_t obj_id, nuraft::buffer & buffer)
 {
     auto idx = snapshot.snapshot_meta->get_last_log_idx();
     auto snapshot_dir_name = getSnapshotDirName(idx);
@@ -327,7 +327,7 @@ void MetaSnapshotManager::saveBackupFileOfSnapshot(const MetaStorageSnapshot & s
     LOG_DEBUG(log, "save  #{} of snapshot {} to file: {}", obj_id, idx, file_path);
 }
 
-nuraft::ptr<nuraft::buffer> MetaSnapshotManager::loadBackupFileOfSnapshot(const MetaStorageSnapshot & snapshot, uint64_t obj_id) const
+nuraft::ptr<nuraft::buffer> MetaSnapshotManager::loadBackupFileOfSnapshot(const MetaSnapshot & snapshot, uint64_t obj_id) const
 {
     auto idx = snapshot.snapshot_meta->get_last_log_idx();
     auto snapshot_dir_name = getSnapshotDirName(idx);

@@ -24,6 +24,7 @@ public:
 private:
     IServer & server;
     Poco::Logger * log;
+    std::string name;
 
     // The request_context and the request_credentials instances may outlive a single request/response loop.
     // This happens only when the authentication mechanism requires more than a single request/response exchange (e.g., SPNEGO).

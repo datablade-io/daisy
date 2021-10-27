@@ -5,22 +5,23 @@
 #endif
 
 #if USE_NURAFT
-#    include <Coordination/KVRequest.h>
-#    include <Coordination/KeeperLogStore.h>
-#    include <Coordination/LoggerWrapper.h>
-#    include <Coordination/MetaSnapshotManager.h>
-#    include <Coordination/MetaStateMachine.h>
-#    include <Coordination/MetaStateManager.h>
 
-#    include <Coordination/ReadBufferFromNuraftBuffer.h>
-#    include <Coordination/WriteBufferFromNuraftBuffer.h>
-#    include <IO/WriteBufferFromString.h>
+#include <Coordination/KVRequest.h>
+#include <Coordination/KeeperLogStore.h>
+#include <Coordination/LoggerWrapper.h>
+#include <Coordination/MetaSnapshotManager.h>
+#include <Coordination/MetaStateMachine.h>
+#include <Coordination/MetaStateManager.h>
 
-#    include <libnuraft/nuraft.hxx> // Y_IGNORE
-#    include <common/logger_useful.h>
+#include <Coordination/ReadBufferFromNuraftBuffer.h>
+#include <Coordination/WriteBufferFromNuraftBuffer.h>
+#include <IO/WriteBufferFromString.h>
 
-#    include <filesystem>
-#    include <thread>
+#include <libnuraft/nuraft.hxx> // Y_IGNORE
+#include <common/logger_useful.h>
+
+#include <filesystem>
+#include <thread>
 
 
 namespace fs = std::filesystem;
@@ -71,7 +72,7 @@ struct MetaRaftServer
         , endpoint(hostname + ":" + std::to_string(port))
         , state_manager(nuraft::cs_new<DB::MetaStateManager>(server_id, hostname, port, logs_path))
     {
-        Coordination::SnapshotsQueue snapshots_queue{10};
+        Coordination::MetaSnapshotsQueue snapshots_queue{10};
         Coordination::CoordinationSettingsPtr settings = std::make_shared<Coordination::CoordinationSettings>();
         settings->snapshot_distance = 10;
         settings->reserved_log_items = 10;
@@ -176,7 +177,7 @@ TEST(CoordinationTest1, TestMetaRaft1)
     std::string value;
     do
     {
-        s1.state_machine->getByKey("version", value);
+        s1.state_machine->getByKey("version", &value);
         std::cout << "Waiting s1 to apply entry\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     } while (value != "1.0.0");
@@ -196,12 +197,12 @@ void testCreateRestoreSnapshot(Coordination::CoordinationSettingsPtr settings, u
 
     ChangelogDirTest snapshots1("./snapshots1");
 
-    SnapshotsQueue snapshots_queue{1};
+    MetaSnapshotsQueue snapshots_queue{1};
     auto state_machine = std::make_shared<MetaStateMachine>(snapshots_queue, "./snapshots", "./meta", settings);
     state_machine->init();
     DB::KeeperLogStore changelog("./logs", settings->rotate_log_storage_interval, true);
 
-    SnapshotsQueue snapshots_queue1{1};
+    MetaSnapshotsQueue snapshots_queue1{1};
     auto restore_machine = std::make_shared<MetaStateMachine>(snapshots_queue1, "./snapshots1", "./meta1", settings);
     restore_machine->init();
 
@@ -229,7 +230,7 @@ void testCreateRestoreSnapshot(Coordination::CoordinationSettingsPtr settings, u
                   };
 
             state_machine->create_snapshot(s, when_done);
-            CreateSnapshotTask snapshot_task;
+            CreateMetaSnapshotTask snapshot_task;
             snapshots_queue.pop(snapshot_task);
             snapshot_task.create_snapshot(std::move(snapshot_task.snapshot));
         }
@@ -280,7 +281,7 @@ void testCreateRestoreSnapshot(Coordination::CoordinationSettingsPtr settings, u
     }
 
     std::string ver;
-    restore_machine->getByKey("version", ver);
+    restore_machine->getByKey("version", &ver);
     EXPECT_EQ(ver, std::to_string(total_logs));
 }
 
@@ -307,7 +308,7 @@ void testLogAndStateMachine1(Coordination::CoordinationSettingsPtr settings, uin
     ChangelogDirTest logs("./logs");
 
     //    ResponsesQueue queue;
-    SnapshotsQueue snapshots_queue{1};
+    MetaSnapshotsQueue snapshots_queue{1};
     auto state_machine = std::make_shared<MetaStateMachine>(snapshots_queue, "./snapshots", "./meta", settings);
     state_machine->init();
     uint64_t start_idx = state_machine->last_commit_index();
@@ -335,7 +336,7 @@ void testLogAndStateMachine1(Coordination::CoordinationSettingsPtr settings, uin
                   };
 
             state_machine->create_snapshot(s, when_done);
-            CreateSnapshotTask snapshot_task;
+            CreateMetaSnapshotTask snapshot_task;
             snapshots_queue.pop(snapshot_task);
             snapshot_task.create_snapshot(std::move(snapshot_task.snapshot));
         }
@@ -349,7 +350,7 @@ void testLogAndStateMachine1(Coordination::CoordinationSettingsPtr settings, uin
         }
     }
 
-    SnapshotsQueue snapshots_queue1{1};
+    MetaSnapshotsQueue snapshots_queue1{1};
     auto restore_machine = std::make_shared<MetaStateMachine>(snapshots_queue1, "./snapshots", "./meta1", settings);
     restore_machine->init();
 
@@ -371,7 +372,7 @@ void testLogAndStateMachine1(Coordination::CoordinationSettingsPtr settings, uin
     }
 
     std::string ver;
-    restore_machine->getByKey("version", ver);
+    restore_machine->getByKey("version", &ver);
     EXPECT_EQ(ver, std::to_string(total_logs));
 }
 

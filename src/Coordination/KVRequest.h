@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Common/TypePromotion.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
 
@@ -14,6 +15,7 @@ using namespace DB;
 
 enum class KVOpNum : uint32_t
 {
+    UNKNOWN = 0,
     PUT = 1,
     MULTIPUT = 2,
     GET = 3,
@@ -25,6 +27,8 @@ namespace
     {
         switch (op_num)
         {
+            case KVOpNum::UNKNOWN:
+                return "Unknown";
             case KVOpNum::PUT:
                 return "Put";
             case KVOpNum::MULTIPUT:
@@ -39,7 +43,7 @@ namespace
     }
 }
 
-struct KVRequest
+struct KVRequest: public TypePromotion<KVRequest>
 {
     KVRequest() = default;
     KVRequest(const KVRequest &) = default;
@@ -72,6 +76,18 @@ struct KVGetRequest final : public KVRequest
     bool isReadRequest() const override { return true; }
 };
 
+struct KVMultiGetRequest final : public KVRequest
+{
+    std::vector<String> keys;
+
+    KVOpNum getOpNum() const override { return KVOpNum::MULTIGET; }
+    inline void writeImpl(WriteBuffer & out) const override { writeVectorBinary<String>(keys, out); }
+
+    inline void readImpl(ReadBuffer & in) override { readVectorBinary<String>(keys, in); }
+
+    bool isReadRequest() const override { return true; }
+};
+
 struct KVPutRequest final : public KVRequest
 {
     // TODO: use Slice in future to avoid memory copy
@@ -95,6 +111,29 @@ struct KVPutRequest final : public KVRequest
     bool isReadRequest() const override { return false; }
 };
 
+struct KVMultiPutRequest final : public KVRequest
+{
+    // TODO: use Slice in future to avoid memory copy
+    std::vector<String> keys;
+    std::vector<String> values;
+
+    KVOpNum getOpNum() const override { return KVOpNum::MULTIPUT; }
+
+    inline void writeImpl(WriteBuffer & out) const override
+    {
+        writeVectorBinary<String>(keys, out);
+        writeVectorBinary<String>(values, out);
+    }
+
+    inline void readImpl(ReadBuffer & in) override
+    {
+        readVectorBinary<String>(keys, in);
+        readVectorBinary<String>(values, in);
+    }
+
+    bool isReadRequest() const override { return false; }
+};
+
 class KVRequestFactory final : private boost::noncopyable
 {
 public:
@@ -107,7 +146,7 @@ public:
         return factory;
     }
 
-    KVRequestPtr get(KVOpNum op_num) const
+    KVRequestPtr get(KVOpNum op_num)
     {
         auto it = op_num_to_request.find(op_num);
         if (it == op_num_to_request.end())

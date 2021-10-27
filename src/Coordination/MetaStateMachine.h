@@ -4,8 +4,7 @@
 
 #include <libnuraft/nuraft.hxx> // Y_IGNORE
 #include <common/logger_useful.h>
-#include <Coordination/KeeperStorage.h>
-#include <Coordination/ThreadSafeQueue.h>
+#include <Common/ConcurrentBoundedQueue.h>
 #include <Coordination/CoordinationSettings.h>
 #include <Coordination/MetaSnapshotManager.h>
 
@@ -14,13 +13,16 @@
 namespace DB
 {
 
-//using ResponsesQueue = ThreadSafeQueue<KeeperStorage::ResponseForSession>;
-using SnapshotsQueue = ConcurrentBoundedQueue<CreateSnapshotTask>;
+using MetaSnapshotsQueue = ConcurrentBoundedQueue<CreateMetaSnapshotTask>;
 
 class MetaStateMachine : public nuraft::state_machine
 {
 public:
-    MetaStateMachine(SnapshotsQueue & snapshots_queue_, const std::string & snapshots_path_, const std::string & db_path_, const CoordinationSettingsPtr & coordination_settings_);
+    MetaStateMachine(
+        MetaSnapshotsQueue & snapshots_queue_,
+        const std::string & snapshots_path_,
+        const std::string & db_path_,
+        const CoordinationSettingsPtr & coordination_settings_);
 
     void init();
 
@@ -54,11 +56,9 @@ public:
         nuraft::ptr<nuraft::buffer> & data_out,
         bool & is_last_obj) override;
 
-    void processReadRequest(const KeeperStorage::RequestForSession & request_for_session);
+    void getByKey(const std::string & key, std::string * value) const;
 
-    void getByKey(const std::string & key, std::string & value);
-
-    std::unordered_set<int64_t> getDeadSessions();
+    void multiGetByKeys(const std::vector<std::string> & keys, std::vector<std::string> * values) const;
 
     void shutdownStorage();
 
@@ -72,7 +72,7 @@ private:
     RocksDBPtr rocksdb_ptr;
     String rocksdb_dir;
 
-    MetaStorageSnapshotPtr latest_snapshot_meta = nullptr;
+    MetaSnapshotPtr latest_snapshot_meta = nullptr;
     nuraft::ptr<nuraft::buffer> latest_snapshot_buf = nullptr;
 
     CoordinationSettingsPtr coordination_settings;
@@ -83,7 +83,7 @@ private:
 
 //    ResponsesQueue & responses_queue;
 
-    SnapshotsQueue & snapshots_queue;
+    MetaSnapshotsQueue & snapshots_queue;
     /// Mutex for snapshots
     std::mutex snapshots_lock;
 

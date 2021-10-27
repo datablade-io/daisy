@@ -1,7 +1,5 @@
 #include "KVRequest.h"
 
-#include <IO/ReadHelpers.h>
-
 namespace Coordination
 {
 using namespace DB;
@@ -42,6 +40,8 @@ void registerKVRequest(KVRequestFactory & factory)
 KVRequestFactory::KVRequestFactory()
 {
     registerKVRequest<KVOpNum::GET, KVGetRequest>(*this);
+    registerKVRequest<KVOpNum::MULTIGET, KVMultiGetRequest>(*this);
     registerKVRequest<KVOpNum::PUT, KVPutRequest>(*this);
+    registerKVRequest<KVOpNum::MULTIPUT, KVMultiPutRequest>(*this);
 }
 }

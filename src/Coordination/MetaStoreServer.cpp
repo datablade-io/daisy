@@ -1,4 +1,4 @@
-#include <Coordination/MetaStore.h>
+#include <Coordination/MetaStoreServer.h>
 
 #if !defined(ARCADIA_BUILD)
 #   include "config_core.h"
@@ -60,44 +60,73 @@ void setSSLParams(nuraft::asio_service::options & asio_opts)
 }
 #endif
 
-std::string getSnapshotsPathFromConfig(const Poco::Util::AbstractConfiguration & config, bool standalone_keeper)
+std::string getSnapshotsPathFromConfig(const Poco::Util::AbstractConfiguration & config, bool standalone_metastore)
 {
     /// the most specialized path
-    if (config.has("keeper_server.snapshot_storage_path"))
-        return config.getString("keeper_server.snapshot_storage_path");
+    if (config.has("metastore_server.snapshot_storage_path"))
+        return config.getString("metastore_server.snapshot_storage_path");
 
-    if (config.has("keeper_server.storage_path"))
-        return std::filesystem::path{config.getString("keeper_server.storage_path")} / "snapshots";
+    if (config.has("metastore_server.storage_path"))
+        return std::filesystem::path{config.getString("metastore_server.storage_path")} / "snapshots";
 
-    if (standalone_keeper)
-        return std::filesystem::path{config.getString("path", KEEPER_DEFAULT_PATH)} / "snapshots";
+    if (standalone_metastore)
+        return std::filesystem::path{config.getString("path", METASTORE_DEFAULT_PATH)} / "snapshots";
     else
         return std::filesystem::path{config.getString("path", DBMS_DEFAULT_PATH)} / "coordination/snapshots";
 }
 
+std::string getStoragePathFromConfig(const Poco::Util::AbstractConfiguration & config, bool standalone_metastore)
+{
+    /// the most specialized path
+    if (config.has("metastore_server.storage_path"))
+        return config.getString("metastore_server.storage_path");
+
+    if (standalone_metastore)
+        return config.getString("path", METASTORE_DEFAULT_PATH);
+    else
+        return std::filesystem::path{config.getString("path", DBMS_DEFAULT_PATH)} / "coordination";
 }
 
-MetaStore::MetaStore(
+nuraft::ptr<nuraft::buffer> getBufferFromKVRequest(const Coordination::KVRequestPtr & request)
+{
+    DB::WriteBufferFromNuraftBuffer buf;
+    request->write(buf);
+    return buf.getBuffer();
+}
+
+Coordination::KVResponsePtr parseKVResponse(nuraft::ptr<nuraft::buffer> data)
+{
+    using namespace Coordination;
+
+    ReadBufferFromNuraftBuffer buffer(*data);
+
+    KVResponsePtr response = KVResponse::read(buffer);
+    return response;
+}
+
+}
+
+MetaStoreServer::MetaStoreServer(
     int server_id_,
     const CoordinationSettingsPtr & coordination_settings_,
     const Poco::Util::AbstractConfiguration & config,
-    SnapshotsQueue & snapshots_queue_,
-    bool standalone_keeper)
+    MetaSnapshotsQueue & snapshots_queue_,
+    bool standalone_metastore)
     : server_id(server_id_)
     , coordination_settings(coordination_settings_)
     , state_machine(nuraft::cs_new<MetaStateMachine>(
                         snapshots_queue_,
-                        getSnapshotsPathFromConfig(config, standalone_keeper),
-                        "./meta",
+                        getSnapshotsPathFromConfig(config, standalone_metastore),
+                        getStoragePathFromConfig(config, standalone_metastore),
                         coordination_settings))
-    , state_manager(nuraft::cs_new<MetaStateManager>(server_id, "metastore", config, coordination_settings, standalone_keeper))
-    , log(&Poco::Logger::get("MetaStore"))
+    , state_manager(nuraft::cs_new<MetaStateManager>(server_id, "metastore_server", config, coordination_settings, standalone_metastore))
+    , log(&Poco::Logger::get("MetaStoreServer"))
 {
     if (coordination_settings->quorum_reads)
-        LOG_WARNING(log, "Quorum reads enabled, MetaStore will work slower.");
+        LOG_WARNING(log, "Quorum reads enabled, MetaStoreServer will work slower.");
 }
 
-void MetaStore::startup()
+void MetaStoreServer::startup()
 {
     state_machine->init();
 
@@ -129,7 +158,7 @@ void MetaStore::startup()
     params.auto_forwarding_req_timeout_ = coordination_settings->operation_timeout_ms.totalMilliseconds() * 2;
     params.max_append_size_ = coordination_settings->max_requests_batch_size;
 
-    params.return_method_ = nuraft::raft_params::async_handler;
+    params.return_method_ = nuraft::raft_params::blocking;
 
     nuraft::asio_service::options asio_opts{};
     if (state_manager->isSecure())
@@ -148,7 +177,7 @@ void MetaStore::startup()
         throw Exception(ErrorCodes::RAFT_ERROR, "Cannot allocate RAFT instance");
 }
 
-void MetaStore::launchRaftServer(
+void MetaStoreServer::launchRaftServer(
     const nuraft::raft_params & params,
     const nuraft::asio_service::options & asio_opts)
 {
@@ -185,7 +214,7 @@ void MetaStore::launchRaftServer(
     asio_listener->listen(raft_instance);
 }
 
-void MetaStore::shutdownRaftServer()
+void MetaStoreServer::shutdownRaftServer()
 {
     size_t timeout = coordination_settings->shutdown_timeout.totalSeconds();
 
@@ -220,59 +249,68 @@ void MetaStore::shutdownRaftServer()
 }
 
 
-void MetaStore::shutdown()
+void MetaStoreServer::shutdown()
 {
     state_machine->shutdownStorage();
     state_manager->flushLogStore();
     shutdownRaftServer();
 }
 
-namespace
+String MetaStoreServer::localGetByKey(const String & key) const
 {
-
-nuraft::ptr<nuraft::buffer> getZooKeeperLogEntry(int64_t session_id, const Coordination::ZooKeeperRequestPtr & request)
-{
-    DB::WriteBufferFromNuraftBuffer buf;
-    DB::writeIntBinary(session_id, buf);
-    request->write(buf);
-    return buf.getBuffer();
+    String value;
+    state_machine->getByKey(key, &value);
+    return value;
 }
 
-}
-
-
-void MetaStore::putLocalReadRequest(const KeeperStorage::RequestForSession & request_for_session)
+std::vector<String> MetaStoreServer::localMultiGetByKeys(const std::vector<String> & keys) const
 {
-    if (!request_for_session.request->isReadRequest())
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot process non-read request locally");
-
-    state_machine->processReadRequest(request_for_session);
+    std::vector<String> values;
+    state_machine->multiGetByKeys(keys, &values);
+    return values;
 }
 
-RaftAppendResult MetaStore::putRequestBatch(const KeeperStorage::RequestsForSessions & requests_for_sessions)
+Coordination::KVResponsePtr MetaStoreServer::putRequest(const Coordination::KVRequestPtr & request)
 {
+    const auto & entry = getBufferFromKVRequest(request);
+    auto ret = raft_instance->append_entries({entry});
+    if (ret->get_accepted() &&
+        ret->get_result_code() == nuraft::cmd_result_code::OK &&
+        ret->get())
+        return parseKVResponse(ret->get());
 
-    std::vector<nuraft::ptr<nuraft::buffer>> entries;
-    for (const auto & [session_id, request] : requests_for_sessions)
-        entries.push_back(getZooKeeperLogEntry(session_id, request));
-
-    {
-        std::lock_guard lock(append_entries_mutex);
-        return raft_instance->append_entries(entries);
-    }
+    /// error response
+    auto response = std::make_shared<Coordination::KVEmptyResponse>();
+    response->msg = ret->get_result_str();
+    return response;
 }
 
-bool MetaStore::isLeader() const
+bool MetaStoreServer::isLeader() const
 {
     return raft_instance->is_leader();
 }
 
-bool MetaStore::isLeaderAlive() const
+bool MetaStoreServer::isLeaderAlive() const
 {
     return raft_instance->is_leader_alive();
 }
 
-nuraft::cb_func::ReturnCode MetaStore::callbackFunc(nuraft::cb_func::Type type, nuraft::cb_func::Param * param)
+bool MetaStoreServer::isAutoForward() const
+{
+    return raft_instance->get_current_params().auto_forwarding_;
+}
+
+int MetaStoreServer::getLeaderID() const
+{
+    return raft_instance->get_leader();
+}
+
+MetaClusterConfig MetaStoreServer::getClusterConfig() const
+{
+    return state_manager->load_config();
+}
+
+nuraft::cb_func::ReturnCode MetaStoreServer::callbackFunc(nuraft::cb_func::Type type, nuraft::cb_func::Param * param)
 {
     if (initialized_flag)
         return nuraft::cb_func::ReturnCode::Ok;
@@ -332,7 +370,7 @@ nuraft::cb_func::ReturnCode MetaStore::callbackFunc(nuraft::cb_func::Type type, 
     }
 }
 
-void MetaStore::waitInit()
+void MetaStoreServer::waitInit()
 {
     std::unique_lock lock(initialized_mutex);
     int64_t timeout = coordination_settings->startup_timeout.totalMilliseconds();

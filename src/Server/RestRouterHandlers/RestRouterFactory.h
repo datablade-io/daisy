@@ -7,6 +7,7 @@
 #include "IngestRawStoreHandler.h"
 #include "IngestRestRouterHandler.h"
 #include "IngestStatusHandler.h"
+#include "MetaStoreHandler.h"
 #include "PingHandler.h"
 #include "RawstoreTableRestRouterHandler.h"
 #include "RestRouterHandler.h"
@@ -41,8 +42,9 @@ public:
     static void registerRestRouterHandlers()
     {
         auto & factory = RestRouterFactory::instance();
-
+        const String name = "dae";
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ingest/tables/(?P<table>[%\\w]+)(\\?mode=\\w+){0,1}",
             "POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -50,6 +52,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ingest/rawstores/(?P<rawstore>[%\\w]+)(\\?mode=\\w+){0,1}",
             "POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -57,6 +60,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/search(\\?[\\w\\-=&#]+){0,1}",
             "POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -64,6 +68,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ingest/statuses",
             "POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -71,6 +76,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/tables(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -78,6 +84,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/tables/(?P<table>[%\\w]+)(\\?[\\w\\-=&#]+){0,1}",
             "PATCH/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -85,6 +92,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/rawstores(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -92,6 +100,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/rawstores/(?P<table>[%\\w]+)(\\?[\\w\\-=&#]+){0,1}",
             "PATCH/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -99,6 +108,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/(?P<table>[%\\w]+)/columns(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -106,6 +116,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/(?P<table>[%\\w]+)/columns/(?P<column>[%\\w]+)(\\?[\\w\\-=&#]+){0,1}",
             "PATCH/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -113,6 +124,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/databases(\\?[\\w\\-=&#]+){0,1}",
             "GET/POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -120,6 +132,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/ddl/databases/(?P<database>\\w+)(\\?[\\w\\-=&#]+){0,1}",
             "DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -127,6 +140,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/sqlanalyzer",
             "POST",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -134,6 +148,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/tasks(/?$|/(?P<task_id>[-\\w]+))",
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -141,6 +156,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/(?P<status>ping|info)$",
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -148,6 +164,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/v1/clusterinfo",
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -155,6 +172,7 @@ public:
             });
 
         factory.registerRouterHandler(
+            name,
             "/dae/apis",
             "GET",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
@@ -162,10 +180,29 @@ public:
             });
     }
 
-public:
-    RestRouterHandlerPtr get(const String & url, const String & method, ContextPtr query_context) const
+    static void registerMetaStoreRestRouterHandlers()
     {
-        for (auto & router_handler : router_handlers)
+        auto & factory = RestRouterFactory::instance();
+        String name = "metastore";
+#if USE_NURAFT
+        factory.registerRouterHandler(
+            name,
+            "/metastore(\\?[\\w\\-=&#]+){0,1}",
+            "GET/POST",
+            [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
+                return std::make_shared<DB::MetaStoreHandler>(query_context);
+            });
+#endif
+    }
+
+public:
+    RestRouterHandlerPtr get(const String & name, const String & url, const String & method, ContextPtr query_context) const
+    {
+        auto iter = router_handlers.find(name);
+        if (iter == router_handlers.end())
+            return nullptr;
+
+        for (auto & router_handler : iter->second)
         {
             int num_captures = router_handler.regex->NumberOfCapturingGroups() + 1;
 
@@ -200,10 +237,11 @@ public:
         return nullptr;
     }
 
-    void registerRouterHandler(const String & route, const String & method, std::function<RestRouterHandlerPtr(ContextPtr)> func)
+    void registerRouterHandler(
+        const String & name, const String & route, const String & method, std::function<RestRouterHandlerPtr(ContextPtr)> func)
     {
         auto regex = compileRegex(route);
-        router_handlers.emplace_back(RouterHandler(method, regex, func));
+        router_handlers[name].emplace_back(RouterHandler(method, regex, func));
     }
 
 private:
@@ -234,7 +272,8 @@ private:
         }
     };
 
-    std::vector<RouterHandler> router_handlers;
+    /// Namespace - RouterHandlers
+    std::map<String, std::vector<RouterHandler> > router_handlers;
 };
 
 }

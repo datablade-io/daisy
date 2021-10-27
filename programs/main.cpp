@@ -58,6 +58,11 @@ int mainEntryClickHouseGitImport(int argc, char ** argv);
 #if ENABLE_CLICKHOUSE_KEEPER
 int mainEntryClickHouseKeeper(int argc, char ** argv);
 #endif
+/// Daisy: start.
+#if ENABLE_CLICKHOUSE_METASTORE
+int mainEntryClickHouseMetaStore(int argc, char ** argv);
+#endif
+/// Daisy: end.
 #if ENABLE_CLICKHOUSE_DWAL_BENCHMARK
 int mainEntryClickHouseDWal(int argc, char ** argv);
 #endif
@@ -121,6 +126,11 @@ std::pair<const char *, MainFunc> clickhouse_applications[] =
 #if ENABLE_CLICKHOUSE_KEEPER
     {"keeper", mainEntryClickHouseKeeper},
 #endif
+/// Daisy: start.
+#if ENABLE_CLICKHOUSE_METASTORE
+    {"metastore", mainEntryClickHouseMetaStore},
+#endif
+/// Daisy: end.
 #if ENABLE_CLICKHOUSE_DWAL_BENCHMARK
     {"dwal-benchmark", mainEntryClickHouseDWal},
 #endif

@@ -1,11 +1,13 @@
 #include <Coordination/MetaStateMachine.h>
 
 #include <Coordination/KVRequest.h>
+#include <Coordination/KVResponse.h>
 #include <Coordination/MetaSnapshotManager.h>
 #include <Coordination/ReadBufferFromNuraftBuffer.h>
 #include <Coordination/WriteBufferFromNuraftBuffer.h>
 
 #include <IO/ReadHelpers.h>
+#include <IO/WriteHelpers.h>
 
 #include <rocksdb/db.h>
 #include <rocksdb/table.h>
@@ -20,6 +22,8 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int ROCKSDB_ERROR;
+    extern const int STD_EXCEPTION;
+    extern const int UNKNOWN_EXCEPTION;
 }
 
 namespace
@@ -33,10 +37,26 @@ namespace
         KVRequestPtr request = KVRequest::read(buffer);
         return request;
     }
+
+    nuraft::ptr<nuraft::buffer> getBufferFromKVResponse(const Coordination::KVResponsePtr & response) noexcept
+    {
+        DB::WriteBufferFromNuraftBuffer buf;
+        response->write(buf);
+        return buf.getBuffer();
+    }
+
+    std::vector<rocksdb::Slice> convertStringsToSlices(const std::vector<std::string> & strs)
+    {
+        std::vector<rocksdb::Slice> slices;
+        slices.reserve(strs.size());
+        for (const auto & str : strs)
+            slices.emplace_back(str);
+        return slices;
+    }
 }
 
 MetaStateMachine::MetaStateMachine(
-    SnapshotsQueue & snapshots_queue_,
+    MetaSnapshotsQueue & snapshots_queue_,
     const std::string & snapshots_path_,
     const std::string & db_path_,
     const CoordinationSettingsPtr & coordination_settings_)
@@ -90,35 +110,92 @@ void MetaStateMachine::init()
     }
 }
 
+/// This func called by async thread, if there is exception, it's cause to crash that the whole process exit.
+/// So, we must to ensure the success of commit as much as possible
 nuraft::ptr<nuraft::buffer> MetaStateMachine::commit(const uint64_t log_idx, nuraft::buffer & data)
 {
-    auto request = parseKVRequest(data);
-
     LOG_DEBUG(log, "commit index {}", log_idx);
 
-    rocksdb::WriteBatch batch;
-    rocksdb::Status status;
+    auto request = parseKVRequest(data);
+    const auto & op = request->getOpNum();
+    auto response = Coordination::KVResponseFactory::instance().get(op);
 
-    Coordination::KVOpNum op_num = request->getOpNum();
-    if (op_num != Coordination::KVOpNum::PUT)
-        return nullptr;
+    if (op == Coordination::KVOpNum::MULTIPUT || op == Coordination::KVOpNum::PUT)
+    {
+        auto write_batch = [this](uint64_t idx, const std::vector<std::string> & keys, const std::vector<std::string> & values) {
+            rocksdb::Status status;
+            rocksdb::WriteBatch batch;
+            auto count = std::min(keys.size(), values.size());
+            for (size_t i = 0; i < count; ++i)
+            {
+                status = batch.Put(keys[i], values[i]);
+                if (!status.ok())
+                    return status;
+            }
 
-    auto req = dynamic_cast<Coordination::KVPutRequest &>(*request);
-    status = batch.Put(req.key, req.value);
-    if (!status.ok())
-        throw Exception("RocksDB write error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+            status = batch.Put(META_LOG_INDEX_KEY, std::to_string(idx));
+            if (!status.ok())
+                return status;
 
-    status = batch.Put(META_LOG_INDEX_KEY, std::to_string(log_idx));
-    if (!status.ok())
-        throw Exception("RocksDB write error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+            status = rocksdb_ptr->Write(rocksdb::WriteOptions(), &batch);
+            return status;
+        };
 
-    status = rocksdb_ptr->Write(rocksdb::WriteOptions(), &batch);
-    if (!status.ok())
-        throw Exception("RocksDB write error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+        rocksdb::Status status;
+        if (op == Coordination::KVOpNum::MULTIPUT)
+        {
+            auto req = request->as<const Coordination::KVMultiPutRequest>();
+            status = write_batch(log_idx, req->keys, req->values);
+        }
+        else
+        {
+            auto req = request->as<const Coordination::KVPutRequest>();
+            status = write_batch(log_idx, {req->key}, {req->value});
+        }
+        if (!status.ok())
+        {
+            /// NOTICE: There is incomplete rollback operation in nuraft, so it will cause the system to exit.
+            throw Exception("RocksDB write error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+        }
+    }
+    else if (op == Coordination::KVOpNum::MULTIGET)
+    {
+        auto req = request->as<const Coordination::KVMultiGetRequest>();
+        auto resp = response->as<Coordination::KVMultiGetResponse>();
+        const auto & slices_keys = convertStringsToSlices(req->keys);
+        auto statuses = rocksdb_ptr->MultiGet(rocksdb::ReadOptions(), slices_keys, &(resp->values));
+        for (auto status : statuses)
+            if (!status.ok())
+            {
+                /// NOTICE: There is incomplete rollback operation in nuraft, so it will cause the system to exit.
+                // throw Exception("RocksDB read error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+
+                /// To avoid to exit for exception, even if the read failed, we also consider this commit successful,
+                /// and return error status.
+                resp->code = ErrorCodes::ROCKSDB_ERROR;
+                resp->msg = "RocksDB read error: " + status.ToString();
+                break;
+            }
+    }
+    else if (op == Coordination::KVOpNum::GET)
+    {
+        auto req = request->as<const Coordination::KVGetRequest>();
+        auto resp = response->as<Coordination::KVGetResponse>();
+        auto status = rocksdb_ptr->Get(rocksdb::ReadOptions(), req->key, &(resp->value));
+        if (!status.ok())
+        {
+            /// NOTICE: There is incomplete rollback operation in nuraft, so it will cause the system to exit.
+            // throw Exception("RocksDB read error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+
+            /// To avoid to exit for exception, even if the read failed, we also consider this commit successful,
+            /// and return error status.
+            resp->code = ErrorCodes::ROCKSDB_ERROR;
+            resp->msg = "RocksDB read error: " + status.ToString();
+        }
+    }
 
     last_committed_idx = log_idx;
-
-    return nullptr;
+    return getBufferFromKVResponse(response);
 }
 
 bool MetaStateMachine::apply_snapshot(nuraft::snapshot & s)
@@ -160,13 +237,13 @@ void MetaStateMachine::create_snapshot(nuraft::snapshot & s, nuraft::async_resul
 
     nuraft::ptr<nuraft::buffer> snp_buf = s.serialize();
     auto snapshot_meta_copy = nuraft::snapshot::deserialize(*snp_buf);
-    CreateSnapshotTask snapshot_task;
+    CreateMetaSnapshotTask snapshot_task;
     {
         std::lock_guard lock(storage_lock);
-        snapshot_task.snapshot = std::make_shared<MetaStorageSnapshot>(snapshot_meta_copy);
+        snapshot_task.snapshot = std::make_shared<MetaSnapshot>(snapshot_meta_copy);
     }
 
-    snapshot_task.create_snapshot = [this, when_done](MetaStorageSnapshotPtr && snapshot) {
+    snapshot_task.create_snapshot = [this, when_done](MetaSnapshotPtr && snapshot) {
         nuraft::ptr<std::exception> exception(nullptr);
         bool ret = true;
         try
@@ -257,24 +334,19 @@ int MetaStateMachine::read_logical_snp_obj(
     return 1;
 }
 
-void MetaStateMachine::processReadRequest(const KeeperStorage::RequestForSession & /*request_for_session*/)
+void MetaStateMachine::getByKey(const std::string & key, std::string * value) const
 {
-    KeeperStorage::ResponsesForSessions responses;
-    {
-        std::lock_guard lock(storage_lock);
-        //        auto status = rocksdb_ptr->Write(rocksdb::WriteOptions(), &batch);
-        //        responses = storage->processRequest(request_for_session.request, request_for_session.session_id, std::nullopt);
-    }
-
-    //    for (const auto & response : responses)
-    //        responses_queue.push(response);
+    auto status = rocksdb_ptr->Get(rocksdb::ReadOptions(), key, value);
+    if (!status.ok())
+        throw Exception("RocksDB read error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
 }
 
-void MetaStateMachine::getByKey(const std::string & key, std::string & value)
+void MetaStateMachine::multiGetByKeys(const std::vector<std::string> & keys, std::vector<std::string> * values) const
 {
-    rocksdb::Status status = rocksdb_ptr->Get(rocksdb::ReadOptions(), key, &value);
-    if (!status.ok() && !status.IsNotFound())
-        throw Exception("RocksDB read error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+    auto statuses = rocksdb_ptr->MultiGet(rocksdb::ReadOptions(), convertStringsToSlices(keys), values);
+    for (auto status : statuses)
+        if (!status.ok())
+            throw Exception("RocksDB read error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
 }
 
 void MetaStateMachine::shutdownStorage()

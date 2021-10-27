@@ -2,6 +2,8 @@
 
 #include <libnuraft/nuraft.hxx> // Y_IGNORE
 #include <Coordination/InMemoryLogStore.h>
+#include <Coordination/KVRequest.h>
+#include <Coordination/KVResponse.h>
 #include <Coordination/MetaStateManager.h>
 #include <Coordination/MetaStateMachine.h>
 #include <Coordination/CoordinationSettings.h>
@@ -10,10 +12,9 @@
 
 namespace DB
 {
+using MetaClusterConfig = nuraft::ptr<nuraft::cluster_config>;
 
-using RaftAppendResult = nuraft::ptr<nuraft::cmd_result<nuraft::ptr<nuraft::buffer>>>;
-
-class MetaStore
+class MetaStoreServer
 {
 private:
     const int server_id;
@@ -49,30 +50,36 @@ private:
 
 
 public:
-    MetaStore(
+    MetaStoreServer(
         int server_id_,
         const CoordinationSettingsPtr & coordination_settings_,
         const Poco::Util::AbstractConfiguration & config,
-        SnapshotsQueue & snapshots_queue_,
-        bool standalone_keeper);
+        MetaSnapshotsQueue & snapshots_queue_,
+        bool standalone_metastore);
 
     void startup();
 
-    void putLocalReadRequest(const KeeperStorage::RequestForSession & request);
+    String localGetByKey(const String & key) const;
 
-    RaftAppendResult putRequestBatch(const KeeperStorage::RequestsForSessions & requests);
+    std::vector<String> localMultiGetByKeys(const std::vector<String> & keys) const;
 
-    std::unordered_set<int64_t> getDeadSessions();
+    Coordination::KVResponsePtr putRequest(const Coordination::KVRequestPtr & request);
 
     bool isLeader() const;
 
     bool isLeaderAlive() const;
+
+    bool isAutoForward() const;
 
     void waitInit();
 
     void shutdown();
 
     int getServerID() const { return server_id; }
+
+    int getLeaderID() const;
+
+    MetaClusterConfig getClusterConfig() const;
 };
 
 }

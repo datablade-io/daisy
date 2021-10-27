@@ -100,6 +100,10 @@
 
 #define KEEPER_DEFAULT_PATH "/var/lib/clickhouse-keeper/"
 
+/// Daisy: start.
+#define METASTORE_DEFAULT_PATH "/var/lib/clickhouse-metastore/"
+/// Daisy: end.
+
 // more aliases: https://mailman.videolan.org/pipermail/x264-devel/2014-May/010660.html
 
 /// Marks that extra information is sent to a shard. It could be any magic numbers.
