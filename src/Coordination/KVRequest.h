@@ -20,6 +20,8 @@ enum class KVOpNum : uint32_t
     MULTIPUT = 2,
     GET = 3,
     MULTIGET = 4,
+    DELETE = 5,
+    MULTIDELETE = 6
 };
 namespace
 {
@@ -37,6 +39,10 @@ namespace
                 return "Get";
             case KVOpNum::MULTIGET:
                 return "MultiGet";
+            case KVOpNum::DELETE:
+                return "Delete";
+            case KVOpNum::MULTIDELETE:
+                return "MultiDelete";
         }
         int32_t raw_op = static_cast<int32_t>(op_num);
         throw DB::Exception("Operation " + std::to_string(raw_op) + " is unknown", DB::ErrorCodes::LOGICAL_ERROR);
@@ -129,6 +135,46 @@ struct KVMultiPutRequest final : public KVRequest
     {
         readVectorBinary<String>(keys, in);
         readVectorBinary<String>(values, in);
+    }
+
+    bool isReadRequest() const override { return false; }
+};
+
+struct KVDeleteRequest final : public KVRequest
+{
+    // TODO: use Slice in future to avoid memory copy
+    String key;
+
+    KVOpNum getOpNum() const override { return KVOpNum::DELETE; }
+
+    inline void writeImpl(WriteBuffer & out) const override
+    {
+        writeStringBinary(key, out);
+    }
+
+    inline void readImpl(ReadBuffer & in) override
+    {
+        readStringBinary(key, in);
+    }
+
+    bool isReadRequest() const override { return false; }
+};
+
+struct KVMultiDeleteRequest final : public KVRequest
+{
+    // TODO: use Slice in future to avoid memory copy
+    std::vector<String> keys;
+
+    KVOpNum getOpNum() const override { return KVOpNum::MULTIDELETE; }
+
+    inline void writeImpl(WriteBuffer & out) const override
+    {
+        writeVectorBinary<String>(keys, out);
+    }
+
+    inline void readImpl(ReadBuffer & in) override
+    {
+        readVectorBinary<String>(keys, in);
     }
 
     bool isReadRequest() const override { return false; }

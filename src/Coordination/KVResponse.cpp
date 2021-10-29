@@ -51,5 +51,7 @@ KVResponseFactory::KVResponseFactory()
     registerKVResponse<KVOpNum::MULTIGET, KVMultiGetResponse>(*this);
     registerKVResponse<KVOpNum::PUT, KVPutResponse>(*this);
     registerKVResponse<KVOpNum::MULTIPUT, KVMultiPutResponse>(*this);
+    registerKVResponse<KVOpNum::DELETE, KVDeleteResponse>(*this);
+    registerKVResponse<KVOpNum::MULTIDELETE, KVMultiDeleteResponse>(*this);
 }
 }

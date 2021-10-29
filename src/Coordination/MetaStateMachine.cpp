@@ -193,6 +193,30 @@ nuraft::ptr<nuraft::buffer> MetaStateMachine::commit(const uint64_t log_idx, nur
             resp->msg = "RocksDB read error: " + status.ToString();
         }
     }
+    else if (op == Coordination::KVOpNum::MULTIDELETE)
+    {
+        auto req = request->as<const Coordination::KVMultiDeleteRequest>();
+        for (const auto & key : req->keys)
+        {
+            auto status = rocksdb_ptr->Delete(rocksdb::WriteOptions(), key);
+            if (!status.ok())
+            {
+                /// NOTICE: There is incomplete rollback operation in nuraft, so it will cause the system to exit.
+                throw Exception("RocksDB delete error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+            }
+
+        }
+    }
+    else if (op == Coordination::KVOpNum::DELETE)
+    {
+        auto req = request->as<const Coordination::KVDeleteRequest>();
+        auto status = rocksdb_ptr->Delete(rocksdb::WriteOptions(), req->key);
+        if (!status.ok())
+        {
+            /// NOTICE: There is incomplete rollback operation in nuraft, so it will cause the system to exit.
+            throw Exception("RocksDB delete error: " + status.ToString(), ErrorCodes::ROCKSDB_ERROR);
+        }
+    }
 
     last_committed_idx = log_idx;
     return getBufferFromKVResponse(response);

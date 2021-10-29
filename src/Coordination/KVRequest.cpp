@@ -43,5 +43,7 @@ KVRequestFactory::KVRequestFactory()
     registerKVRequest<KVOpNum::MULTIGET, KVMultiGetRequest>(*this);
     registerKVRequest<KVOpNum::PUT, KVPutRequest>(*this);
     registerKVRequest<KVOpNum::MULTIPUT, KVMultiPutRequest>(*this);
+    registerKVRequest<KVOpNum::DELETE, KVDeleteRequest>(*this);
+    registerKVRequest<KVOpNum::MULTIDELETE, KVMultiDeleteRequest>(*this);
 }
 }

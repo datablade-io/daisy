@@ -85,6 +85,24 @@ struct KVMultiPutResponse final : public KVResponse
     inline void readImpl(ReadBuffer & /*in*/) override { }
 };
 
+struct KVDeleteResponse final : public KVResponse
+{
+    KVOpNum getOpNum() const override { return KVOpNum::DELETE; }
+
+    inline void writeImpl(WriteBuffer & /*out*/) const override { }
+
+    inline void readImpl(ReadBuffer & /*in*/) override { }
+};
+
+struct KVMultiDeleteResponse final : public KVResponse
+{
+    KVOpNum getOpNum() const override { return KVOpNum::MULTIDELETE; }
+
+    inline void writeImpl(WriteBuffer & /*out*/) const override { }
+
+    inline void readImpl(ReadBuffer & /*in*/) override { }
+};
+
 class KVResponseFactory final : private boost::noncopyable
 {
 public:

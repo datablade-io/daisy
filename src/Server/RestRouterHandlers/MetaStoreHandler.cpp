@@ -238,6 +238,74 @@ std::pair<String, Int32> MetaStoreHandler::executePost(const Poco::JSON::Object:
         return {jsonErrorResponse("request unknown error.", ErrorCodes::LOGICAL_ERROR), HTTPResponse::HTTP_BAD_REQUEST};
     }
 }
+
+std::pair<String, Int32> MetaStoreHandler::executeDelete(const Poco::JSON::Object::Ptr & payload) const
+{
+    /// we get key from payload
+    std::vector<String> request_keys = parseStringsFromJSONObject(payload, "keys");
+    auto key = parseStringFromJSONObject(payload, "key");
+    if (!key.empty())
+        request_keys.emplace_back(key);
+
+    if (request_keys.empty())
+        return {jsonErrorResponse("Here is not 'key' or 'keys'.", ErrorCodes::BAD_REQUEST_PARAMETER), HTTPResponse::HTTP_BAD_REQUEST};
+
+    if (!metastore_dispatcher->hasLeader())
+        return {
+            jsonErrorResponse("Ignoring request, because no alive leader exist", ErrorCodes::NOT_A_LEADER), HTTPResponse::HTTP_BAD_REQUEST};
+
+    try
+    {
+        if (metastore_dispatcher->isLeader() || metastore_dispatcher->isSupportAutoForward())
+        {
+            auto request = Coordination::KVRequestFactory::instance().get(Coordination::KVOpNum::MULTIDELETE);
+            request->as<Coordination::KVMultiDeleteRequest>()->keys = request_keys;
+
+            auto response = metastore_dispatcher->putRequest(request);
+            if (response->code != ErrorCodes::OK)
+                return {
+                    jsonErrorResponse(fmt::format("request failed[{}]: {}", response->code, response->msg), ErrorCodes::LOGICAL_ERROR),
+                    HTTPResponse::HTTP_BAD_REQUEST};
+
+            return {buildResponse(query_context->getCurrentQueryId()), HTTPResponse::HTTP_OK};
+        }
+        else
+        {
+            /// Forward request to leader node manually
+            Poco::URI uri{fmt::format(
+                METASTORE_URL,
+                metastore_dispatcher->getLeaderHostname(),
+                metastore_dispatcher->getHttpPort(),
+                /* no parameters */ "")};
+            std::stringstream req_body_stream; /// STYLE_CHECK_ALLOW_STD_STRING_STREAM
+            payload->stringify(req_body_stream, 0);
+            const String & body = req_body_stream.str();
+
+            auto [response, http_status] = sendRequest(
+                uri,
+                HTTPRequest::HTTP_POST,
+                query_context->getCurrentQueryId(),
+                query_context->getUserName(),
+                query_context->getPasswordByUserName(query_context->getUserName()),
+                body,
+                log);
+            if (http_status == HTTPResponse::HTTP_OK)
+            {
+                return {response, http_status};
+            }
+            return {jsonErrorResponseFrom(response), http_status};
+        }
+    }
+    catch (std::exception & e)
+    {
+        return {jsonErrorResponse(fmt::format("request error: {}", e.what()), ErrorCodes::LOGICAL_ERROR), HTTPResponse::HTTP_BAD_REQUEST};
+    }
+    catch (...)
+    {
+        return {jsonErrorResponse("request unknown error.", ErrorCodes::LOGICAL_ERROR), HTTPResponse::HTTP_BAD_REQUEST};
+    }
+}
+
 }
 
 #endif

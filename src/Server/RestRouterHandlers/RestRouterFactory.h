@@ -188,7 +188,7 @@ public:
         factory.registerRouterHandler(
             name,
             "/metastore(\\?[\\w\\-=&#]+){0,1}",
-            "GET/POST",
+            "GET/POST/DELETE",
             [](ContextPtr query_context) { /// STYLE_CHECK_ALLOW_BRACE_SAME_LINE_LAMBDA
                 return std::make_shared<DB::MetaStoreHandler>(query_context);
             });
