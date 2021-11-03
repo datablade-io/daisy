@@ -15,6 +15,7 @@
 #include <Common/formatReadable.h>
 #include <Common/thread_local_rng.h>
 #include <Coordination/KeeperStorageDispatcher.h>
+#include <Coordination/MetaStoreDispatcher.h>
 #include <Compression/ICompressionCodec.h>
 #include <Core/BackgroundSchedulePool.h>
 #include <Formats/FormatFactory.h>
@@ -327,6 +328,11 @@ struct ContextSharedPart
 #if USE_NURAFT
     mutable std::mutex keeper_storage_dispatcher_mutex;
     mutable std::shared_ptr<KeeperStorageDispatcher> keeper_storage_dispatcher;
+
+    /// Daisy: start.
+    mutable std::mutex metastore_dispatcher_mutex;
+    mutable std::shared_ptr<MetaStoreDispatcher> metastore_dispatcher;
+    /// Daisy: end.
 #endif
     mutable std::mutex auxiliary_zookeepers_mutex;
     mutable std::map<String, zkutil::ZooKeeperPtr> auxiliary_zookeepers;    /// Map for auxiliary ZooKeeper clients.
@@ -1742,6 +1748,47 @@ void Context::shutdownKeeperStorageDispatcher() const
 #endif
 }
 
+/// Daisy: start.
+void Context::initializeMetaStoreDispatcher() const
+{
+#if USE_NURAFT
+    std::lock_guard lock(shared->metastore_dispatcher_mutex);
+
+    if (shared->metastore_dispatcher)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Trying to initialize MetaStoreServer multiple times");
+
+    const auto & config = getConfigRef();
+    if (config.has("metastore_server"))
+    {
+        shared->metastore_dispatcher = std::make_shared<MetaStoreDispatcher>();
+        shared->metastore_dispatcher->initialize(config, getApplicationType() == ApplicationType::METASTORE);
+    }
+#endif
+}
+
+#if USE_NURAFT
+std::shared_ptr<MetaStoreDispatcher> & Context::getMetaStoreDispatcher() const
+{
+    std::lock_guard lock(shared->metastore_dispatcher_mutex);
+    if (!shared->metastore_dispatcher)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "MetaStoreServer must be initialized before requests");
+
+    return shared->metastore_dispatcher;
+}
+#endif
+
+void Context::shutdownMetaStoreDispatcher() const
+{
+#if USE_NURAFT
+    std::lock_guard lock(shared->metastore_dispatcher_mutex);
+    if (shared->metastore_dispatcher)
+    {
+        shared->metastore_dispatcher->shutdown();
+        shared->metastore_dispatcher.reset();
+    }
+#endif
+}
+/// Daisy: end.
 
 zkutil::ZooKeeperPtr Context::getAuxiliaryZooKeeper(const String & name) const
 {

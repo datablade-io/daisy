@@ -1028,6 +1028,42 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
     }
 
+    /// Daisy: start.
+    /// Register DAE rest API in advance
+    RestRouterFactory::registerRestRouterHandlers();
+    if (config().has("metastore_server"))
+    {
+#if USE_NURAFT
+        /// Register MetaStore Rest api route handlers
+        RestRouterFactory::registerMetaStoreRestRouterHandlers();
+
+        /// Initialize test metastore RAFT. Do nothing if no metastore_server in config.
+        global_context->initializeMetaStoreDispatcher();
+        for (const auto & listen_host : listen_hosts)
+        {
+            /// HTTP MetaStoreServer
+            const char * port_name = "metastore_server.http_port";
+            createServer(listen_host, port_name, listen_try, [&](UInt16 port)
+            {
+                Poco::Net::ServerSocket socket;
+                auto address = socketBindListen(socket, listen_host, port);
+                socket.setReceiveTimeout(settings.receive_timeout);
+                socket.setSendTimeout(settings.send_timeout);
+                servers_to_start_before_tables->emplace_back(
+                    port_name,
+                    std::make_unique<HTTPServer>(
+                        context(), createMetaStoreHandlerFactory(*this, "MetaStoreHTTPHandler-factory"), server_pool, socket, http_params));
+
+                LOG_INFO(log, "Listening for connections to MetaStoreServer (http): http://{}", address.toString());
+            });
+        }
+#else
+        throw Exception(ErrorCodes::SUPPORT_IS_DISABLED, "ClickHouse server built without NuRaft library. Cannot use internal coordination.");
+#endif
+
+    }
+    /// Daisy: end.
+
     for (auto & server : *servers_to_start_before_tables)
         server.start();
 
@@ -1067,6 +1103,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
                 LOG_INFO(log, "Closed connections to servers for tables.");
 
             global_context->shutdownKeeperStorageDispatcher();
+
+            /// Daisy: start.
+            global_context->shutdownMetaStoreDispatcher();
+            /// Daisy: end.
         }
 
         /// Wait server pool to avoid use-after-free of destroyed context in the handlers
@@ -1225,10 +1265,6 @@ int Server::main(const std::vector<std::string> & /*args*/)
         AsynchronousMetrics async_metrics(
             global_context, config().getUInt("asynchronous_metrics_update_period_s", 60), servers_to_start_before_tables, servers);
         attachSystemTablesAsync(*DatabaseCatalog::instance().getSystemDatabase(), async_metrics);
-
-        /// Daisy : start. Register Rest api route handlers
-        RestRouterFactory::registerRestRouterHandlers();
-        /// Daisy : end.
 
         for (const auto & listen_host : listen_hosts)
         {

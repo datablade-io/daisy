@@ -60,7 +60,7 @@ def run_docker_image_with_env(image_name, output, env_variables, ch_root, ccache
 
     subprocess.check_call(cmd, shell=True)
 
-def parse_env_variables(build_type, compiler, sanitizer, package_type, image_type, cache, distcc_hosts, unbundled, split_binary, clang_tidy, version, author, official, alien_pkgs, with_coverage, with_binaries):
+def parse_env_variables(build_type, compiler, sanitizer, package_type, image_type, cache, distcc_hosts, unbundled, split_binary, clang_tidy, version, author, official, alien_pkgs, with_coverage, with_binaries, cmake_flags_opt):
     CLANG_PREFIX = "clang"
     DARWIN_SUFFIX = "-darwin"
     ARM_SUFFIX = "-aarch64"
@@ -189,6 +189,9 @@ def parse_env_variables(build_type, compiler, sanitizer, package_type, image_typ
         cmake_flags.append('-DYANDEX_OFFICIAL_BUILD=1')
 
     # Daisy : starts. Generate ninja flags.
+    if cmake_flags_opt:
+        cmake_flags.append(cmake_flags_opt)
+
     if len(ninja_flags) > 0:
         result.append("NINJA_FLAGS='{flags}'".format(flags=' '.join(ninja_flags)))
     # Daisy : ends.    
@@ -234,6 +237,9 @@ if __name__ == "__main__":
     # Daisy : starts. Add docker-image-repo parameter.
     parser.add_argument("--docker-image-repo", default="")
     # Daisy : ends.
+    # Daisy: starts. Add nuraft parameter
+    parser.add_argument("--cmake-flags", default="")
+    # Daisy: ends.
 
     args = parser.parse_args()
     if not os.path.isabs(args.output_dir):
@@ -269,7 +275,7 @@ if __name__ == "__main__":
     env_prepared = parse_env_variables(
         args.build_type, args.compiler, args.sanitizer, args.package_type, image_type,
         args.cache, args.distcc_hosts, args.unbundled, args.split_binary, args.clang_tidy,
-        args.version, args.author, args.official, args.alien_pkgs, args.with_coverage, args.with_binaries)
+        args.version, args.author, args.official, args.alien_pkgs, args.with_coverage, args.with_binaries, args.cmake_flags)
 
     # Daisy : starts. Add sccache directory.
     run_docker_image_with_env(image_name, args.output_dir, env_prepared, ch_root, args.ccache_dir, args.sccache_dir, args.docker_image_version)

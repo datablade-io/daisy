@@ -361,13 +361,42 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
 
     try
     {
-        if (!authenticateUser(request_context, request, params, response))
-            return; // '401 Unauthorized' response with 'Negotiate' has been sent at this point.
+        /// Currently only DAE requests require permissions
+        if (name == "dae")
+        {
+            if (!authenticateUser(request_context, request, params, response))
+                return; // '401 Unauthorized' response with 'Negotiate' has been sent at this point.
 
-        const auto & database = getDatabaseByUser(client_info.current_user);
-        request_context->setCurrentDatabase(database);
+            const auto & database = getDatabaseByUser(client_info.current_user);
+            request_context->setCurrentDatabase(database);
+        }
+        else
+        {
+            /// Set client info.
+            client_info.query_kind = ClientInfo::QueryKind::INITIAL_QUERY;
+            client_info.interface = ClientInfo::Interface::HTTP;
 
-        auto router_handler = RestRouterFactory::instance().get(request.getURI(), request.getMethod(), request_context);
+            ClientInfo::HTTPMethod http_method = ClientInfo::HTTPMethod::UNKNOWN;
+            if (request.getMethod() == HTTPServerRequest::HTTP_GET)
+                http_method = ClientInfo::HTTPMethod::GET;
+            else if (request.getMethod() == HTTPServerRequest::HTTP_POST)
+                http_method = ClientInfo::HTTPMethod::POST;
+            else if (request.getMethod() == HTTPServerRequest::HTTP_PATCH)
+                http_method = ClientInfo::HTTPMethod::PATCH;
+            else if (request.getMethod() == HTTPServerRequest::HTTP_DELETE)
+                http_method = ClientInfo::HTTPMethod::DELETE;
+
+            client_info.http_method = http_method;
+            client_info.http_user_agent = request.get("User-Agent", "");
+            client_info.http_referer = request.get("Referer", "");
+            client_info.forwarded_for = request.get("X-Forwarded-For", "");
+
+            /// Query sent through HTTP interface is initial.
+            client_info.initial_user = client_info.current_user;
+            client_info.initial_address = client_info.current_address;
+        }
+
+        auto router_handler = RestRouterFactory::instance().get(name, request.getURI(), request.getMethod(), request_context);
         if (router_handler == nullptr)
         {
             response.setStatusAndReason(HTTPResponse::HTTP_NOT_FOUND);
@@ -397,7 +426,7 @@ void RestHTTPRequestHandler::handleRequest(HTTPServerRequest & request, HTTPServ
     }
 }
 
-RestHTTPRequestHandler::RestHTTPRequestHandler(IServer & server_, const String & name) : server(server_), log(&Poco::Logger::get(name))
+RestHTTPRequestHandler::RestHTTPRequestHandler(IServer & server_, const String & name_) : server(server_), log(&Poco::Logger::get(name_)), name(name_)
 {
 }
 

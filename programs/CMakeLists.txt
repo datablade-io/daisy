@@ -58,6 +58,16 @@ if (NOT USE_NURAFT)
     set(ENABLE_CLICKHOUSE_KEEPER OFF)
 endif()
 
+# Daisy: start.
+option (ENABLE_CLICKHOUSE_METASTORE "ClickHouse alternative to MetaStore" ${ENABLE_CLICKHOUSE_ALL})
+if (NOT USE_NURAFT)
+    # RECONFIGURE_MESSAGE_LEVEL should not be used here,
+    # since USE_NURAFT is set to OFF for FreeBSD and Darwin.
+    message (STATUS "clickhouse-metastore will not be built (lack of NuRaft)")
+    set(ENABLE_CLICKHOUSE_METASTORE OFF)
+endif()
+# Daisy: end.
+
 if (CLICKHOUSE_SPLIT_BINARY)
     option(ENABLE_CLICKHOUSE_INSTALL "Install ClickHouse without .deb/.rpm/.tgz packages (having the binary only)" OFF)
 else ()
@@ -150,6 +160,14 @@ if (ENABLE_CLICKHOUSE_KEEPER)
 else()
     message(STATUS "ClickHouse keeper mode: OFF")
 endif()
+
+# Daisy: start.
+if (ENABLE_CLICKHOUSE_METASTORE)
+    message(STATUS "ClickHouse metastore mode: ON")
+else()
+    message(STATUS "ClickHouse metastore mode: OFF")
+endif()
+# Daisy: end.
 
 if (ENABLE_CLICKHOUSE_DWAL_BENCHMARK)
     message(STATUS "ClickHouse dwal-benchmark: ON")
@@ -279,6 +297,12 @@ if (ENABLE_CLICKHOUSE_KEEPER)
     add_subdirectory (keeper)
 endif()
 
+# Daisy: start.
+if (ENABLE_CLICKHOUSE_METASTORE)
+    add_subdirectory (metastore)
+endif()
+# Daisy: end.
+
 if (ENABLE_CLICKHOUSE_ODBC_BRIDGE)
     add_subdirectory (odbc-bridge)
 endif ()
@@ -321,6 +345,12 @@ if (CLICKHOUSE_SPLIT_BINARY)
     if (ENABLE_CLICKHOUSE_KEEPER)
         list (APPEND CLICKHOUSE_ALL_TARGETS clickhouse-keeper)
     endif ()
+
+    # Daisy: start.
+    if (ENABLE_CLICKHOUSE_METASTORE)
+        list (APPEND CLICKHOUSE_ALL_TARGETS clickhouse-metastore)
+    endif ()
+    # Daisy: end.
 
     set_target_properties(${CLICKHOUSE_ALL_TARGETS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ..)
 
@@ -372,6 +402,11 @@ else ()
     if (ENABLE_CLICKHOUSE_KEEPER)
         clickhouse_target_link_split_lib(clickhouse keeper)
     endif()
+    # Daisy: start.
+    if (ENABLE_CLICKHOUSE_METASTORE)
+        clickhouse_target_link_split_lib(clickhouse metastore)
+    endif()
+    # Daisy: end.
     if (ENABLE_CLICKHOUSE_INSTALL)
         clickhouse_target_link_split_lib(clickhouse install)
     endif ()
@@ -435,6 +470,13 @@ else ()
         install (FILES "${CMAKE_CURRENT_BINARY_DIR}/clickhouse-keeper" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT clickhouse)
         list(APPEND CLICKHOUSE_BUNDLE clickhouse-keeper)
     endif ()
+# Daisy: start.
+    if (ENABLE_CLICKHOUSE_METASTORE)
+        add_custom_target (clickhouse-metastore ALL COMMAND ${CMAKE_COMMAND} -E create_symlink clickhouse clickhouse-metastore DEPENDS clickhouse)
+        install (FILES "${CMAKE_CURRENT_BINARY_DIR}/clickhouse-metastore" DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT clickhouse)
+        list(APPEND CLICKHOUSE_BUNDLE clickhouse-metastore)
+    endif ()
+# Daisy: end.
     if (ENABLE_CLICKHOUSE_DWAL_BENCHMARK)
         add_custom_target (clickhouse-dwal-benchmark ALL COMMAND ${CMAKE_COMMAND} -E create_symlink clickhouse clickhouse-dwal-benchmark DEPENDS clickhouse)
         install (FILES ${CMAKE_CURRENT_BINARY_DIR}/clickhouse-dwal-benchmark DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT clickhouse)

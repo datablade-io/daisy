@@ -1,0 +1,21 @@
+<yandex>
+    <logger>
+        <level>trace</level>
+        <console>true</console>
+    </logger>
+
+    <metastore_server>
+        <http_port>9444</http_port>
+        <server_id>1</server_id>
+        <log_storage_path>./metastore_log</log_storage_path>
+        <snapshot_storage_path>./metastore_snapshot</snapshot_storage_path>
+
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>localhost</hostname>
+                <port>44444</port>
+            </server>
+        </raft_configuration>
+    </metastore_server>
+</yandex>
